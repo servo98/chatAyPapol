@@ -1,0 +1,60 @@
+# Flujo de release automático: empuja un tag (ej. v0.2.0) y esto compila el
+# cliente para Windows y Linux, y publica los instaladores en GitHub Releases.
+# Con GITHUB_REPO=usuario/repo en el .env del server, los clientes se
+# auto-actualizan desde aquí sin que alojes nada.
+name: release
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults: { run: { working-directory: client } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - name: Sellar versión desde el tag
+        shell: bash
+        run: echo "const appVersion = '${GITHUB_REF_NAME#v}';" > lib/version.dart
+      - run: flutter build windows --release
+      - name: Instalador Inno Setup
+        shell: pwsh
+        run: |
+          $v = "${env:GITHUB_REF_NAME}".TrimStart("v")
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\installer.iss /DAppVersion=$v
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: client/packaging/out/*.exe }
+
+  linux:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: client } }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencias de build (GTK + FUSE para AppImage)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev libfuse2 || sudo apt-get install -y libfuse2t64
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - name: Sellar versión desde el tag
+        run: echo "const appVersion = '${GITHUB_REF_NAME#v}';" > lib/version.dart
+      - run: flutter build linux --release
+      - run: ./packaging/make-appimage.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: linux, path: client/packaging/out/*.AppImage }
+
+  publish:
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { merge-multiple: true, path: dist }
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
