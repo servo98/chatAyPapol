@@ -1,0 +1,12 @@
+# LiveKit SFU — config mínima para ChatPapol.
+# PRODUCCIÓN: cambia las keys (genera con: ./bin/livekit-server generate-keys)
+# y ponlas también en el .env del server (LIVEKIT_KEY / LIVEKIT_SECRET).
+port: 7880
+rtc:
+  port_range_start: 50000
+  port_range_end: 50100
+  use_external_ip: true
+keys:
+  devkey: devsecret-devsecret-devsecret-32
+logging:
+  level: info

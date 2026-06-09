@@ -1,0 +1,9 @@
+# server
+server/node_modules/
+server/data/
+server/bin/
+server/.env
+
+# client (flutter tiene su propio .gitignore dentro)
+client/packaging/out/
+client/packaging/AppDir/

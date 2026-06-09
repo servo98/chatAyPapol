@@ -1,0 +1,17 @@
+{
+  "name": "chatpapol-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "livekit": "./scripts/get-livekit.sh && ./bin/livekit-server --config livekit.yaml"
+  },
+  "dependencies": {
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0"
+  }
+}
