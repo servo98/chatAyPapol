@@ -20,6 +20,8 @@ dependencies:
   shared_preferences: ^2.3.0
   path_provider: ^2.1.0
   crypto: ^3.0.0
+  # ventana sin marco del OS: barra de título y botones propios
+  window_manager: ^0.4.3
 
 dev_dependencies:
   flutter_lints: ^6.0.0

@@ -1,12 +1,31 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 import 'store.dart';
 import 'theme.dart';
 import 'ui/login.dart';
 import 'ui/shell.dart';
+import 'ui/titlebar.dart';
 import 'voice.dart';
 
-void main() {
+bool get _desktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (_desktop) {
+    await windowManager.ensureInitialized();
+    const opts = WindowOptions(
+      size: Size(1280, 800),
+      minimumSize: Size(960, 600),
+      center: true,
+      title: 'ChatPapol',
+      titleBarStyle: TitleBarStyle.hidden, // marco del OS fuera: barra propia
+    );
+    windowManager.waitUntilReadyToShow(opts, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
   final store = AppStore();
   final voice = VoiceManager(store);
   store.tryRestore();
@@ -24,6 +43,10 @@ class ChatPapolApp extends StatelessWidget {
       title: 'ChatPapol',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
+      builder: (ctx, child) => Column(children: [
+        if (_desktop) const TitleBar(),
+        Expanded(child: child ?? const SizedBox.shrink()),
+      ]),
       home: ListenableBuilder(
         listenable: store,
         builder: (ctx, _) {

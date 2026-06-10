@@ -93,7 +93,7 @@ class _SidebarState extends State<Sidebar> {
               store.api.post('/api/channels', {'name': name, 'type': v});
             }
           case 'settings':
-            if (context.mounted) openSettings(context, store);
+            if (context.mounted) openSettings(context, store, voice);
         }
       },
       itemBuilder: (_) => [
@@ -331,7 +331,7 @@ class _SidebarState extends State<Sidebar> {
                 color: voice.deafened ? Pal.red : Pal.muted,
               ),
               SmallIconBtn(Icons.settings, 'Ajustes',
-                  () => openSettings(context, store)),
+                  () => openSettings(context, store, voice)),
             ]),
           ),
         ],

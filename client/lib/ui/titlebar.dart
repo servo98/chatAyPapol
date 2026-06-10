@@ -1,0 +1,104 @@
+import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
+import '../theme.dart';
+
+/// Barra de título propia (la ventana se crea sin marco del OS).
+/// Zona de arrastre + doble clic para maximizar + botones min/max/cerrar.
+class TitleBar extends StatefulWidget {
+  const TitleBar({super.key});
+  @override
+  State<TitleBar> createState() => _TitleBarState();
+}
+
+class _TitleBarState extends State<TitleBar> with WindowListener {
+  bool maximized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    windowManager.addListener(this);
+    windowManager.isMaximized().then((v) {
+      if (mounted) setState(() => maximized = v);
+    });
+  }
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    super.dispose();
+  }
+
+  @override
+  void onWindowMaximize() => setState(() => maximized = true);
+
+  @override
+  void onWindowUnmaximize() => setState(() => maximized = false);
+
+  Future<void> _toggleMax() async =>
+      await windowManager.isMaximized()
+          ? windowManager.unmaximize()
+          : windowManager.maximize();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Pal.bg0,
+      child: SizedBox(
+        height: 34,
+        child: Row(children: [
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onDoubleTap: _toggleMax,
+              child: DragToMoveArea(
+                child: Row(children: const [
+                  SizedBox(width: 12),
+                  Icon(Icons.forum_rounded, color: Pal.accent, size: 15),
+                  SizedBox(width: 8),
+                  Text('ChatPapol',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: Pal.muted)),
+                ]),
+              ),
+            ),
+          ),
+          _WinBtn(Icons.horizontal_rule, 'Minimizar',
+              () => windowManager.minimize()),
+          _WinBtn(maximized ? Icons.filter_none : Icons.crop_square,
+              maximized ? 'Restaurar' : 'Maximizar', _toggleMax,
+              iconSize: maximized ? 13 : 15),
+          _WinBtn(Icons.close, 'Cerrar', () => windowManager.close(),
+              hoverColor: Pal.red),
+        ]),
+      ),
+    );
+  }
+}
+
+class _WinBtn extends StatelessWidget {
+  final IconData icon;
+  final String tip;
+  final VoidCallback onTap;
+  final Color hoverColor;
+  final double iconSize;
+  const _WinBtn(this.icon, this.tip, this.onTap,
+      {this.hoverColor = Pal.bg4, this.iconSize = 15});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tip,
+      child: InkWell(
+        onTap: onTap,
+        hoverColor: hoverColor,
+        child: SizedBox(
+          width: 46,
+          height: double.infinity,
+          child: Icon(icon, size: iconSize, color: Pal.muted),
+        ),
+      ),
+    );
+  }
+}

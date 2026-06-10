@@ -1,27 +1,32 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:livekit_client/livekit_client.dart' as lk;
 import '../models.dart';
 import '../perms.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../updater.dart';
 import '../version.dart';
+import '../voice.dart';
 import 'widgets.dart';
 
-void openSettings(BuildContext context, AppStore store) {
+void openSettings(BuildContext context, AppStore store, VoiceManager voice) {
   showDialog(
     context: context,
     builder: (_) => Dialog(
       insetPadding: const EdgeInsets.all(40),
-      child: SettingsScreen(store: store),
+      child: SettingsScreen(store: store, voice: voice),
     ),
   );
 }
 
 class SettingsScreen extends StatefulWidget {
   final AppStore store;
-  const SettingsScreen({super.key, required this.store});
+  final VoiceManager voice;
+  const SettingsScreen({super.key, required this.store, required this.voice});
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -35,6 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isAdmin = store.canI(P.administrator);
     final tabs = <(String, String, IconData)>[
       ('cuenta', 'Mi cuenta', Icons.person),
+      ('voz', 'Voz y micrófono', Icons.mic),
       if (store.canI(P.manageRoles)) ('roles', 'Roles', Icons.theater_comedy),
       if (store.canI(P.createInvites)) ('invites', 'Invitaciones', Icons.mail),
       if (store.canI(P.manageExpressions)) ('stickers', 'Stickers', Icons.emoji_emotions),
@@ -108,15 +114,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           Expanded(
-            child: Stack(children: [
-              Padding(padding: const EdgeInsets.all(24), child: _panel()),
-              Positioned(
-                right: 12, top: 12,
-                child: IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, color: Pal.muted)),
-              ),
-            ]),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, right: 8),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, color: Pal.muted),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                    child: _panel(),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -125,6 +143,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _panel() => switch (tab) {
         'cuenta' => _AccountPanel(store),
+        'voz' => _VoicePanel(widget.voice),
         'roles' => _RolesPanel(store),
         'invites' => _InvitesPanel(store),
         'stickers' => _ExpressionsPanel(store, stickers: true),
@@ -190,6 +209,331 @@ class _AccountPanel extends StatelessWidget {
         ]),
       ]),
     ]);
+  }
+}
+
+// ───────────────────────── Voz y micrófono ─────────────────────────
+class _VoicePanel extends StatefulWidget {
+  final VoiceManager voice;
+  const _VoicePanel(this.voice);
+  @override
+  State<_VoicePanel> createState() => _VoicePanelState();
+}
+
+class _VoicePanelState extends State<_VoicePanel> {
+  VoiceManager get voice => widget.voice;
+
+  List<lk.MediaDevice> inputs = [];
+  StreamSubscription<List<lk.MediaDevice>>? _devSub;
+
+  // Prueba de micro: track local SIN sala (o el publicado si ya hay voz).
+  lk.LocalAudioTrack? _testTrack;
+  lk.AudioVisualizer? _vis;
+  lk.EventsListener<lk.AudioVisualizerEvent>? _visListener;
+  bool testing = false;
+  double level = 0;
+  // Guard de operaciones en vuelo: evita doble click en "Probar micrófono"
+  // y cambios de opciones solapados.
+  bool _busy = false;
+  // Época de la prueba: dispose()/_stopTest la incrementan para CANCELAR
+  // continuaciones de awaits en vuelo (p.ej. LocalAudioTrack.create esperando
+  // el prompt de permisos); la continuación compara y libera lo que creó.
+  int _gen = 0;
+
+  static const _label = TextStyle(
+      fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDevices();
+    _devSub = lk.Hardware.instance.onDeviceChange.stream
+        .listen((_) => _loadDevices());
+    // si la voz se desconecta probando el track publicado, aborta la prueba
+    voice.addListener(_onVoiceChanged);
+  }
+
+  @override
+  void dispose() {
+    _gen++; // cancela cualquier _startTest/_applyMicChange en vuelo
+    voice.removeListener(_onVoiceChanged);
+    _devSub?.cancel();
+    _releaseTest(); // libera track/visualizer al cerrar el panel
+    super.dispose();
+  }
+
+  void _onVoiceChanged() {
+    // Probábamos el track PUBLICADO (sin track standalone) y la Room lo ha
+    // disuelto al desconectar: para la prueba, el track ya no existe.
+    if (testing && _testTrack == null && voice.micTrack == null) _stopTest();
+  }
+
+  Future<void> _loadDevices() async {
+    final devs = await lk.Hardware.instance.audioInputs();
+    if (mounted) setState(() => inputs = devs);
+  }
+
+  /// Crea (si hace falta) el track de prueba y su visualizer. Si la época
+  /// cambia durante un await (panel cerrado, prueba detenida), libera todo
+  /// lo creado y devuelve false sin tocar el estado.
+  Future<bool> _acquireTest(int gen) async {
+    // Si ya estamos en voz, medimos el track REAL publicado;
+    // si no, creamos uno standalone con las mismas opciones.
+    lk.AudioTrack? track = voice.micTrack;
+    lk.LocalAudioTrack? created;
+    if (track == null) {
+      created = await lk.LocalAudioTrack.create(voice.micOptions);
+      if (gen != _gen || !mounted) {
+        await created.stop();
+        await created.dispose();
+        return false;
+      }
+      await created.start();
+      track = created;
+    }
+    final vis = lk.createVisualizer(track,
+        options: const lk.AudioVisualizerOptions(barCount: 7));
+    final listener = vis.createListener()
+      ..on<lk.AudioVisualizerEvent>((e) {
+        final bands =
+            e.event.whereType<num>().map((v) => v.toDouble()).toList();
+        final peak = bands.isEmpty ? 0.0 : bands.reduce(math.max);
+        if (mounted) setState(() => level = peak.clamp(0.0, 1.0));
+      });
+    await vis.start();
+    if (gen != _gen || !mounted) {
+      await listener.dispose();
+      await vis.stop();
+      await vis.dispose();
+      await created?.stop();
+      await created?.dispose();
+      return false;
+    }
+    _testTrack = created;
+    _vis = vis;
+    _visListener = listener;
+    return true;
+  }
+
+  Future<void> _startTest() async {
+    if (testing || _busy) return;
+    _busy = true;
+    final gen = ++_gen;
+    try {
+      final ok = await _acquireTest(gen);
+      if (ok && mounted) setState(() => testing = true);
+    } catch (e) {
+      await _releaseTest();
+      if (mounted) {
+        setState(() => testing = false);
+        showError(context, e);
+      }
+    } finally {
+      _busy = false;
+    }
+  }
+
+  Future<void> _stopTest() async {
+    _gen++; // cancela arranques/reinicios en vuelo
+    testing = false;
+    level = 0;
+    if (mounted) setState(() {});
+    await _releaseTest();
+  }
+
+  Future<void> _releaseTest() async {
+    final vis = _vis;
+    _vis = null;
+    _visListener?.dispose();
+    _visListener = null;
+    final track = _testTrack;
+    _testTrack = null;
+    try {
+      await vis?.stop();
+      await vis?.dispose();
+      await track?.stop();
+      await track?.dispose();
+    } catch (_) {}
+  }
+
+  /// Aplica un cambio de dispositivo/opciones y, si la prueba está activa,
+  /// la reinicia entera:
+  /// - el visualizer se libera ANTES del cambio: tras un restartTrack su
+  ///   EventChannel queda atado al id del mediaStreamTrack viejo y su stop()
+  ///   usaría el id nuevo, fugando el visualizer nativo del track viejo;
+  /// - el track standalone NO se puede restartTrack (sin publicar,
+  ///   sender == null → TrackCreateException): se recrea con las nuevas
+  ///   opciones vía LocalAudioTrack.create.
+  Future<void> _applyMicChange(Future<void> Function() change) async {
+    if (!testing || _busy) {
+      await change();
+      return;
+    }
+    _busy = true;
+    final gen = ++_gen;
+    try {
+      await _releaseTest();
+      await change(); // puede hacer restartTrack del track publicado
+      if (gen != _gen || !mounted) return;
+      final ok = await _acquireTest(gen);
+      if (!ok && mounted) {
+        setState(() {
+          testing = false;
+          level = 0;
+        });
+      }
+    } catch (e) {
+      await _releaseTest();
+      if (mounted) {
+        setState(() {
+          testing = false;
+          level = 0;
+        });
+        showError(context, e);
+      }
+    } finally {
+      _busy = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: voice,
+      builder: (ctx, _) {
+        // si el dispositivo guardado ya no existe, mostramos "Predeterminado"
+        final value = inputs.any((d) => d.deviceId == voice.micDeviceId)
+            ? voice.micDeviceId
+            : null;
+        return ListView(children: [
+          _title('Voz y micrófono'),
+          const Text('DISPOSITIVO DE ENTRADA', style: _label),
+          const SizedBox(height: 6),
+          DropdownButtonFormField<String?>(
+            // FormField solo lee initialValue en su initState: el primer build
+            // ocurre con inputs == [] (value → null) y al cargar los
+            // dispositivos NO se actualizaría. La key fuerza a recrear el
+            // estado cuando cambia el valor efectivo.
+            key: ValueKey<String?>(value),
+            initialValue: value,
+            dropdownColor: Pal.bg0,
+            style: const TextStyle(fontSize: 13.5, color: Pal.text),
+            items: [
+              const DropdownMenuItem<String?>(
+                  value: null, child: Text('Predeterminado del sistema')),
+              ...inputs.map((d) => DropdownMenuItem<String?>(
+                    value: d.deviceId,
+                    child: Text(d.label.isEmpty ? d.deviceId : d.label,
+                        overflow: TextOverflow.ellipsis),
+                  )),
+            ],
+            onChanged: (id) async {
+              final dev =
+                  inputs.where((d) => d.deviceId == id).firstOrNull;
+              await _applyMicChange(() => voice.setMicDevice(dev));
+            },
+          ),
+          const SizedBox(height: 20),
+          const Text('PROBAR MICRÓFONO', style: _label),
+          const SizedBox(height: 8),
+          Row(children: [
+            ElevatedButton.icon(
+              onPressed: testing ? _stopTest : _startTest,
+              icon: Icon(testing ? Icons.stop : Icons.graphic_eq, size: 16),
+              label: Text(testing ? 'Detener' : 'Probar micrófono'),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Container(
+                height: 10,
+                decoration: BoxDecoration(
+                    color: Pal.bg0, borderRadius: BorderRadius.circular(5)),
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: testing ? level : 0,
+                  heightFactor: 1,
+                  child: Container(
+                    decoration: BoxDecoration(
+                        color: Pal.green,
+                        borderRadius: BorderRadius.circular(5)),
+                  ),
+                ),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+              testing
+                  ? 'Habla: si la barra verde se mueve, se te escucha.'
+                  : voice.connected
+                      ? 'Mide el micro que ya está publicado en el canal de voz.'
+                      : 'Crea una captura local sin entrar a ningún canal.',
+              style: const TextStyle(color: Pal.faint, fontSize: 12)),
+          const SizedBox(height: 20),
+          const Text('PROCESADO DE VOZ', style: _label),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            activeTrackColor: Pal.accent,
+            value: voice.noiseSuppression,
+            title: const Text('Supresión de ruido',
+                style: TextStyle(fontSize: 13.5)),
+            subtitle: const Text('Filtra ventiladores, teclado y ruido de fondo.',
+                style: TextStyle(fontSize: 11, color: Pal.faint)),
+            onChanged: (v) =>
+                _applyMicChange(() => voice.setNoiseSuppression(v)),
+          ),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            activeTrackColor: Pal.accent,
+            value: voice.echoCancellation,
+            title: const Text('Cancelación de eco',
+                style: TextStyle(fontSize: 13.5)),
+            subtitle: const Text('Evita que se cuele el audio de tus altavoces.',
+                style: TextStyle(fontSize: 11, color: Pal.faint)),
+            onChanged: (v) =>
+                _applyMicChange(() => voice.setEchoCancellation(v)),
+          ),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            activeTrackColor: Pal.accent,
+            value: voice.autoGainControl,
+            title: const Text('Ganancia automática (AGC)',
+                style: TextStyle(fontSize: 13.5)),
+            subtitle: const Text('Nivela el volumen de tu voz automáticamente.',
+                style: TextStyle(fontSize: 11, color: Pal.faint)),
+            onChanged: (v) =>
+                _applyMicChange(() => voice.setAutoGainControl(v)),
+          ),
+          const SizedBox(height: 12),
+          const Text('VOLUMEN DE SALIDA', style: _label),
+          Row(children: [
+            const Icon(Icons.volume_down, size: 18, color: Pal.muted),
+            Expanded(
+              child: Slider(
+                value: voice.outputVolume,
+                activeColor: Pal.accent,
+                onChanged: (v) => voice.setOutputVolume(v),
+              ),
+            ),
+            const Icon(Icons.volume_up, size: 18, color: Pal.muted),
+            SizedBox(
+              width: 42,
+              child: Text('${(voice.outputVolume * 100).round()}%',
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(fontSize: 12.5, color: Pal.muted)),
+            ),
+          ]),
+          const Text(
+              'Atenúa lo que oyes de los demás. El volumen de captura del micro '
+              'no se puede ajustar por software en escritorio: usa la ganancia '
+              'automática o el volumen de micrófono del sistema.',
+              style: TextStyle(color: Pal.faint, fontSize: 12)),
+        ]);
+      },
+    );
   }
 }
 

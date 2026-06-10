@@ -207,31 +207,50 @@ class VoicePanel extends StatelessWidget {
     try {
       final sources = await voice.shareSources();
       if (!context.mounted) return;
+      var withAudio = false;
       showDialog(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('¿Qué quieres compartir?', style: TextStyle(fontSize: 17)),
-          content: SizedBox(
-            width: 420,
-            height: 320,
-            child: ListView(
-              children: sources.map((s) => ListTile(
-                    leading: Icon(
-                        s.type == rtc.SourceType.Screen
-                            ? Icons.monitor
-                            : Icons.window,
-                        color: Pal.accent),
-                    title: Text(s.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 13.5)),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      voice.startShare(s).catchError((e) {
-                        if (context.mounted) showError(context, e);
-                      });
-                    },
-                  )).toList(),
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setSt) => AlertDialog(
+            title: const Text('¿Qué quieres compartir?', style: TextStyle(fontSize: 17)),
+            content: SizedBox(
+              width: 420,
+              height: 360,
+              child: Column(children: [
+                Expanded(
+                  child: ListView(
+                    children: sources.map((s) => ListTile(
+                          leading: Icon(
+                              s.type == rtc.SourceType.Screen
+                                  ? Icons.monitor
+                                  : Icons.window,
+                              color: Pal.accent),
+                          title: Text(s.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 13.5)),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            voice.startShare(s, withAudio: withAudio).catchError((e) {
+                              if (context.mounted) showError(context, e);
+                            });
+                          },
+                        )).toList(),
+                  ),
+                ),
+                CheckboxListTile(
+                  dense: true,
+                  value: withAudio,
+                  activeColor: Pal.accent,
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: const Text('Compartir también el audio del sistema',
+                      style: TextStyle(fontSize: 13)),
+                  subtitle: const Text('Experimental: puede fallar en Windows',
+                      style: TextStyle(fontSize: 11, color: Pal.faint)),
+                  onChanged: (v) => setSt(() => withAudio = v ?? false),
+                ),
+              ]),
             ),
           ),
         ),
