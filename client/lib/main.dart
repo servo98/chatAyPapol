@@ -180,8 +180,11 @@ Future<void> _diagShare() async {
       final cycles = variant == 'audio' ? 3 : 1;
       for (var c = 1; c <= cycles; c++) {
         await log('3: setScreenShareEnabled ($variant) ciclo $c/$cycles ...');
-        await room.localParticipant
-            ?.setScreenShareEnabled(true, screenShareCaptureOptions: opts);
+        // captureScreenAudio debe ir como PARÁMETRO (livekit revisa ese, no
+        // el de las opciones) para que cree y publique el track de audio
+        await room.localParticipant?.setScreenShareEnabled(true,
+            captureScreenAudio: variant == 'audio',
+            screenShareCaptureOptions: opts);
         final pubsOn = room.localParticipant?.audioTrackPublications.length;
         await log('  CAPTURA+PUBLISH OK ✓ (audio pubs=$pubsOn)');
         // deja correr el encoder y mide los fps/bitrate reales del sender
