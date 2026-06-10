@@ -14,19 +14,23 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (_desktop) {
     await windowManager.ensureInitialized();
+    // ORDEN CRÍTICO: mostrar SIEMPRE primero (garantiza ventana visible);
+    // ocultar la barra del SO después es best-effort y nunca bloquea el show.
+    // (No ponemos titleBarStyle en WindowOptions: aplicarlo en el arranque
+    //  provocaba que la ventana quedara invisible.)
     const opts = WindowOptions(
       size: Size(1280, 800),
       minimumSize: Size(960, 600),
       center: true,
       title: 'ChatPapol',
-      titleBarStyle: TitleBarStyle.hidden, // marco del OS fuera: barra propia
     );
     await windowManager.waitUntilReadyToShow(opts, () async {
-      // forzamos el ocultado del título del SO (evita doble barra) y mostramos
-      await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
       await windowManager.show();
       await windowManager.focus();
     });
+    try {
+      await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+    } catch (_) {/* peor caso: barra del SO visible, pero la app funciona */}
   }
   final store = AppStore();
   final voice = VoiceManager(store);
