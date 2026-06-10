@@ -6,6 +6,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart' as m;
 import 'store.dart';
 
+/// livekit no trae preset de screenshare a 60fps; 1080p60 fluido necesita
+/// más bitrate que el preset de 30fps (4Mbps) para no verse borroso.
+const _share1080FPS60 = VideoParameters(
+  dimensions: VideoDimensionsPresets.h1080_169,
+  encoding: VideoEncoding(maxBitrate: 8000 * 1000, maxFramerate: 60),
+);
+
+VideoParameters _shareParamsFor(int fps) => switch (fps) {
+      15 => VideoParametersPresets.screenShareH1080FPS15,
+      60 => _share1080FPS60,
+      _ => VideoParametersPresets.screenShareH1080FPS30,
+    };
+
 /// Voz, screenshare y soundboard. LiveKit hace el trabajo duro (SFU);
 /// el soundboard NO usa WebRTC: cada cliente reproduce el archivo localmente.
 class VoiceManager extends ChangeNotifier {
@@ -168,9 +181,17 @@ class VoiceManager extends ChangeNotifier {
           defaultAudioCaptureOptions: micOptions,
           // captureScreenAudio va por llamada en startShare (opt-in): el
           // loopback de audio en Windows puede crashear el capturador nativo
+          // maxFrameRate explícito SIEMPRE: si queda null, livekit manda
+          // mandatory:{frameRate:null} y el plugin nativo de Windows hace
+          // std::get<int> sobre null → __fastfail 0xC0000409 (app muerta).
           defaultScreenShareCaptureOptions: const ScreenShareCaptureOptions(
+            maxFrameRate: 30.0,
             params: VideoParametersPresets.screenShareH1080FPS30,
           ),
+          // una sola capa a máxima calidad: con simulcast el screenshare
+          // reparte el bitrate entre capas y la nítida tarda/no llega
+          defaultVideoPublishOptions:
+              const VideoPublishOptions(simulcast: false),
         ),
       );
       await r.connect(t['url'], t['token']);
@@ -258,22 +279,32 @@ class VoiceManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Enumera pantallas/ventanas para que la UI muestre el selector.
-  Future<List<rtc.DesktopCapturerSource>> shareSources() =>
-      rtc.desktopCapturer.getSources(
-          types: [rtc.SourceType.Screen, rtc.SourceType.Window]);
+  /// Enumera pantallas/ventanas con miniatura para el selector.
+  /// Dos llamadas separadas: pedir Screen+Window en una sola getSources
+  /// devuelve solo las ventanas (las pantallas se pierden en el plugin).
+  Future<List<rtc.DesktopCapturerSource>> shareSources() async {
+    final thumb = rtc.ThumbnailSize(320, 180);
+    final screens = await rtc.desktopCapturer
+        .getSources(types: [rtc.SourceType.Screen], thumbnailSize: thumb);
+    final windows = await rtc.desktopCapturer
+        .getSources(types: [rtc.SourceType.Window], thumbnailSize: thumb);
+    return [...screens, ...windows];
+  }
 
   /// [withAudio] es opt-in: el loopback "Remote App Audio" de Windows es
   /// inestable en el capturador nativo y puede tumbar la app; sin audio el
-  /// screenshare es sólido.
+  /// screenshare es sólido. [fps] = 15, 30 o 60 (1080p en todos).
   Future<void> startShare(rtc.DesktopCapturerSource source,
-      {bool withAudio = false}) async {
+      {bool withAudio = false, int fps = 60}) async {
     await room?.localParticipant?.setScreenShareEnabled(
       true,
       screenShareCaptureOptions: ScreenShareCaptureOptions(
         sourceId: source.id,
         captureScreenAudio: withAudio,
-        params: VideoParametersPresets.screenShareH1080FPS30,
+        // null aquí mata el proceso en Windows (mandatory frameRate:null →
+        // fastfail en ParseConstraints del plugin C++); ver RoomOptions.
+        maxFrameRate: fps.toDouble(),
+        params: _shareParamsFor(fps),
       ),
     );
     sharing = true;

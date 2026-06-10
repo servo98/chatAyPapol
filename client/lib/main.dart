@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
+import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:window_manager/window_manager.dart';
 import 'installer.dart';
 import 'store.dart';
@@ -13,8 +15,174 @@ import 'voice.dart';
 
 bool get _desktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
+// Diagnóstico aislado de screenshare + dispositivos. Escribe paso a paso a un
+// archivo (si la app CRASHEA en un paso nativo, falta esa línea → ahí murió).
+Future<void> _diag() async {
+  final f = File(r'C:\Users\ferna\Downloads\chatpapol-toolchain\diag.txt');
+  Future<void> log(String s) async => f.writeAsStringSync('$s\n', mode: FileMode.append);
+  f.writeAsStringSync('=== diag inicio ===\n');
+  try {
+    await log('paso 1: getSources(Screen) ...');
+    final scr = await rtc.desktopCapturer.getSources(types: [rtc.SourceType.Screen]);
+    await log('  OK pantallas=${scr.length}');
+
+    await log('paso 2: getSources(Window) ...');
+    final win = await rtc.desktopCapturer.getSources(types: [rtc.SourceType.Window]);
+    await log('  OK ventanas=${win.length}');
+
+    await log('paso 3: getSources(Screen+Window) ...');
+    final both = await rtc.desktopCapturer
+        .getSources(types: [rtc.SourceType.Screen, rtc.SourceType.Window]);
+    await log('  OK total=${both.length}');
+
+    await log('paso 4: audioInputs/outputs (sin init) ...');
+    var ins = await lk.Hardware.instance.audioInputs();
+    var outs = await lk.Hardware.instance.audioOutputs();
+    await log('  in=${ins.length} out=${outs.length}');
+    for (final d in ins) {
+      await log('   IN  ${d.deviceId} | ${d.label}');
+    }
+    for (final d in outs) {
+      await log('   OUT ${d.deviceId} | ${d.label}');
+    }
+
+    await log('paso 5: init audio (crear+parar track) y re-enumerar ...');
+    final t = await lk.LocalAudioTrack.create();
+    await t.stop();
+    await t.dispose();
+    ins = await lk.Hardware.instance.audioInputs();
+    outs = await lk.Hardware.instance.audioOutputs();
+    await log('  TRAS INIT: in=${ins.length} out=${outs.length}');
+    for (final d in ins) {
+      await log('   IN  ${d.deviceId} | ${d.label}');
+    }
+    for (final d in outs) {
+      await log('   OUT ${d.deviceId} | ${d.label}');
+    }
+
+    await log('=== diag FIN ok ===');
+  } catch (e, st) {
+    await log('EXCEPCIÓN: $e\n$st');
+  }
+  exit(0);
+}
+
+// Reproduce el screenshare REAL: conecta a una sala LiveKit y prueba la captura
+// con distintos presets, registrando cada paso (si crashea, falta la línea).
+Future<void> _diagShare() async {
+  final out = File(r'C:\Users\ferna\Downloads\chatpapol-toolchain\diag-share.txt');
+  final cfg = File(r'C:\Users\ferna\Downloads\chatpapol-toolchain\share-test.txt')
+      .readAsLinesSync();
+  final url = cfg[0], token = cfg[1];
+  final variant = cfg.length > 2 ? cfg[2].trim() : '1080';
+  Future<void> log(String s) async => out.writeAsStringSync('$s\n', mode: FileMode.append);
+  out.writeAsStringSync('=== diag-share variant=$variant ===\n');
+  lk.Room? room;
+  try {
+    await log('1: conectando ...');
+    // mismas opciones de publish que la app (una capa, sin simulcast)
+    room = lk.Room(
+        roomOptions: const lk.RoomOptions(
+            defaultVideoPublishOptions:
+                lk.VideoPublishOptions(simulcast: false)));
+    await room.connect(url, token);
+    await log('  conectado ✓');
+
+    // variant: "screen:N" / "window:N" / 1080 / 720 / default / captureonly / fps
+    // "fps" es la prueba discriminante del fix: idéntico a 1080 pero con
+    // maxFrameRate explícito (sin él, livekit manda mandatory:{frameRate:null}
+    // y el plugin C++ hace fastfail). Predicción: 1080/default crashean, fps NO.
+    final isWin = variant.startsWith('window');
+    final idx = variant.contains(':') ? int.tryParse(variant.split(':')[1]) ?? 0 : 0;
+    final srcs = await rtc.desktopCapturer.getSources(
+        types: [isWin ? rtc.SourceType.Window : rtc.SourceType.Screen]);
+    await log('2: ${srcs.length} fuentes (${isWin ? "ventanas" : "pantallas"}):');
+    for (var i = 0; i < srcs.length; i++) {
+      await log('     [$i] ${srcs[i].name}');
+    }
+    final src = srcs[idx.clamp(0, srcs.length - 1)];
+    await log('   usando [$idx] "${src.name}"');
+
+    lk.ScreenShareCaptureOptions opts;
+    switch (variant) {
+      case '720':
+        opts = lk.ScreenShareCaptureOptions(
+            sourceId: src.id, params: lk.VideoParametersPresets.screenShareH720FPS5);
+        break;
+      case 'default': // sin params: deja que webrtc negocie
+        opts = lk.ScreenShareCaptureOptions(sourceId: src.id);
+        break;
+      case 'fps': // el FIX: maxFrameRate explícito evita frameRate:null
+        opts = lk.ScreenShareCaptureOptions(
+            sourceId: src.id,
+            maxFrameRate: 30.0,
+            params: lk.VideoParametersPresets.screenShareH1080FPS30);
+        break;
+      case '60': // 1080p60 (lo que usa la app): mide fps reales del sender
+        opts = lk.ScreenShareCaptureOptions(
+            sourceId: src.id,
+            maxFrameRate: 60.0,
+            params: const lk.VideoParameters(
+                dimensions: lk.VideoDimensionsPresets.h1080_169,
+                encoding:
+                    lk.VideoEncoding(maxBitrate: 8000 * 1000, maxFramerate: 60)));
+        break;
+      case 'window':
+        opts = lk.ScreenShareCaptureOptions(
+            sourceId: src.id, params: lk.VideoParametersPresets.screenShareH720FPS5);
+        break;
+      default: // 1080
+        opts = lk.ScreenShareCaptureOptions(
+            sourceId: src.id, params: lk.VideoParametersPresets.screenShareH1080FPS30);
+    }
+
+    if (variant == 'captureonly') {
+      await log('3: createScreenShareTrack SIN publicar (aísla la captura) ...');
+      final t = await lk.LocalVideoTrack.createScreenShareTrack(opts);
+      await log('  CAPTURA SOLA OK ✓ (el crash NO es la captura → es el encoder/publish)');
+      await Future.delayed(const Duration(seconds: 1));
+      await t.stop();
+      await t.dispose();
+      await log('  stop OK');
+    } else {
+      await log('3: setScreenShareEnabled ($variant) ...');
+      await room.localParticipant?.setScreenShareEnabled(true, screenShareCaptureOptions: opts);
+      await log('  CAPTURA+PUBLISH OK ✓');
+      // deja correr el encoder y mide los fps/bitrate reales del sender
+      await Future.delayed(const Duration(seconds: 6));
+      for (final pub in room.localParticipant?.videoTrackPublications ?? []) {
+        final track = pub.track;
+        if (track is lk.LocalVideoTrack) {
+          for (final st in await track.getSenderStats()) {
+            await log('  stats rid=${st.rid} fps=${st.framesPerSecond} '
+                '${st.frameWidth}x${st.frameHeight} limit=${st.qualityLimitationReason}');
+          }
+        }
+      }
+      await room.localParticipant?.setScreenShareEnabled(false);
+      await log('  stop OK');
+    }
+
+    await log('=== diag-share FIN ok (variant=$variant NO crasheó) ===');
+  } catch (e, st) {
+    await log('EXCEPCIÓN: $e\n$st');
+  } finally {
+    await room?.disconnect();
+    await room?.dispose();
+  }
+  exit(0);
+}
+
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (args.contains('--diag')) {
+    await _diag();
+    return;
+  }
+  if (args.contains('--diag-share')) {
+    await _diagShare();
+    return;
+  }
   if (_desktop) {
     // El runner nativo ya muestra la ventana en el primer frame (visible
     // garantizado). Aquí solo ajustamos tamaño/centrado y QUITAMOS la barra

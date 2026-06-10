@@ -207,37 +207,51 @@ class VoicePanel extends StatelessWidget {
     try {
       final sources = await voice.shareSources();
       if (!context.mounted) return;
+      rtc.DesktopCapturerSource? selected;
       var withAudio = false;
+      var fps = 60;
+      final screens =
+          sources.where((s) => s.type == rtc.SourceType.Screen).toList();
+      final windows =
+          sources.where((s) => s.type == rtc.SourceType.Window).toList();
       showDialog(
         context: context,
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setSt) => AlertDialog(
-            title: const Text('¿Qué quieres compartir?', style: TextStyle(fontSize: 17)),
+            title: const Text('¿Qué quieres compartir?',
+                style: TextStyle(fontSize: 17)),
             content: SizedBox(
-              width: 420,
-              height: 360,
+              width: 560,
+              height: 460,
               child: Column(children: [
                 Expanded(
-                  child: ListView(
-                    children: sources.map((s) => ListTile(
-                          leading: Icon(
-                              s.type == rtc.SourceType.Screen
-                                  ? Icons.monitor
-                                  : Icons.window,
-                              color: Pal.accent),
-                          title: Text(s.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 13.5)),
-                          onTap: () {
-                            Navigator.pop(ctx);
-                            voice.startShare(s, withAudio: withAudio).catchError((e) {
-                              if (context.mounted) showError(context, e);
-                            });
-                          },
-                        )).toList(),
-                  ),
+                  child: ListView(children: [
+                    if (screens.isNotEmpty)
+                      _sourceSection(
+                          'Pantallas', screens, selected, (s) => setSt(() => selected = s)),
+                    if (windows.isNotEmpty)
+                      _sourceSection(
+                          'Ventanas', windows, selected, (s) => setSt(() => selected = s)),
+                  ]),
                 ),
+                const SizedBox(height: 8),
+                Row(children: [
+                  const Text('Calidad: 1080p a',
+                      style: TextStyle(fontSize: 13, color: Pal.muted)),
+                  const SizedBox(width: 8),
+                  SegmentedButton<int>(
+                    style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                    segments: const [
+                      ButtonSegment(value: 15, label: Text('15 fps')),
+                      ButtonSegment(value: 30, label: Text('30 fps')),
+                      ButtonSegment(value: 60, label: Text('60 fps')),
+                    ],
+                    selected: {fps},
+                    onSelectionChanged: (v) => setSt(() => fps = v.first),
+                  ),
+                ]),
                 CheckboxListTile(
                   dense: true,
                   value: withAudio,
@@ -252,12 +266,110 @@ class VoicePanel extends StatelessWidget {
                 ),
               ]),
             ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancelar')),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Pal.accent),
+                onPressed: selected == null
+                    ? null
+                    : () {
+                        Navigator.pop(ctx);
+                        voice
+                            .startShare(selected!, withAudio: withAudio, fps: fps)
+                            .catchError((e) {
+                          if (context.mounted) showError(context, e);
+                        });
+                      },
+                child: const Text('Compartir'),
+              ),
+            ],
           ),
         ),
       );
     } catch (e) {
       if (context.mounted) showError(context, e);
     }
+  }
+
+  /// Sección del selector: título + grid de miniaturas (estilo Discord).
+  Widget _sourceSection(
+      String title,
+      List<rtc.DesktopCapturerSource> items,
+      rtc.DesktopCapturerSource? selected,
+      void Function(rtc.DesktopCapturerSource) onTap) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Text(title,
+            style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Pal.muted,
+                letterSpacing: 0.5)),
+      ),
+      GridView.count(
+        crossAxisCount: 2,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        childAspectRatio: 16 / 11,
+        children: items.map((s) {
+          final sel = selected?.id == s.id;
+          return InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => onTap(s),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: sel ? Pal.accent : Pal.bg3, width: sel ? 2 : 1),
+                color: Pal.bg3,
+              ),
+              padding: const EdgeInsets.all(4),
+              child: Column(children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(5),
+                    child: s.thumbnail != null && s.thumbnail!.isNotEmpty
+                        ? Image.memory(s.thumbnail!,
+                            fit: BoxFit.contain,
+                            width: double.infinity,
+                            gaplessPlayback: true)
+                        : Center(
+                            child: Icon(
+                                s.type == rtc.SourceType.Screen
+                                    ? Icons.monitor
+                                    : Icons.window,
+                                color: Pal.muted,
+                                size: 36)),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(
+                      s.type == rtc.SourceType.Screen
+                          ? Icons.monitor
+                          : Icons.window,
+                      size: 13,
+                      color: sel ? Pal.accent : Pal.muted),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(s.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12)),
+                  ),
+                ]),
+              ]),
+            ),
+          );
+        }).toList(),
+      ),
+      const SizedBox(height: 8),
+    ]);
   }
 
   void _soundboard(BuildContext context) {
