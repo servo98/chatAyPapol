@@ -114,7 +114,7 @@ class _ChatViewState extends State<ChatView> {
     final ch = channel;
     if (ch == null) {
       return const Center(
-          child: Text('Elige un canal para empezar 👈',
+          child: Text('❯ elige un canal para empezar',
               style: TextStyle(color: Pal.muted)));
     }
     final msgs = store.messages[ch.id] ?? [];
@@ -194,8 +194,11 @@ class _ChatViewState extends State<ChatView> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.tag, color: Pal.faint, size: 20),
-          const SizedBox(width: 6),
+          const Text('#',
+              style: TextStyle(
+                  color: Pal.faint, fontSize: 19, fontWeight: FontWeight.w700,
+                  height: 1)),
+          const SizedBox(width: 7),
           Text(ch.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
           if (ch.topic != null && ch.topic!.isNotEmpty) ...[
             Container(
@@ -218,13 +221,21 @@ class _ChatViewState extends State<ChatView> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircleAvatar(
-              radius: 34, backgroundColor: Pal.bg3,
-              child: const Icon(Icons.tag, size: 36, color: Pal.muted)),
+          Container(
+            width: 68, height: 68,
+            decoration: BoxDecoration(
+                color: Pal.bg3,
+                shape: BoxShape.circle,
+                border: Border.all(color: Pal.borderStrong)),
+            alignment: Alignment.center,
+            child: const Text('#',
+                style: TextStyle(
+                    fontSize: 34, fontWeight: FontWeight.w700, color: Pal.accent)),
+          ),
           const SizedBox(height: 12),
-          Text('Bienvenido a #${ch.name}',
+          Text('bienvenido a #${ch.name}',
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-          const Text('Este es el principio del canal. Di algo 👋',
+          const Text('este es el principio del canal — di algo ▮',
               style: TextStyle(color: Pal.muted, fontSize: 13)),
         ],
       ),
@@ -311,9 +322,11 @@ class _ChatViewState extends State<ChatView> {
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(12),
-      decoration:
-          BoxDecoration(color: Pal.bg3, borderRadius: BorderRadius.circular(8)),
-      child: const Text('No tienes permiso para escribir en este canal 🔒',
+      decoration: BoxDecoration(
+          color: Pal.bg3,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Pal.borderDefault)),
+      child: const Text('! no tienes permiso para escribir en este canal',
           style: TextStyle(color: Pal.muted, fontSize: 13)),
     );
   }
@@ -328,9 +341,18 @@ class _ChatViewState extends State<ChatView> {
           if (slashMatches.isNotEmpty) _slashPopup(slashMatches),
           if (replyingTo != null || editing != null) _contextBar(),
           if (pendingUploads.isNotEmpty) _uploadsBar(),
-          Container(
-            decoration: BoxDecoration(
-                color: Pal.bg3, borderRadius: BorderRadius.circular(10)),
+          ListenableBuilder(
+            listenable: focus,
+            builder: (_, child) => Container(
+              decoration: BoxDecoration(
+                  color: Pal.inset,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: focus.hasFocus ? Pal.accent : Pal.borderDefault,
+                      width: focus.hasFocus ? 1.5 : 1),
+                  boxShadow: focus.hasFocus ? Pal.glowGreen : null),
+              child: child,
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -340,6 +362,13 @@ class _ChatViewState extends State<ChatView> {
                     child: SmallIconBtn(
                         Icons.add_circle, 'Adjuntar archivo', _attach, size: 22),
                   ),
+                const Padding(
+                  padding: EdgeInsets.only(left: 10, right: 2, bottom: 11),
+                  child: Text('❯',
+                      style: TextStyle(
+                          color: Pal.accent, fontSize: 14, height: 1,
+                          fontWeight: FontWeight.w700)),
+                ),
                 Expanded(
                   child: Focus(
                     onKeyEvent: (node, e) {
@@ -597,7 +626,7 @@ class _MessageTile extends StatelessWidget {
                                   style: TextStyle(
                                       fontSize: 9.5,
                                       fontWeight: FontWeight.w800,
-                                      color: Colors.white)),
+                                      color: Pal.greenInk)),
                             ),
                           const SizedBox(width: 8),
                           Text(fmtTime(m.createdAt),

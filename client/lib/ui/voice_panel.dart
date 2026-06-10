@@ -83,7 +83,7 @@ class VoicePanel extends StatelessWidget {
   Widget _tilesOnly(List<m.VoiceState> users) {
     if (users.isEmpty) {
       return const Center(
-          child: Text('Nadie por aquí todavía. ¡Únete! 🎙️',
+          child: Text('❯ nadie por aquí todavía — únete',
               style: TextStyle(color: Pal.muted)));
     }
     return Center(
@@ -498,8 +498,9 @@ class VoicePanel extends StatelessWidget {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(s.emoji ?? '🔊',
-                                style: const TextStyle(fontSize: 22)),
+                            Text(s.emoji ?? '♪',
+                                style: const TextStyle(
+                                    fontSize: 22, color: Pal.accent)),
                             const SizedBox(height: 4),
                             Text(s.name,
                                 maxLines: 1,

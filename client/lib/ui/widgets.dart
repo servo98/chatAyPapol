@@ -3,9 +3,11 @@ import '../models.dart';
 import '../store.dart';
 import '../theme.dart';
 
+// Paleta secundaria aypapol (sin blurple de Discord): verde, cian, magenta,
+// ámbar, morado rolcito, teal facturas. Tinta oscura encima para legibilidad.
 const avatarColors = [
-  Color(0xFF8B7CF7), Color(0xFF5BC8AF), Color(0xFFF2A65A),
-  Color(0xFFE36FA0), Color(0xFF6FA8FF), Color(0xFFFFC857),
+  Color(0xFF2CE60F), Color(0xFF22D3EE), Color(0xFFFF2E9A),
+  Color(0xFFFFB627), Color(0xFFB06CFF), Color(0xFF38E0A6),
 ];
 
 class Avatar extends StatelessWidget {
@@ -33,7 +35,7 @@ class Avatar extends StatelessWidget {
             child: Text(
               (u?.username ?? '?').substring(0, 1).toUpperCase(),
               style: TextStyle(
-                  color: Colors.white,
+                  color: Pal.greenInk,
                   fontSize: size * .42,
                   fontWeight: FontWeight.w700),
             ));

@@ -53,13 +53,26 @@ class _TitleBarState extends State<TitleBar> with WindowListener {
               child: DragToMoveArea(
                 child: Row(children: const [
                   SizedBox(width: 12),
-                  Icon(Icons.forum_rounded, color: Pal.accent, size: 15),
+                  Text('❯',
+                      style: TextStyle(
+                          fontSize: 14,
+                          height: 1,
+                          fontWeight: FontWeight.w700,
+                          color: Pal.accent)),
                   SizedBox(width: 8),
-                  Text('ChatPapol',
+                  Text.rich(
+                    TextSpan(
                       style: TextStyle(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w700,
-                          color: Pal.muted)),
+                          color: Pal.muted),
+                      children: [
+                        TextSpan(text: 'Chat',
+                            style: TextStyle(color: Pal.accent)),
+                        TextSpan(text: 'Papol'),
+                      ],
+                    ),
+                  ),
                 ]),
               ),
             ),

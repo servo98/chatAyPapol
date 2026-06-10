@@ -98,13 +98,13 @@ class _SidebarState extends State<Sidebar> {
       },
       itemBuilder: (_) => [
         if (store.canI(P.createInvites))
-          const PopupMenuItem(value: 'invite', child: Text('📨  Invitar gente')),
+          const PopupMenuItem(value: 'invite', child: Text('❯  invitar gente')),
         if (store.canI(P.manageChannels)) ...const [
-          PopupMenuItem(value: 'text', child: Text('#  Crear canal de texto')),
-          PopupMenuItem(value: 'voice', child: Text('🔊  Crear canal de voz')),
-          PopupMenuItem(value: 'category', child: Text('📁  Crear categoría')),
+          PopupMenuItem(value: 'text', child: Text('#  crear canal de texto')),
+          PopupMenuItem(value: 'voice', child: Text('♪  crear canal de voz')),
+          PopupMenuItem(value: 'category', child: Text('▸  crear categoría')),
         ],
-        const PopupMenuItem(value: 'settings', child: Text('⚙️  Ajustes')),
+        const PopupMenuItem(value: 'settings', child: Text('⚙  ajustes')),
       ],
       child: Container(
         height: 48,
@@ -114,11 +114,21 @@ class _SidebarState extends State<Sidebar> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.forum_rounded, color: Pal.accent, size: 20),
-            const SizedBox(width: 8),
+            const Text('❯',
+                style: TextStyle(
+                    color: Pal.accent, fontSize: 18, fontWeight: FontWeight.w700,
+                    height: 1)),
+            const SizedBox(width: 9),
             const Expanded(
-              child: Text('ChatPapol',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              child: Text.rich(
+                TextSpan(
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  children: [
+                    TextSpan(text: 'Chat', style: TextStyle(color: Pal.accent)),
+                    TextSpan(text: 'Papol', style: TextStyle(color: Pal.text)),
+                  ],
+                ),
+              ),
             ),
             Icon(Icons.expand_more, color: Pal.muted, size: 18),
             if (!store.wsConnected)
@@ -148,7 +158,7 @@ class _SidebarState extends State<Sidebar> {
                 child: Text(cat.name.toUpperCase(),
                     style: const TextStyle(
                         fontSize: 11, fontWeight: FontWeight.w700,
-                        color: Pal.faint, letterSpacing: .5)),
+                        color: Pal.faint, letterSpacing: 1.2)),
               ),
               if (hover && store.canI(P.manageChannels)) ...[
                 SmallIconBtn(Icons.add, 'Crear canal aquí', () async {
@@ -186,10 +196,16 @@ class _SidebarState extends State<Sidebar> {
                   : hover
                       ? Pal.bg3
                       : null,
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(5),
+              // barra de acento verde con glow en el canal activo
+              border: selected
+                  ? const Border(
+                      left: BorderSide(color: Pal.accent, width: 3))
+                  : null,
+              boxShadow: selected ? Pal.glowGreenSm : null,
             ),
             child: InkWell(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(5),
               onTap: () {
                 store.selectChannel(ch.id);
                 if (ch.isVoice) voice.join(ch.id);
@@ -198,9 +214,23 @@ class _SidebarState extends State<Sidebar> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 child: Row(
                   children: [
-                    Icon(ch.isVoice ? Icons.volume_up_rounded : Icons.tag,
-                        size: 17,
-                        color: selected || hasUnread ? Pal.text : Pal.faint),
+                    ch.isVoice
+                        ? Icon(Icons.volume_up_rounded,
+                            size: 17,
+                            color: selected
+                                ? Pal.accent
+                                : hasUnread ? Pal.text : Pal.faint)
+                        : SizedBox(
+                            width: 17,
+                            child: Text('#',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1,
+                                    color: selected
+                                        ? Pal.accent
+                                        : hasUnread ? Pal.text : Pal.faint))),
                     const SizedBox(width: 7),
                     Expanded(
                       child: Text(ch.name,
@@ -208,7 +238,9 @@ class _SidebarState extends State<Sidebar> {
                           style: TextStyle(
                               fontSize: 14,
                               fontWeight: hasUnread ? FontWeight.w700 : FontWeight.w500,
-                              color: selected || hasUnread ? Pal.text : Pal.muted)),
+                              color: selected
+                                  ? Pal.text
+                                  : hasUnread ? Pal.text : Pal.muted)),
                     ),
                     if (hasUnread)
                       Container(

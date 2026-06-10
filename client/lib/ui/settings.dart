@@ -927,8 +927,9 @@ class _ExpressionsPanel extends StatelessWidget {
                 : ListView(
                     children: store.sounds.map((s) => ListTile(
                           dense: true,
-                          leading: Text(s.emoji ?? '🔊',
-                              style: const TextStyle(fontSize: 18)),
+                          leading: Text(s.emoji ?? '♪',
+                              style: const TextStyle(
+                                  fontSize: 18, color: Pal.accent)),
                           title: Text(s.name, style: const TextStyle(fontSize: 13.5)),
                           trailing: SmallIconBtn(Icons.delete_outline, 'Borrar',
                               () => store.api.delete('/api/sounds/${s.id}'),
@@ -1275,7 +1276,7 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
         const Row(children: [
           Icon(Icons.check_circle, color: Pal.green, size: 18),
           SizedBox(width: 8),
-          Text('Estás al día ✨', style: TextStyle(fontSize: 14)),
+          Text('✔ estás al día', style: TextStyle(fontSize: 14, color: Pal.green)),
         ])
       else ...[
         Container(
@@ -1283,8 +1284,9 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
           decoration: BoxDecoration(
               color: Pal.bg0, borderRadius: BorderRadius.circular(10)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('🎉 Nueva versión: v${available!.version}',
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            Text('❯ nueva versión: v${available!.version}',
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w700, color: Pal.accent)),
             if (available!.notes.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 6),

@@ -35,7 +35,7 @@ class MemberList extends StatelessWidget {
         child: Text(label,
             style: const TextStyle(
                 fontSize: 11, fontWeight: FontWeight.w700,
-                color: Pal.faint, letterSpacing: .5)),
+                color: Pal.faint, letterSpacing: 1.2)),
       );
 
   Widget _memberTile(BuildContext context, User u, bool isOnline) {
@@ -72,7 +72,7 @@ class MemberList extends StatelessWidget {
                 child: const Text('BOT',
                     style: TextStyle(
                         fontSize: 9, fontWeight: FontWeight.w800,
-                        color: Colors.white)),
+                        color: Pal.greenInk)),
               ),
           ]),
         ),
@@ -92,11 +92,12 @@ class MemberList extends StatelessWidget {
       position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx, pos.dy),
       items: [
         if (store.canI(P.manageRoles))
-          const PopupMenuItem(value: 'roles', child: Text('🎭  Gestionar roles')),
+          const PopupMenuItem(value: 'roles', child: Text('●  gestionar roles')),
         if (store.canI(P.kickMembers))
-          const PopupMenuItem(value: 'kick', child: Text('👢  Expulsar')),
+          const PopupMenuItem(value: 'kick', child: Text('→  expulsar')),
         if (store.canI(P.banMembers))
-          const PopupMenuItem(value: 'ban', child: Text('🔨  Banear')),
+          const PopupMenuItem(value: 'ban',
+              child: Text('✕  banear', style: TextStyle(color: Pal.red))),
       ],
     );
     if (choice == null || !context.mounted) return;
