@@ -86,6 +86,9 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// QR de 2FA pendiente de confirmar tras un registro (uri otpauth + secreto).
+  Map<String, dynamic>? pendingTotp;
+
   Future<void> login(String username, String password,
       {String? invite, bool register = false}) async {
     api.base = serverUrl;
@@ -95,6 +98,18 @@ class AppStore extends ChangeNotifier {
       if (invite != null && invite.isNotEmpty) 'invite': invite,
     };
     final r = await api.post(register ? '/api/auth/register' : '/api/auth/login', body);
+    api.token = r['token'];
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('token', api.token!);
+    pendingTotp = r['totp']; // solo el registro trae el QR de 2FA
+    _start(User.fromJson(r['user']));
+  }
+
+  /// Recuperar contraseña con 2FA (sin email): deja la sesión iniciada.
+  Future<void> recover(String username, String code, String password) async {
+    api.base = serverUrl;
+    final r = await api.post('/api/auth/recover',
+        {'username': username, 'code': code, 'password': password});
     api.token = r['token'];
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('token', api.token!);

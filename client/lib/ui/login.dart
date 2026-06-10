@@ -105,9 +105,75 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: const TextStyle(color: Pal.link, fontSize: 13),
                   ),
                 ),
+                if (!registering)
+                  TextButton(
+                    onPressed: () => _recoverDialog(context),
+                    child: const Text('¿Olvidaste tu contraseña? Recupérala con tu 2FA',
+                        style: TextStyle(color: Pal.muted, fontSize: 12)),
+                  ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  void _recoverDialog(BuildContext context) {
+    final u = TextEditingController(text: user.text);
+    final code = TextEditingController();
+    final np = TextEditingController();
+    var working = false;
+    String? err;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: const Text('Recuperar contraseña', style: TextStyle(fontSize: 17)),
+          content: SizedBox(
+            width: 340,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text(
+                  'Sin emails: usa el código de tu app de autenticación (2FA).',
+                  style: TextStyle(fontSize: 12.5, color: Pal.muted)),
+              const SizedBox(height: 12),
+              TextField(controller: u, decoration: const InputDecoration(labelText: 'Usuario')),
+              const SizedBox(height: 8),
+              TextField(
+                  controller: code,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  decoration: const InputDecoration(labelText: 'Código 2FA (6 dígitos)', counterText: '')),
+              const SizedBox(height: 8),
+              TextField(
+                  controller: np,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Contraseña nueva')),
+              if (err != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(err!, style: const TextStyle(color: Pal.red, fontSize: 12.5)),
+                ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: working
+                  ? null
+                  : () async {
+                      setSt(() { working = true; err = null; });
+                      try {
+                        await widget.store.recover(
+                            u.text.trim(), code.text.trim(), np.text);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      } catch (e) {
+                        setSt(() { working = false; err = e.toString(); });
+                      }
+                    },
+              child: const Text('Restablecer y entrar'),
+            ),
+          ],
         ),
       ),
     );

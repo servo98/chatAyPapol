@@ -125,6 +125,15 @@ CREATE TABLE IF NOT EXISTS bot_commands (
 );
 `);
 
+// Migraciones aditivas sobre bases existentes (CREATE IF NOT EXISTS no añade
+// columnas): ignorar el error si la columna ya existe.
+for (const mig of [
+  "ALTER TABLE users ADD COLUMN totp_secret TEXT",        // secreto TOTP (2FA)
+  "ALTER TABLE users ADD COLUMN totp_ok INTEGER DEFAULT 0", // 1 = QR confirmado
+]) {
+  try { db.run(mig); } catch {}
+}
+
 // Monotonic, sortable ids (time-ordered like snowflakes).
 let lastId = 0;
 export function newId(): string {

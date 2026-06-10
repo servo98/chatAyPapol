@@ -7,6 +7,7 @@ import 'bootstrap_runner.dart';
 import 'chat.dart';
 import 'members.dart';
 import 'sidebar.dart';
+import 'totp.dart';
 import 'voice_panel.dart';
 import 'widgets.dart';
 
@@ -27,6 +28,17 @@ class _ShellState extends State<Shell> {
   void initState() {
     super.initState();
     _checkUpdates();
+    // recién registrado: muestra el QR de 2FA para enrolar la cuenta
+    final totp = widget.store.pendingTotp;
+    if (totp != null) {
+      widget.store.pendingTotp = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          showTotpEnroll(context, widget.store,
+              uri: totp['uri'], secret: totp['secret']);
+        }
+      });
+    }
   }
 
   Future<void> _checkUpdates() async {

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 
 class ApiException implements Exception {
   final String message;
@@ -40,12 +41,28 @@ class Api {
   Future<dynamic> put(String p, Object b) => _send('PUT', p, b);
   Future<dynamic> delete(String p) => _send('DELETE', p);
 
+  // MIME por extensión: sin esto el multipart va como octet-stream y el chat
+  // no sabe que un .png/.gif es imagen (no muestra la preview inline).
+  static const _mimeByExt = {
+    'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+    'gif': 'image/gif', 'webp': 'image/webp', 'bmp': 'image/bmp',
+    'svg': 'image/svg+xml', 'mp4': 'video/mp4', 'webm': 'video/webm',
+    'mov': 'video/quicktime', 'mp3': 'audio/mpeg', 'ogg': 'audio/ogg',
+    'wav': 'audio/wav', 'pdf': 'application/pdf', 'txt': 'text/plain',
+    'zip': 'application/zip',
+  };
+  static MediaType _mimeFor(String filename) {
+    final ext = filename.contains('.') ? filename.split('.').last.toLowerCase() : '';
+    return MediaType.parse(_mimeByExt[ext] ?? 'application/octet-stream');
+  }
+
   Future<dynamic> upload(String path, Uint8List bytes, String filename,
       {Map<String, String> fields = const {}}) async {
     final req = http.MultipartRequest('POST', _u(path))
       ..headers['authorization'] = 'Bearer $token'
       ..fields.addAll(fields)
-      ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+      ..files.add(http.MultipartFile.fromBytes('file', bytes,
+          filename: filename, contentType: _mimeFor(filename)));
     final res = await http.Response.fromStream(await req.send());
     final decoded = jsonDecode(utf8.decode(res.bodyBytes));
     if (res.statusCode >= 400) {

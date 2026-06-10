@@ -15,13 +15,24 @@ chatRoutes.use("*", requireAuth);
 const MAX_UPLOAD = 25 * 1024 * 1024;
 const SAFE_EXT = /^\.[a-z0-9]{1,8}$/i;
 
+// MIME por extensión cuando el cliente sube octet-stream: sin tipo real el
+// chat no sabe que el adjunto es imagen y no muestra la preview inline.
+const MIME_BY_EXT: Record<string, string> = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+  ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+  ".mp4": "video/mp4", ".webm": "video/webm", ".mp3": "audio/mpeg",
+  ".ogg": "audio/ogg", ".wav": "audio/wav", ".pdf": "application/pdf",
+};
+
 async function saveFile(file: File, dir: string, maxBytes: number) {
   if (file.size === 0 || file.size > maxBytes) throw new Error(`Archivo vacío o > ${Math.round(maxBytes / 1e6)} MB`);
   let ext = extname(file.name).toLowerCase();
   if (!SAFE_EXT.test(ext)) ext = "";
   const name = `${newId()}${ext}`;
   await Bun.write(join(FILES_DIR, dir, name), file);
-  return { name: file.name, url: `/files/${dir}/${name}`, size: file.size, type: file.type };
+  const type = (!file.type || file.type === "application/octet-stream")
+    ? (MIME_BY_EXT[ext] ?? file.type) : file.type;
+  return { name: file.name, url: `/files/${dir}/${name}`, size: file.size, type };
 }
 
 // ---------- uploads ----------

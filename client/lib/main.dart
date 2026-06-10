@@ -142,6 +142,13 @@ Future<void> _diagShare() async {
                 encoding:
                     lk.VideoEncoding(maxBitrate: 8000 * 1000, maxFramerate: 60)));
         break;
+      case 'audio': // screenshare CON audio del sistema (loopback) x3 ciclos
+        opts = lk.ScreenShareCaptureOptions(
+            sourceId: src.id,
+            captureScreenAudio: true,
+            maxFrameRate: 30.0,
+            params: lk.VideoParametersPresets.screenShareH1080FPS30);
+        break;
       case '60': // 1080p60 (lo que usa la app): mide fps reales del sender
         opts = lk.ScreenShareCaptureOptions(
             sourceId: src.id,
@@ -169,22 +176,29 @@ Future<void> _diagShare() async {
       await t.dispose();
       await log('  stop OK');
     } else {
-      await log('3: setScreenShareEnabled ($variant) ...');
-      await room.localParticipant?.setScreenShareEnabled(true, screenShareCaptureOptions: opts);
-      await log('  CAPTURA+PUBLISH OK ✓');
-      // deja correr el encoder y mide los fps/bitrate reales del sender
-      await Future.delayed(const Duration(seconds: 6));
-      for (final pub in room.localParticipant?.videoTrackPublications ?? []) {
-        final track = pub.track;
-        if (track is lk.LocalVideoTrack) {
-          for (final st in await track.getSenderStats()) {
-            await log('  stats rid=${st.rid} fps=${st.framesPerSecond} '
-                '${st.frameWidth}x${st.frameHeight} limit=${st.qualityLimitationReason}');
+      // 'audio' hace 3 ciclos start/stop para cazar leaks del loopback
+      final cycles = variant == 'audio' ? 3 : 1;
+      for (var c = 1; c <= cycles; c++) {
+        await log('3: setScreenShareEnabled ($variant) ciclo $c/$cycles ...');
+        await room.localParticipant
+            ?.setScreenShareEnabled(true, screenShareCaptureOptions: opts);
+        final pubsOn = room.localParticipant?.audioTrackPublications.length;
+        await log('  CAPTURA+PUBLISH OK ✓ (audio pubs=$pubsOn)');
+        // deja correr el encoder y mide los fps/bitrate reales del sender
+        await Future.delayed(Duration(seconds: variant == 'audio' ? 3 : 6));
+        for (final pub in room.localParticipant?.videoTrackPublications ?? []) {
+          final track = pub.track;
+          if (track is lk.LocalVideoTrack) {
+            for (final st in await track.getSenderStats()) {
+              await log('  stats rid=${st.rid} fps=${st.framesPerSecond} '
+                  '${st.frameWidth}x${st.frameHeight} limit=${st.qualityLimitationReason}');
+            }
           }
         }
+        await room.localParticipant?.setScreenShareEnabled(false);
+        final pubsOff = room.localParticipant?.audioTrackPublications.length;
+        await log('  stop OK (audio pubs=$pubsOff)');
       }
-      await room.localParticipant?.setScreenShareEnabled(false);
-      await log('  stop OK');
     }
 
     await log('=== diag-share FIN ok (variant=$variant NO crasheó) ===');

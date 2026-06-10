@@ -100,7 +100,7 @@ class VoicePanel extends StatelessWidget {
     final user = store.users[v.userId];
     final isSpeaking = voice.speaking.contains(v.userId);
     final size = small ? 64.0 : 160.0;
-    return Container(
+    final tile = Container(
       width: small ? 110 : 220,
       height: small ? 80 : size,
       margin: small ? const EdgeInsets.only(right: 8) : null,
@@ -131,9 +131,75 @@ class VoicePanel extends StatelessWidget {
                 padding: EdgeInsets.only(left: 4),
                 child: Icon(Icons.screen_share, size: 12, color: Pal.green),
               ),
+            if (voice.userVolume(v.userId) != 1.0)
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: Icon(
+                    voice.userVolume(v.userId) == 0
+                        ? Icons.volume_off
+                        : Icons.volume_down,
+                    size: 12,
+                    color: Pal.muted),
+              ),
           ]),
         ),
       ]),
+    );
+    if (v.userId == store.me?.id) return tile; // tu propio volumen no aplica
+    // click derecho (o mantener presionado): volumen individual, como Discord
+    return Builder(
+      builder: (ctx) => GestureDetector(
+        onSecondaryTap: () => _showUserVolume(ctx, v.userId, user?.username),
+        onLongPress: () => _showUserVolume(ctx, v.userId, user?.username),
+        child: tile,
+      ),
+    );
+  }
+
+  void _showUserVolume(BuildContext context, String userId, String? name) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Volumen de ${name ?? 'usuario'}',
+            style: const TextStyle(fontSize: 16)),
+        content: StatefulBuilder(
+          builder: (ctx, setSt) {
+            final v = voice.userVolume(userId);
+            return Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(v == 0 ? Icons.volume_off : Icons.volume_up,
+                  size: 18, color: Pal.muted),
+              SizedBox(
+                width: 260,
+                child: Slider(
+                  value: v,
+                  max: 2.0,
+                  divisions: 40,
+                  activeColor: Pal.accent,
+                  label: '${(v * 100).round()}%',
+                  onChanged: (nv) {
+                    voice.setUserVolume(userId, nv);
+                    setSt(() {});
+                  },
+                ),
+              ),
+              SizedBox(
+                  width: 44,
+                  child: Text('${(v * 100).round()}%',
+                      style: const TextStyle(fontSize: 12, color: Pal.muted))),
+            ]);
+          },
+        ),
+        actions: [
+          TextButton(
+              onPressed: () {
+                voice.setUserVolume(userId, 1.0);
+                Navigator.pop(ctx);
+              },
+              child: const Text('Restablecer')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Listo')),
+        ],
+      ),
     );
   }
 
@@ -208,7 +274,6 @@ class VoicePanel extends StatelessWidget {
       final sources = await voice.shareSources();
       if (!context.mounted) return;
       rtc.DesktopCapturerSource? selected;
-      var withAudio = false;
       var fps = 60;
       final screens =
           sources.where((s) => s.type == rtc.SourceType.Screen).toList();
@@ -252,17 +317,21 @@ class VoicePanel extends StatelessWidget {
                     onSelectionChanged: (v) => setSt(() => fps = v.first),
                   ),
                 ]),
-                CheckboxListTile(
+                // el plugin de WebRTC aún no implementa loopback en Windows:
+                // el track de audio nunca se publica (verificado con el arnés
+                // --diag-share variant=audio). Deshabilitado hasta que el fix
+                // upstream (flutter-webrtc PR #2060) salga en una release.
+                const CheckboxListTile(
                   dense: true,
-                  value: withAudio,
-                  activeColor: Pal.accent,
+                  value: false,
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text('Compartir también el audio del sistema',
-                      style: TextStyle(fontSize: 13)),
-                  subtitle: const Text('Experimental: puede fallar en Windows',
+                  title: Text('Compartir también el audio del sistema',
+                      style: TextStyle(fontSize: 13, color: Pal.muted)),
+                  subtitle: Text(
+                      'Aún no disponible en Windows (límite del plugin de WebRTC)',
                       style: TextStyle(fontSize: 11, color: Pal.faint)),
-                  onChanged: (v) => setSt(() => withAudio = v ?? false),
+                  onChanged: null,
                 ),
               ]),
             ),
@@ -276,9 +345,7 @@ class VoicePanel extends StatelessWidget {
                     ? null
                     : () {
                         Navigator.pop(ctx);
-                        voice
-                            .startShare(selected!, withAudio: withAudio, fps: fps)
-                            .catchError((e) {
+                        voice.startShare(selected!, fps: fps).catchError((e) {
                           if (context.mounted) showError(context, e);
                         });
                       },

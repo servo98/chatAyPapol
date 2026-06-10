@@ -1,3 +1,5 @@
+import 'package:cross_file/cross_file.dart' show XFile;
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +19,7 @@ class ChatView extends StatefulWidget {
 }
 
 class _ChatViewState extends State<ChatView> {
+  bool dragging = false; // hay archivos siendo arrastrados sobre el chat
   final input = TextEditingController();
   final scroll = ScrollController();
   final focus = FocusNode();
@@ -116,7 +119,7 @@ class _ChatViewState extends State<ChatView> {
     }
     final msgs = store.messages[ch.id] ?? [];
     final canSend = store.canI(P.sendMessages, ch.id);
-    return Column(
+    final body = Column(
       children: [
         _header(ch),
         Expanded(
@@ -133,6 +136,53 @@ class _ChatViewState extends State<ChatView> {
         if (canSend) _inputBar(ch) else _readOnlyBar(),
       ],
     );
+    if (!store.canI(P.attachFiles, ch.id)) return body;
+    // arrastrar archivos a la ventana = adjuntarlos (como el botón +)
+    return DropTarget(
+      onDragEntered: (_) => setState(() => dragging = true),
+      onDragExited: (_) => setState(() => dragging = false),
+      onDragDone: (detail) {
+        setState(() => dragging = false);
+        _attachDropped(detail.files);
+      },
+      child: Stack(children: [
+        body,
+        if (dragging)
+          Positioned.fill(
+            child: Container(
+              color: Pal.bg0.withValues(alpha: .8),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Pal.accent, width: 2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.file_upload, size: 42, color: Pal.accent),
+                    SizedBox(height: 8),
+                    Text('Suelta para adjuntar',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+
+  Future<void> _attachDropped(List<XFile> files) async {
+    for (final f in files) {
+      try {
+        final bytes = await f.readAsBytes();
+        final up = await store.api.upload('/api/uploads', bytes, f.name);
+        if (mounted) setState(() => pendingUploads.add(up));
+      } catch (e) {
+        if (mounted) showError(context, e);
+      }
+    }
   }
 
   Widget _header(Channel ch) {

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
@@ -46,6 +47,9 @@ class VoiceManager extends ChangeNotifier {
   // Volumen de SALIDA (playout de tracks remotos). NO hay ganancia de captura:
   // ver setOutputVolume.
   double outputVolume = 1.0;
+  // Volumen POR USUARIO (identity → 0.0..2.0; 1.0 = normal). Persistido en
+  // local: si te encuentras a la misma persona en otro canal, se respeta.
+  final userVolumes = <String, double>{};
 
   bool get connected => room != null && channelId != null;
 
@@ -72,8 +76,29 @@ class VoiceManager extends ChangeNotifier {
     echoCancellation = prefs.getBool('mic_echo_cancellation') ?? true;
     autoGainControl = prefs.getBool('mic_auto_gain') ?? true;
     outputVolume = prefs.getDouble('voice_output_volume') ?? 1.0;
+    try {
+      final raw = prefs.getString('voice_user_volumes');
+      if (raw != null) {
+        (jsonDecode(raw) as Map<String, dynamic>).forEach(
+            (k, v) => userVolumes[k] = (v as num).toDouble().clamp(0.0, 2.0));
+      }
+    } catch (_) {}
     notifyListeners();
   }
+
+  /// Volumen individual de [identity] (0.0..2.0). Se guarda en local y se
+  /// aplica de inmediato si está en la llamada.
+  Future<void> setUserVolume(String identity, double v) async {
+    v = v.clamp(0.0, 2.0);
+    // 1.0 = normal: no ensuciar el mapa con valores default
+    (v - 1.0).abs() < 0.01 ? userVolumes.remove(identity) : userVolumes[identity] = v;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('voice_user_volumes', jsonEncode(userVolumes));
+    _applyOutputVolumeAll();
+    notifyListeners();
+  }
+
+  double userVolume(String identity) => userVolumes[identity] ?? 1.0;
 
   Future<void> _saveMicPrefs() async {
     final prefs = await SharedPreferences.getInstance();
@@ -149,10 +174,12 @@ class VoiceManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _applyOutputVolume(Track t) {
+  void _applyOutputVolume(Track t, String identity) {
     if (t is! RemoteAudioTrack) return;
     try {
-      rtc.Helper.setVolume(outputVolume, t.mediaStreamTrack);
+      rtc.Helper.setVolume(
+          (outputVolume * userVolume(identity)).clamp(0.0, 2.0),
+          t.mediaStreamTrack);
     } catch (_) {}
   }
 
@@ -162,7 +189,7 @@ class VoiceManager extends ChangeNotifier {
     for (final p in r.remoteParticipants.values) {
       for (final pub in p.audioTrackPublications) {
         final t = pub.track;
-        if (t != null) _applyOutputVolume(t);
+        if (t != null) _applyOutputVolume(t, p.identity);
       }
     }
   }
@@ -204,9 +231,17 @@ class VoiceManager extends ChangeNotifier {
             ..addAll(e.speakers.map((p) => p.identity));
           notifyListeners();
         })
+        // transiciones por participante: prende/apaga el aro sin esperar al
+        // siguiente snapshot completo de active speakers
+        ..on<SpeakingChangedEvent>((e) {
+          e.speaking
+              ? speaking.add(e.participant.identity)
+              : speaking.remove(e.participant.identity);
+          notifyListeners();
+        })
         ..on<RoomDisconnectedEvent>((_) => _cleanup())
         ..on<TrackSubscribedEvent>((e) {
-          _applyOutputVolume(e.track);
+          _applyOutputVolume(e.track, e.participant.identity);
           notifyListeners();
         })
         ..on<TrackUnsubscribedEvent>((_) => notifyListeners())

@@ -10,6 +10,7 @@ import '../store.dart';
 import '../theme.dart';
 import '../updater.dart';
 import '../version.dart';
+import 'totp.dart';
 import '../voice.dart';
 import 'bootstrap_runner.dart';
 import 'widgets.dart';
@@ -201,7 +202,20 @@ class _AccountPanel extends StatelessWidget {
                 try {
                   await store.api.patch('/api/me', {'username': name});
                 } catch (e) {
-                  if (context.mounted) showError(context, e);
+                  // con 2FA activo el server exige código: pedirlo y reintentar
+                  if (e.toString().contains('2FA') && context.mounted) {
+                    final code = await askTotpCode(context,
+                        reason: 'Cambiar tu nombre requiere tu código 2FA.');
+                    if (code == null) return;
+                    try {
+                      await store.api
+                          .patch('/api/me', {'username': name, 'code': code});
+                    } catch (e2) {
+                      if (context.mounted) showError(context, e2);
+                    }
+                  } else if (context.mounted) {
+                    showError(context, e);
+                  }
                 }
               },
               child: const Text('Cambiar nombre', style: TextStyle(fontSize: 12.5)),
@@ -209,7 +223,96 @@ class _AccountPanel extends StatelessWidget {
           ]),
         ]),
       ]),
+      const SizedBox(height: 18),
+      _title('Seguridad'),
+      Row(children: [
+        OutlinedButton(
+          onPressed: () => _changePassword(context),
+          child: const Text('Cambiar contraseña', style: TextStyle(fontSize: 12.5)),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton(
+          onPressed: () async {
+            // cuentas creadas antes del 2FA: enrolar aquí
+            try {
+              final r = await store.api.post('/api/auth/totp/enroll', {});
+              if (context.mounted) {
+                await showTotpEnroll(context, store,
+                    uri: r['uri'], secret: r['secret']);
+              }
+            } catch (e) {
+              if (context.mounted) showError(context, e);
+            }
+          },
+          child: const Text('Activar 2FA', style: TextStyle(fontSize: 12.5)),
+        ),
+      ]),
     ]);
+  }
+
+  void _changePassword(BuildContext context) {
+    final cur = TextEditingController();
+    final nue = TextEditingController();
+    final code = TextEditingController();
+    var working = false;
+    String? err;
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: const Text('Cambiar contraseña', style: TextStyle(fontSize: 17)),
+          content: SizedBox(
+            width: 320,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                  controller: cur,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Contraseña actual')),
+              const SizedBox(height: 8),
+              TextField(
+                  controller: nue,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Contraseña nueva (mín. 8)')),
+              const SizedBox(height: 8),
+              TextField(
+                  controller: code,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  decoration: const InputDecoration(
+                      labelText: 'Código 2FA (si lo tienes activo)',
+                      counterText: '')),
+              if (err != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(err!,
+                      style: const TextStyle(color: Pal.red, fontSize: 12.5)),
+                ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: working
+                  ? null
+                  : () async {
+                      setSt(() { working = true; err = null; });
+                      try {
+                        await store.api.post('/api/auth/password', {
+                          'current': cur.text,
+                          'password': nue.text,
+                          'code': code.text.trim(),
+                        });
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      } catch (e) {
+                        setSt(() { working = false; err = e.toString(); });
+                      }
+                    },
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -13,8 +13,14 @@ dependencies:
   # acceso directo a desktopCapturer para elegir pantalla/ventana al compartir
   flutter_webrtc: any
   http: ^1.2.0
+  http_parser: ^4.1.0
+  cross_file: ^0.3.4
   web_socket_channel: ^3.0.0
   file_picker: ^11.0.0
+  # arrastrar archivos a la ventana para adjuntarlos al chat
+  desktop_drop: ^0.7.1
+  # QR del enrolamiento 2FA (TOTP)
+  qr_flutter: ^4.1.0
   url_launcher: ^6.3.0
   audioplayers: ^6.1.0
   shared_preferences: ^2.3.0
