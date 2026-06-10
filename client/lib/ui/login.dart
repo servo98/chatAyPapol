@@ -10,7 +10,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final server = TextEditingController(text: 'http://localhost:3210');
   final user = TextEditingController();
   final pass = TextEditingController();
   final invite = TextEditingController();
@@ -24,7 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
       error = null;
     });
     try {
-      await widget.store.login(server.text.trim(), user.text.trim(), pass.text,
+      await widget.store.login(user.text.trim(), pass.text,
           invite: invite.text.trim(), register: registering);
     } catch (e) {
       setState(() => error = e.toString());
@@ -74,7 +73,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Pal.muted, fontSize: 13)),
                 const SizedBox(height: 24),
-                _field('SERVIDOR', server, hint: 'http://tu-server:3210'),
                 _field('USUARIO', user),
                 _field('CONTRASEÑA', pass, obscure: true, onSubmit: _submit),
                 if (registering)

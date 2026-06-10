@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
+import 'config.dart';
 import 'gateway.dart';
 import 'models.dart';
 import 'perms.dart';
@@ -64,26 +65,30 @@ class AppStore extends ChangeNotifier {
 
   // ---------- sesión ----------
   Future<void> tryRestore() async {
+    api.base = serverUrl;
     final prefs = await SharedPreferences.getInstance();
-    final base = prefs.getString('base');
     final token = prefs.getString('token');
-    if (base != null && token != null) {
-      api.base = base;
+    if (token != null) {
       api.token = token;
       try {
         final u = await api.get('/api/me');
         _start(User.fromJson(u));
-      } catch (_) {
-        api.token = null;
+      } catch (e) {
+        // sin red o server caído: conserva el token y reintenta al reabrir;
+        // solo descarta la sesión si el server la rechazó de verdad (401)
+        if (e is ApiException && e.status == 401) {
+          api.token = null;
+          await prefs.remove('token');
+        }
       }
     }
     restoring = false;
     notifyListeners();
   }
 
-  Future<void> login(String base, String username, String password,
+  Future<void> login(String username, String password,
       {String? invite, bool register = false}) async {
-    api.base = base.replaceAll(RegExp(r'/+$'), '');
+    api.base = serverUrl;
     final body = {
       'username': username,
       'password': password,
@@ -92,7 +97,6 @@ class AppStore extends ChangeNotifier {
     final r = await api.post(register ? '/api/auth/register' : '/api/auth/login', body);
     api.token = r['token'];
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('base', api.base);
     await prefs.setString('token', api.token!);
     _start(User.fromJson(r['user']));
   }
