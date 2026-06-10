@@ -22,6 +22,10 @@ jobs:
         shell: bash
         run: echo "const appVersion = '${GITHUB_REF_NAME#v}';" > lib/version.dart
       - run: flutter build windows --release
+        env:
+          # audioplayers_windows usa <experimental/coroutine>; el MSVC nuevo lo
+          # trata como error salvo que se silencie explícitamente
+          CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
       - name: Instalador Inno Setup
         shell: pwsh
         run: |
@@ -35,10 +39,13 @@ jobs:
     defaults: { run: { working-directory: client } }
     steps:
       - uses: actions/checkout@v4
-      - name: Dependencias de build (GTK + FUSE para AppImage)
+      - name: Dependencias de build (toolchain Flutter + GStreamer para audioplayers + FUSE para AppImage)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build libgtk-3-dev libfuse2 || sudo apt-get install -y libfuse2t64
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev \
+            liblzma-dev libstdc++-12-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+          sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
       - uses: subosito/flutter-action@v2
         with: { channel: stable, cache: true }
       - name: Sellar versión desde el tag
