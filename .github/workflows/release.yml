@@ -15,7 +15,7 @@ jobs:
     runs-on: windows-latest
     defaults: { run: { working-directory: client } }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
         with: { channel: stable, cache: true }
       - name: Sellar versión desde el tag
@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: client } }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Dependencias de build (toolchain Flutter + GStreamer para audioplayers + FUSE para AppImage)
         run: |
           sudo apt-get update
