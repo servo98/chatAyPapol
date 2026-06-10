@@ -35,6 +35,16 @@ dependencies:
 dev_dependencies:
   flutter_lints: ^6.0.0
 
+# Autorizado explícitamente por el usuario (2026-06-10) para tener audio del
+# sistema en el screen share: flutter-webrtc pineado a un commit FIJO de su
+# main oficial (incluye el loopback WASAPI de Windows, PR #2060, mergeado el
+# 2026-06-02 y aún sin release). Quitar cuando salga la release oficial.
+dependency_overrides:
+  flutter_webrtc:
+    git:
+      url: https://github.com/flutter-webrtc/flutter-webrtc.git
+      ref: 3931f2f351079cdc2053e3b128a62438455cfc42
+
 flutter:
   uses-material-design: true
 

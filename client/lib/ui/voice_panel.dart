@@ -275,14 +275,51 @@ class VoicePanel extends StatelessWidget {
       if (!context.mounted) return;
       rtc.DesktopCapturerSource? selected;
       var fps = 60;
+      var withAudio = true; // loopback nuevo: compartir CON audio por default
       final screens =
           sources.where((s) => s.type == rtc.SourceType.Screen).toList();
       final windows =
           sources.where((s) => s.type == rtc.SourceType.Window).toList();
+      // las miniaturas llegan DESPUÉS de getSources (eventos async del
+      // plugin): redibuja el diálogo cuando aterricen, no al primer click
+      StateSetter? refresh;
+      final thumbSub = rtc.desktopCapturer.onThumbnailChanged.stream
+          .listen((_) => refresh?.call(() {}));
       showDialog(
         context: context,
         builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setSt) => AlertDialog(
+          builder: (ctx, setSt) {
+            refresh = setSt;
+            return _shareDialog(context, ctx, setSt, screens, windows,
+                () => selected, (s) => selected = s, () => fps, (v) => fps = v,
+                () => withAudio, (v) => withAudio = v);
+          },
+        ),
+      ).whenComplete(() {
+        refresh = null;
+        thumbSub.cancel();
+      });
+    } catch (e) {
+      if (context.mounted) showError(context, e);
+    }
+  }
+
+  Widget _shareDialog(
+      BuildContext outerContext,
+      BuildContext ctx,
+      StateSetter setSt,
+      List<rtc.DesktopCapturerSource> screens,
+      List<rtc.DesktopCapturerSource> windows,
+      rtc.DesktopCapturerSource? Function() getSel,
+      void Function(rtc.DesktopCapturerSource?) setSel,
+      int Function() getFps,
+      void Function(int) setFps,
+      bool Function() getAudio,
+      void Function(bool) setAudio) {
+    final selected = getSel();
+    final fps = getFps();
+    final withAudio = getAudio();
+    return AlertDialog(
             title: const Text('¿Qué quieres compartir?',
                 style: TextStyle(fontSize: 17)),
             content: SizedBox(
@@ -292,11 +329,11 @@ class VoicePanel extends StatelessWidget {
                 Expanded(
                   child: ListView(children: [
                     if (screens.isNotEmpty)
-                      _sourceSection(
-                          'Pantallas', screens, selected, (s) => setSt(() => selected = s)),
+                      _sourceSection('Pantallas', screens, selected,
+                          (s) => setSt(() => setSel(s))),
                     if (windows.isNotEmpty)
-                      _sourceSection(
-                          'Ventanas', windows, selected, (s) => setSt(() => selected = s)),
+                      _sourceSection('Ventanas', windows, selected,
+                          (s) => setSt(() => setSel(s))),
                   ]),
                 ),
                 const SizedBox(height: 8),
@@ -314,24 +351,22 @@ class VoicePanel extends StatelessWidget {
                       ButtonSegment(value: 60, label: Text('60 fps')),
                     ],
                     selected: {fps},
-                    onSelectionChanged: (v) => setSt(() => fps = v.first),
+                    onSelectionChanged: (v) => setSt(() => setFps(v.first)),
                   ),
                 ]),
-                // el plugin de WebRTC aún no implementa loopback en Windows:
-                // el track de audio nunca se publica (verificado con el arnés
-                // --diag-share variant=audio). Deshabilitado hasta que el fix
-                // upstream (flutter-webrtc PR #2060) salga en una release.
-                const CheckboxListTile(
+                // loopback WASAPI (flutter-webrtc main pineado): verificado
+                // con --diag-share variant=audio (el track sí se publica)
+                CheckboxListTile(
                   dense: true,
-                  value: false,
+                  value: withAudio,
+                  activeColor: Pal.accent,
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
-                  title: Text('Compartir también el audio del sistema',
-                      style: TextStyle(fontSize: 13, color: Pal.muted)),
-                  subtitle: Text(
-                      'Aún no disponible en Windows (límite del plugin de WebRTC)',
+                  title: const Text('Compartir también el audio del sistema',
+                      style: TextStyle(fontSize: 13)),
+                  subtitle: const Text('Beta: avísanos si algo suena raro',
                       style: TextStyle(fontSize: 11, color: Pal.faint)),
-                  onChanged: null,
+                  onChanged: (v) => setSt(() => setAudio(v ?? true)),
                 ),
               ]),
             ),
@@ -345,19 +380,17 @@ class VoicePanel extends StatelessWidget {
                     ? null
                     : () {
                         Navigator.pop(ctx);
-                        voice.startShare(selected!, fps: fps).catchError((e) {
-                          if (context.mounted) showError(context, e);
+                        voice
+                            .startShare(selected,
+                                withAudio: withAudio, fps: fps)
+                            .catchError((e) {
+                          if (outerContext.mounted) showError(outerContext, e);
                         });
                       },
                 child: const Text('Compartir'),
               ),
             ],
-          ),
-        ),
-      );
-    } catch (e) {
-      if (context.mounted) showError(context, e);
-    }
+          );
   }
 
   /// Sección del selector: título + grid de miniaturas (estilo Discord).

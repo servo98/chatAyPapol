@@ -379,9 +379,9 @@ class VoiceManager extends ChangeNotifier {
     return byId.values.toList();
   }
 
-  /// [withAudio] es opt-in: el loopback "Remote App Audio" de Windows es
-  /// inestable en el capturador nativo y puede tumbar la app; sin audio el
-  /// screenshare es sólido. [fps] = 15, 30 o 60 (1080p en todos).
+  /// [withAudio] comparte el audio del sistema vía loopback WASAPI (plugin
+  /// flutter-webrtc pineado a main; verificado con --diag-share). [fps] =
+  /// 15, 30 o 60 (1080p en todos).
   Future<void> startShare(rtc.DesktopCapturerSource source,
       {bool withAudio = false, int fps = 60}) async {
     // el plugin solo captura fuentes de la ÚLTIMA enumeración (getSources
@@ -390,6 +390,9 @@ class VoiceManager extends ChangeNotifier {
     await rtc.desktopCapturer.getSources(types: [source.type]);
     await room?.localParticipant?.setScreenShareEnabled(
       true,
+      // OJO: livekit revisa este PARÁMETRO (no el campo de las opciones)
+      // para crear y publicar el track de audio del sistema (loopback)
+      captureScreenAudio: withAudio,
       screenShareCaptureOptions: ScreenShareCaptureOptions(
         sourceId: source.id,
         captureScreenAudio: withAudio,
