@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
@@ -37,6 +38,12 @@ class VoiceManager extends ChangeNotifier {
   bool sharing = false;
   bool connecting = false;
   final speaking = <String>{};
+  // Aro propio: detección LOCAL del nivel del micro que se ESTÁ ENVIANDO —
+  // aro encendido = tus amigos te están oyendo. Umbral bajo a propósito
+  // (sensible); el server solo gobierna los aros de los demás.
+  static const _selfSpeakLevel = 0.01;
+  Timer? _selfSpeakTimer;
+  DateTime _selfLastLoud = DateTime.fromMillisecondsSinceEpoch(0);
   final _player = AudioPlayer();
 
   // Opciones de micrófono persistidas (ajustes de "Voz y micrófono").
@@ -226,14 +233,21 @@ class VoiceManager extends ChangeNotifier {
       channelId = chId;
       _listener = r.createListener()
         ..on<ActiveSpeakersChangedEvent>((e) {
+          final selfId = store.me?.id;
+          final selfOn = selfId != null && speaking.contains(selfId);
           speaking
             ..clear()
             ..addAll(e.speakers.map((p) => p.identity));
+          // el aro propio lo gobierna la detección local, no el server
+          if (selfId != null) {
+            selfOn ? speaking.add(selfId) : speaking.remove(selfId);
+          }
           notifyListeners();
         })
         // transiciones por participante: prende/apaga el aro sin esperar al
         // siguiente snapshot completo de active speakers
         ..on<SpeakingChangedEvent>((e) {
+          if (e.participant.identity == store.me?.id) return; // self = local
           e.speaking
               ? speaking.add(e.participant.identity)
               : speaking.remove(e.participant.identity);
@@ -251,6 +265,7 @@ class VoiceManager extends ChangeNotifier {
         await r.localParticipant
             ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
       } catch (_) {/* sin permiso SPEAK: solo escucha */}
+      _startSelfSpeaking();
       store.gateway.send('VOICE_JOIN', {'channel_id': chId, 'mute': muted, 'deaf': deafened});
     } finally {
       connecting = false;
@@ -267,7 +282,39 @@ class VoiceManager extends ChangeNotifier {
     await r?.dispose();
   }
 
+  /// Aro propio por nivel LOCAL del micro: sondea audioLevel (stats
+  /// media-source del sender) cada ~180ms con hangover de 350ms.
+  void _startSelfSpeaking() {
+    _selfSpeakTimer?.cancel();
+    _selfSpeakTimer =
+        Timer.periodic(const Duration(milliseconds: 180), (_) async {
+      final selfId = store.me?.id;
+      if (selfId == null || room == null) return;
+      var level = 0.0;
+      if (!muted) {
+        try {
+          final sender = micTrack?.sender;
+          if (sender != null) {
+            for (final rep in await sender.getStats()) {
+              if (rep.type == 'media-source') {
+                final v = rep.values['audioLevel'];
+                if (v is num) level = v.toDouble();
+              }
+            }
+          }
+        } catch (_) {}
+      }
+      final now = DateTime.now();
+      if (level > _selfSpeakLevel) _selfLastLoud = now;
+      final on = now.difference(_selfLastLoud).inMilliseconds < 350;
+      final changed = on ? speaking.add(selfId) : speaking.remove(selfId);
+      if (changed) notifyListeners();
+    });
+  }
+
   void _cleanup() {
+    _selfSpeakTimer?.cancel();
+    _selfSpeakTimer = null;
     _listener?.dispose();
     _listener = null;
     room = null;
