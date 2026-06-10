@@ -35,12 +35,22 @@ Empaquetado e instaladores con auto-update: ver `client/packaging/README.md`.
   `curl -X POST $URL -d '{"content":"hola desde CI","username":"CI"}'`.
 - Bot de ejemplo: `BOT_TOKEN=xxx bun examples/dice-bot.ts` → `/roll 2d20` en el chat.
 
+## CI/CD (todo automático y gratis)
+
+- **Cliente**: cualquier push a `main` que toque `client/**` → GitHub Actions
+  calcula la siguiente versión, compila Windows + Linux y publica la Release.
+  Los clientes instalados se actualizan solos. (Para saltarlo en un commit:
+  `[skip release]` en el mensaje. Para una versión mayor/menor: tag manual `vX.Y.0`.)
+- **Server**: cualquier push que toque `server/**` → imagen Docker publicada en
+  `ghcr.io/servo98/chatpapol-server:latest`.
+
 ## Producción (resumen)
 
-1. VPS pequeño. `livekit-server` necesita UDP 50000-50100 y 7880 abiertos.
-2. Genera keys reales (`livekit-server generate-keys`) → ponlas en `livekit.yaml`
-   y en variables `LIVEKIT_KEY/LIVEKIT_SECRET` del backend.
-3. Pon un reverse proxy con TLS (Caddy: 2 líneas) delante del backend (:3210)
+1. VPS pequeño con Docker: copia `docker-compose.yml` + `server/livekit.yaml`
+   y `docker compose up -d` (backend + LiveKit). Actualizar:
+   `docker compose pull && docker compose up -d`.
+2. `livekit-server` necesita UDP 50000-50100 y 7880 abiertos.
+3. Genera keys reales (`livekit-server generate-keys`) → `livekit.yaml` y
+   variables `LIVEKIT_KEY/LIVEKIT_SECRET/LIVEKIT_URL` del backend.
+4. Pon un reverse proxy con TLS (Caddy: 2 líneas) delante del backend (:3210)
    y de LiveKit (:7880, websocket).
-4. Publica releases del cliente: `POST /api/updates/:platform` (multipart
-   `file` + `version`) — los clientes se auto-actualizan solos.

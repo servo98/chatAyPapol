@@ -1,14 +1,23 @@
-# Flujo de release automático: empuja un tag (ej. v0.2.0) y esto compila el
-# cliente para Windows y Linux, y publica los instaladores en GitHub Releases.
-# Con GITHUB_REPO=usuario/repo en el .env del server, los clientes se
-# auto-actualizan desde aquí sin que alojes nada.
+# Compila el cliente (Windows + Linux) y publica la GitHub Release.
+# Se dispara de dos formas:
+#   - manual: empujar un tag vX.Y.Z
+#   - automática: lo invoca auto-release.yml cuando cambia client/** en main
 name: release
 on:
   push:
     tags: ["v*.*.*"]
+  workflow_call:
+    inputs:
+      version:
+        description: "Versión x.y.z (sin la v)"
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   windows:
@@ -18,9 +27,11 @@ jobs:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
         with: { channel: stable, cache: true }
-      - name: Sellar versión desde el tag
+      - name: Sellar versión
         shell: bash
-        run: echo "const appVersion = '${GITHUB_REF_NAME#v}';" > lib/version.dart
+        run: |
+          RAW="${{ inputs.version || github.ref_name }}"
+          echo "const appVersion = '${RAW#v}';" > lib/version.dart
       - run: flutter build windows --release
         env:
           # audioplayers_windows usa <experimental/coroutine>; el MSVC nuevo lo
@@ -29,7 +40,7 @@ jobs:
       - name: Instalador Inno Setup
         shell: pwsh
         run: |
-          $v = "${env:GITHUB_REF_NAME}".TrimStart("v")
+          $v = "${{ inputs.version || github.ref_name }}".TrimStart("v")
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\installer.iss /DAppVersion=$v
       - uses: actions/upload-artifact@v4
         with: { name: windows, path: client/packaging/out/*.exe }
@@ -48,8 +59,10 @@ jobs:
           sudo apt-get install -y libfuse2 || sudo apt-get install -y libfuse2t64
       - uses: subosito/flutter-action@v2
         with: { channel: stable, cache: true }
-      - name: Sellar versión desde el tag
-        run: echo "const appVersion = '${GITHUB_REF_NAME#v}';" > lib/version.dart
+      - name: Sellar versión
+        run: |
+          RAW="${{ inputs.version || github.ref_name }}"
+          echo "const appVersion = '${RAW#v}';" > lib/version.dart
       - run: flutter build linux --release
       - run: ./packaging/make-appimage.sh
       - uses: actions/upload-artifact@v4
@@ -61,7 +74,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with: { merge-multiple: true, path: dist }
+      - name: Resolver tag
+        id: v
+        run: |
+          RAW="${{ inputs.version || github.ref_name }}"
+          echo "tag=v${RAW#v}" >> "$GITHUB_OUTPUT"
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           files: dist/*
           generate_release_notes: true

@@ -1,0 +1,41 @@
+# Release automática del cliente: cualquier push a main que toque client/**
+# calcula la siguiente versión (parche +1 sobre el último tag) y publica.
+# Para saltarla en un commit concreto: incluye "[skip release]" en el mensaje.
+name: auto-release-client
+on:
+  push:
+    branches: [main]
+    paths: ["client/**"]
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
+    runs-on: ubuntu-latest
+    outputs:
+      next: ${{ steps.bump.outputs.next }}
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - id: bump
+        run: |
+          LATEST=$(git tag --list 'v*' --sort=-v:refname | head -1)
+          LATEST=${LATEST:-v0.0.0}
+          IFS=. read -r MAJ MIN PAT <<< "${LATEST#v}"
+          NEXT="$MAJ.$MIN.$((PAT+1))"
+          echo "Último tag: $LATEST → siguiente: v$NEXT"
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: version
+    uses: ./.github/workflows/release.yml
+    permissions:
+      contents: write
+    with:
+      version: ${{ needs.version.outputs.next }}

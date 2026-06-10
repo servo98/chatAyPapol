@@ -1,0 +1,27 @@
+# Despliegue completo en un VPS: backend + LiveKit en un comando.
+#   docker compose up -d
+# La imagen del backend se reconstruye sola en cada push (ver .github/workflows/docker.yml);
+# para actualizar el VPS: docker compose pull && docker compose up -d
+services:
+  backend:
+    image: ghcr.io/servo98/chatpapol-server:latest
+    restart: unless-stopped
+    ports:
+      - "3210:3210"
+    volumes:
+      - ./data:/app/data
+    environment:
+      # URL del SFU que usan LOS CLIENTES (pública si juegan por internet)
+      LIVEKIT_URL: ${LIVEKIT_URL:-ws://localhost:7880}
+      LIVEKIT_KEY: ${LIVEKIT_KEY:-devkey}
+      LIVEKIT_SECRET: ${LIVEKIT_SECRET:-devsecret-devsecret-devsecret-32}
+      GITHUB_REPO: servo98/chatAyPapol
+
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    # host networking: el rango UDP 50000-50100 de WebRTC sin mapear puerto a puerto
+    network_mode: host
+    command: --config /etc/livekit.yaml
+    volumes:
+      - ./server/livekit.yaml:/etc/livekit.yaml:ro
