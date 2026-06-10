@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
@@ -240,6 +241,9 @@ Future<void> main(List<String> args) async {
     return;
   }
   if (_desktop) {
+    // tras una actualización quedan los binarios viejos como *.old (el swap
+    // in-process los aparta porque estaban en uso): bórralos sin bloquear
+    unawaited(Bootstrap.cleanupOldFiles());
     // El runner nativo ya muestra la ventana en el primer frame (visible
     // garantizado). Aquí solo ajustamos tamaño/centrado y QUITAMOS la barra
     // del SO; si esto último fallara, peor caso = ventana normal usable.

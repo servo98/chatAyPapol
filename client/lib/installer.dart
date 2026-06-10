@@ -134,33 +134,65 @@ foreach (\$lnk in @('$desktop','$startMenu')) {
     return tmp;
   }
 
-  /// Reemplaza la instalación actual con [newFiles] y relanza la app.
-  /// En Windows no se puede sobrescribir el exe en uso: lo hace un .bat que
-  /// espera a que la app cierre.
+  /// Borra restos `*.old` de actualizaciones anteriores. Mejor esfuerzo:
+  /// si la instancia vieja sigue cerrándose, lo que quede se borra en el
+  /// siguiente arranque o update.
+  static Future<void> cleanupOldFiles() async {
+    if (!Platform.isWindows) return;
+    try {
+      final files = await Directory(_exeDir)
+          .list(recursive: true)
+          .where((e) => e is File && e.path.endsWith('.old'))
+          .cast<File>()
+          .toList();
+      for (final f in files) {
+        try {
+          await f.delete();
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  /// Reemplaza la instalación actual con [newFiles] y relanza la app, todo
+  /// dentro del proceso (sin bat ni ayudantes, estilo Discord/Squirrel):
+  /// Windows no deja SOBRESCRIBIR binarios en uso, pero sí RENOMBRARLOS.
+  /// Apartamos lo actual a `*.old`, copiamos lo nuevo encima y relanzamos;
+  /// la instancia nueva limpia los `.old` al arrancar ([cleanupOldFiles]).
   static Future<void> applyAndRestart(Directory newFiles) async {
     final target = _exeDir;
     final exe = Platform.resolvedExecutable;
     if (Platform.isWindows) {
-      final bat = File(p.join(Directory.systemTemp.path, 'chatpapol-swap.bat'));
-      final vbs = File(p.join(Directory.systemTemp.path, 'chatpapol-swap.vbs'));
-      // Espera por PID exacto vía Wait-Process: el viejo `tasklist | find` se
-      // colgaba (pipe sin stdin en consola detached) y además esperaba a
-      // CUALQUIER chatpapol.exe, bloqueándose si había otra instancia abierta.
-      await bat.writeAsString('''
-@echo off
-powershell -NoProfile -Command "Wait-Process -Id $pid -ErrorAction SilentlyContinue"
-robocopy "${newFiles.path}" "$target" /MIR /NFL /NDL /NJH /NJS /NC /NS >NUL
-rmdir /S /Q "${newFiles.path}" >NUL 2>&1
-start "" "$exe"
-del "${vbs.path}" >NUL 2>&1
-del "%~f0" >NUL 2>&1
-''');
-      // wscript es una app SIN consola y Run con 0 oculta la del bat: el swap
-      // corre invisible (sin la ventana negra de cmd)
-      await vbs.writeAsString(
-          'CreateObject("Wscript.Shell").Run "cmd /c ""${bat.path}""", 0, False\r\n');
-      await Process.start('wscript.exe', [vbs.path],
-          mode: ProcessStartMode.detached);
+      final current = await Directory(target)
+          .list(recursive: true)
+          .where((e) => e is File && !e.path.endsWith('.old'))
+          .cast<File>()
+          .toList();
+      for (final f in current) {
+        try {
+          await f.delete(); // los que no están en uso salen directo
+        } catch (_) {
+          final old = File('${f.path}.old');
+          try {
+            if (await old.exists()) await old.delete();
+          } catch (_) {}
+          await f.rename(old.path);
+        }
+      }
+      final incoming = await newFiles
+          .list(recursive: true)
+          .where((e) => e is File)
+          .cast<File>()
+          .toList();
+      for (final f in incoming) {
+        final out = File(p.join(target, p.relative(f.path, from: newFiles.path)));
+        await out.parent.create(recursive: true);
+        await f.copy(out.path);
+      }
+      try {
+        await newFiles.delete(recursive: true);
+      } catch (_) {}
+      await Process.start(exe, const [],
+          mode: ProcessStartMode.detached, workingDirectory: target);
       exit(0);
     } else {
       // Linux/macOS: el AppImage se reemplaza a sí mismo (ver Updater).
