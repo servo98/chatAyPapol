@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_windows
   connectivity_plus
+  desktop_drop
   flutter_webrtc
   livekit_client
   screen_retriever_windows
