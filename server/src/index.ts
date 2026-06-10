@@ -7,7 +7,7 @@ import { userFromToken } from "./auth";
 import { websocket, type WSData } from "./gateway";
 import { authRoutes } from "./routes/auth";
 import { chatRoutes } from "./routes/chat";
-import { adminRoutes } from "./routes/admin";
+import { adminRoutes, publicUpdates } from "./routes/admin";
 import { createMessage } from "./routes/chat";
 
 seed(DEFAULT_EVERYONE);
@@ -31,6 +31,7 @@ app.post("/api/webhooks/:id/:token", async (c) => {
   return c.json(msg);
 });
 
+app.route("/api", publicUpdates);
 app.route("/api", authRoutes);
 app.route("/api", chatRoutes);
 app.route("/api", adminRoutes);

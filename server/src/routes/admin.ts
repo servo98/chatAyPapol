@@ -253,7 +253,9 @@ async function githubRelease(platform: string) {
   }
 }
 
-adminRoutes.get("/updates/:platform", async (c) => {
+// Consultar la última versión es público (no hace falta sesión para actualizarse).
+export const publicUpdates = new Hono();
+publicUpdates.get("/updates/:platform", async (c) => {
   const manifest = await Bun.file(releasesPath).json().catch(() => ({}));
   const rel = manifest[c.req.param("platform")] ?? await githubRelease(c.req.param("platform"));
   return rel ? c.json(rel) : c.json({ error: "Sin releases para esa plataforma" }, 404);
