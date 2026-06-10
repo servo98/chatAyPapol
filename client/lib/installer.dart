@@ -85,7 +85,8 @@ foreach (\$lnk in @('$desktop','$startMenu')) {
 }
 ''';
     try {
-      await Process.run('powershell.exe', ['-NoProfile', '-Command', ps]);
+      await Process.run('powershell.exe',
+          ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', ps]);
     } catch (_) {/* accesos directos son best-effort */}
   }
 
@@ -141,6 +142,7 @@ foreach (\$lnk in @('$desktop','$startMenu')) {
     final exe = Platform.resolvedExecutable;
     if (Platform.isWindows) {
       final bat = File(p.join(Directory.systemTemp.path, 'chatpapol-swap.bat'));
+      final vbs = File(p.join(Directory.systemTemp.path, 'chatpapol-swap.vbs'));
       // Espera por PID exacto vía Wait-Process: el viejo `tasklist | find` se
       // colgaba (pipe sin stdin en consola detached) y además esperaba a
       // CUALQUIER chatpapol.exe, bloqueándose si había otra instancia abierta.
@@ -150,9 +152,14 @@ powershell -NoProfile -Command "Wait-Process -Id $pid -ErrorAction SilentlyConti
 robocopy "${newFiles.path}" "$target" /MIR /NFL /NDL /NJH /NJS /NC /NS >NUL
 rmdir /S /Q "${newFiles.path}" >NUL 2>&1
 start "" "$exe"
+del "${vbs.path}" >NUL 2>&1
 del "%~f0" >NUL 2>&1
 ''');
-      await Process.start('cmd.exe', ['/c', bat.path],
+      // wscript es una app SIN consola y Run con 0 oculta la del bat: el swap
+      // corre invisible (sin la ventana negra de cmd)
+      await vbs.writeAsString(
+          'CreateObject("Wscript.Shell").Run "cmd /c ""${bat.path}""", 0, False\r\n');
+      await Process.start('wscript.exe', [vbs.path],
           mode: ProcessStartMode.detached);
       exit(0);
     } else {
