@@ -35,14 +35,29 @@ Empaquetado e instaladores con auto-update: ver `client/packaging/README.md`.
   `curl -X POST $URL -d '{"content":"hola desde CI","username":"CI"}'`.
 - Bot de ejemplo: `BOT_TOKEN=xxx bun examples/dice-bot.ts` → `/roll 2d20` en el chat.
 
-## CI/CD (todo automático y gratis)
+## CI/CD (gratis)
 
-- **Cliente**: cualquier push a `main` que toque `client/**` → GitHub Actions
-  calcula la siguiente versión, compila Windows + Linux y publica la Release.
-  Los clientes instalados se actualizan solos. (Para saltarlo en un commit:
-  `[skip release]` en el mensaje. Para una versión mayor/menor: tag manual `vX.Y.0`.)
-- **Server**: cualquier push que toque `server/**` → imagen Docker publicada en
+**Soltar una versión nueva del cliente = un comando:**
+
+```bash
+# (commitea tus cambios primero)
+./release.sh        # push → CI compila Linux → compila+firma Windows local → sube todo
+```
+
+Detalle de qué hace cada parte:
+- **Linux**: lo compila GitHub Actions. Push a `main` que toque `client/**` →
+  `auto-release.yml` calcula la siguiente versión y publica el Release con el AppImage.
+  (Saltar: `[skip release]` en el commit. Minor/major: tag manual `vX.Y.0`.)
+- **Windows**: NO lo hace el CI (lento). Se compila **en local** con
+  `client/scripts/publish-windows.sh`, que además **firma** el `Setup.exe`
+  (evita que Defender lo borre) y lo sube al Release. `release.sh` orquesta los dos.
+- La **llave de firma** (`.pfx`) vive solo en la máquina de build (no en el repo).
+- **Server**: push que toque `server/**` → imagen Docker en
   `ghcr.io/servo98/chatpapol-server:latest`.
+
+Los clientes instalados se **auto-actualizan** (descargan el `.zip` del Release y
+muestran la pantalla de carga propia). La primera instalación es el `Setup.exe`
+firmado (un solo doble clic; SmartScreen pide "Ejecutar de todas formas" una vez).
 
 ## Producción (resumen)
 
