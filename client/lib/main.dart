@@ -13,24 +13,22 @@ bool get _desktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (_desktop) {
-    await windowManager.ensureInitialized();
-    // ORDEN CRÍTICO: mostrar SIEMPRE primero (garantiza ventana visible);
-    // ocultar la barra del SO después es best-effort y nunca bloquea el show.
-    // (No ponemos titleBarStyle en WindowOptions: aplicarlo en el arranque
-    //  provocaba que la ventana quedara invisible.)
-    const opts = WindowOptions(
-      size: Size(1280, 800),
-      minimumSize: Size(960, 600),
-      center: true,
-      title: 'ChatPapol',
-    );
-    await windowManager.waitUntilReadyToShow(opts, () async {
+    // El runner nativo ya muestra la ventana en el primer frame (visible
+    // garantizado). Aquí solo ajustamos tamaño/centrado y QUITAMOS la barra
+    // del SO; si esto último fallara, peor caso = ventana normal usable.
+    try {
+      await windowManager.ensureInitialized();
+      const opts = WindowOptions(
+        size: Size(1280, 800),
+        minimumSize: Size(960, 600),
+        center: true,
+        title: 'ChatPapol',
+      );
+      await windowManager.waitUntilReadyToShow(opts);
+      await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
       await windowManager.show();
       await windowManager.focus();
-    });
-    try {
-      await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
-    } catch (_) {/* peor caso: barra del SO visible, pero la app funciona */}
+    } catch (_) {/* la ventana ya está visible por el runner nativo */}
   }
   final store = AppStore();
   final voice = VoiceManager(store);

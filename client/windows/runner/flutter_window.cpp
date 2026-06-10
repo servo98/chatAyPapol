@@ -27,11 +27,12 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
-  // window_manager controla cuándo se muestra la ventana (vía
-  // waitUntilReadyToShow → show()); si la mostramos aquí, con la barra de
-  // título oculta la ventana queda invisible. NO llamar this->Show().
+  // El runner muestra SIEMPRE la ventana en el primer frame (garantiza que
+  // sea visible). window_manager solo le quita la barra del SO después, ya
+  // mostrada. (No pasar titleBarStyle en WindowOptions: eso provocaba que la
+  // ventana quedara invisible al arrancar.)
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    // intencionalmente vacío: lo gestiona window_manager
+    this->Show();
   });
 
   // Flutter can complete the first frame before the "show window" callback is

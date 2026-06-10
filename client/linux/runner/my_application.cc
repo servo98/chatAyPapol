@@ -16,10 +16,9 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
-  // window_manager controla cuándo se muestra la ventana (waitUntilReadyToShow
-  // → show()); mostrarla aquí, con la barra de título oculta, la deja invisible.
-  (void)self;
-  (void)view;
+  // Mostrar SIEMPRE la ventana en el primer frame (garantiza visibilidad);
+  // window_manager solo le quita la barra del SO después.
+  gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
 // Implements GApplication::activate.
