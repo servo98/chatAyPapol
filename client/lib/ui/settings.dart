@@ -160,7 +160,7 @@ class _AccountPanel extends StatelessWidget {
           Row(children: [
             OutlinedButton(
               onPressed: () async {
-                final r = await FilePicker.platform.pickFiles(
+                final r = await FilePicker.pickFiles(
                     type: FileType.image, withData: true);
                 final f = r?.files.firstOrNull;
                 if (f?.bytes == null) return;
@@ -494,7 +494,7 @@ class _ExpressionsPanel extends StatelessWidget {
   }
 
   Future<void> _upload(BuildContext context) async {
-    final r = await FilePicker.platform.pickFiles(withData: true);
+    final r = await FilePicker.pickFiles(withData: true);
     final f = r?.files.firstOrNull;
     if (f?.bytes == null || !context.mounted) return;
     final name = await promptText(context, 'Nombre', initial: f!.name.split('.').first,

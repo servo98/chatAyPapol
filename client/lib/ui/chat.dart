@@ -84,7 +84,7 @@ class _ChatViewState extends State<ChatView> {
   }
 
   Future<void> _attach() async {
-    final r = await FilePicker.platform.pickFiles(withData: true);
+    final r = await FilePicker.pickFiles(withData: true);
     final f = r?.files.firstOrNull;
     if (f?.bytes == null) return;
     try {
