@@ -52,7 +52,9 @@ class _BootstrapRunnerState extends State<BootstrapRunner> {
         await Future.delayed(const Duration(milliseconds: 400));
         exit(0); // la instancia instalada ya se abrió
       } else {
-        final u = widget.update!;
+        // re-chequea contra el server en cada intento: si el manifiesto cambió
+        // desde que salió el banner (o tras un Reintentar), usa la URL fresca
+        final u = await Updater.check(widget.api!) ?? widget.update!;
         final dir = await Bootstrap.downloadAndExtract(
             widget.api!.fileUrl(u.url), u.sha256, onProgress: _set);
         _set('Reiniciando…', 1);

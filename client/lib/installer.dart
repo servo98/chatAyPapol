@@ -141,11 +141,12 @@ foreach (\$lnk in @('$desktop','$startMenu')) {
     final exe = Platform.resolvedExecutable;
     if (Platform.isWindows) {
       final bat = File(p.join(Directory.systemTemp.path, 'chatpapol-swap.bat'));
+      // Espera por PID exacto vía Wait-Process: el viejo `tasklist | find` se
+      // colgaba (pipe sin stdin en consola detached) y además esperaba a
+      // CUALQUIER chatpapol.exe, bloqueándose si había otra instancia abierta.
       await bat.writeAsString('''
 @echo off
-:wait
-tasklist /FI "IMAGENAME eq ${p.basename(exe)}" 2>NUL | find /I "${p.basename(exe)}" >NUL
-if not errorlevel 1 ( timeout /t 1 /nobreak >NUL & goto wait )
+powershell -NoProfile -Command "Wait-Process -Id $pid -ErrorAction SilentlyContinue"
 robocopy "${newFiles.path}" "$target" /MIR /NFL /NDL /NJH /NJS /NC /NS >NUL
 rmdir /S /Q "${newFiles.path}" >NUL 2>&1
 start "" "$exe"

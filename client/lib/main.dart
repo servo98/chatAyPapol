@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:window_manager/window_manager.dart';
+import 'api.dart';
+import 'config.dart';
 import 'installer.dart';
+import 'updater.dart';
+import 'version.dart';
 import 'store.dart';
 import 'theme.dart';
 import 'ui/bootstrap_runner.dart';
@@ -173,6 +177,35 @@ Future<void> _diagShare() async {
   exit(0);
 }
 
+// Ejercita el flujo de auto-update completo SIN UI: check contra el server,
+// descarga, extracción y swap (bat + relanzamiento). Para probar el updater
+// en un sandbox: compilar con appVersion baja y LOCALAPPDATA redirigido.
+Future<void> _diagUpdate() async {
+  final out = File(r'C:\Users\ferna\Downloads\chatpapol-toolchain\diag-update.txt');
+  Future<void> log(String s) async => out.writeAsStringSync('$s\n', mode: FileMode.append);
+  out.writeAsStringSync('=== diag-update v$appVersion desde ${Platform.resolvedExecutable} ===\n');
+  try {
+    final api = Api()..base = serverUrl;
+    await log('1: Updater.check ($serverUrl) ...');
+    final u = await Updater.check(api);
+    if (u == null) {
+      await log('  sin update (ya estamos al día) — FIN');
+      exit(0);
+    }
+    await log('  update ${u.version} → ${u.url}');
+    await log('2: downloadAndExtract ...');
+    final dir = await Bootstrap.downloadAndExtract(
+        api.fileUrl(u.url), u.sha256,
+        onProgress: (s, p) {});
+    await log('  extraído en ${dir.path}');
+    await log('3: applyAndRestart (bat + swap + relaunch) ...');
+    await Bootstrap.applyAndRestart(dir); // hace exit(0)
+  } catch (e, st) {
+    await log('EXCEPCIÓN: $e\n$st');
+    exit(1);
+  }
+}
+
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   if (args.contains('--diag')) {
@@ -181,6 +214,10 @@ Future<void> main(List<String> args) async {
   }
   if (args.contains('--diag-share')) {
     await _diagShare();
+    return;
+  }
+  if (args.contains('--diag-update')) {
+    await _diagUpdate();
     return;
   }
   if (_desktop) {
