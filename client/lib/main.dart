@@ -13,25 +13,20 @@ bool get _desktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (_desktop) {
-    try {
-      await windowManager.ensureInitialized();
-      const opts = WindowOptions(
-        size: Size(1280, 800),
-        minimumSize: Size(960, 600),
-        center: true,
-        title: 'ChatPapol',
-        titleBarStyle: TitleBarStyle.hidden, // marco del OS fuera: barra propia
-      );
-      await windowManager.waitUntilReadyToShow(opts);
+    await windowManager.ensureInitialized();
+    const opts = WindowOptions(
+      size: Size(1280, 800),
+      minimumSize: Size(960, 600),
+      center: true,
+      title: 'ChatPapol',
+      titleBarStyle: TitleBarStyle.hidden, // marco del OS fuera: barra propia
+    );
+    await windowManager.waitUntilReadyToShow(opts, () async {
+      // forzamos el ocultado del título del SO (evita doble barra) y mostramos
+      await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
       await windowManager.show();
       await windowManager.focus();
-    } catch (_) {
-      // si algo de window_manager fallara, asegurar que la ventana se muestre
-      try {
-        await windowManager.setTitleBarStyle(TitleBarStyle.normal);
-        await windowManager.show();
-      } catch (_) {}
-    }
+    });
   }
   final store = AppStore();
   final voice = VoiceManager(store);
