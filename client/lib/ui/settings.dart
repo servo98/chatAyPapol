@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../updater.dart';
 import '../version.dart';
 import '../voice.dart';
+import 'bootstrap_runner.dart';
 import 'widgets.dart';
 
 void openSettings(BuildContext context, AppStore store, VoiceManager voice) {
@@ -1191,15 +1192,9 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
             ElevatedButton.icon(
               onPressed: applying
                   ? null
-                  : () async {
-                      setState(() => applying = true);
-                      try {
-                        await Updater.apply(widget.store.api, available!);
-                      } catch (e) {
-                        if (context.mounted) showError(context, e);
-                      } finally {
-                        if (mounted) setState(() => applying = false);
-                      }
+                  : () {
+                      Navigator.of(context).pop(); // cerrar Ajustes
+                      startUpdate(context, widget.store.api, available!);
                     },
               icon: const Icon(Icons.download, size: 16),
               label: Text(applying

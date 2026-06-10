@@ -222,8 +222,10 @@ adminRoutes.post("/interactions/:id/respond", async (c) => {
 //      espejo de releases/latest — no alojas nada, GitHub pone el CDN.
 const releasesPath = join(FILES_DIR, "releases", "releases.json");
 const GITHUB_REPO = process.env.GITHUB_REPO ?? "";
+// El updater in-app de Windows descarga el .zip de la versión (instalador/swap
+// propio, sin Inno). El Setup.exe (primera instalación) NO se sirve por aquí.
 const ASSET_EXT: Record<string, RegExp> = {
-  windows: /\.exe$/i, linux: /\.AppImage$/i, macos: /\.(dmg|pkg)$/i,
+  windows: /windows.*\.zip$/i, linux: /\.AppImage$/i, macos: /\.(dmg|pkg)$/i,
 };
 let ghCache: { at: number; data: any } | null = null;
 

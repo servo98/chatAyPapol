@@ -1,4 +1,6 @@
-# Compila el cliente (Windows + Linux) y publica la GitHub Release.
+# Compila el cliente Linux (AppImage) y publica la GitHub Release.
+# Windows YA NO se compila aquí (tarda demasiado): se construye en local con
+# client/scripts/publish-windows.sh y se sube al mismo release con gh.
 # Se dispara de dos formas:
 #   - manual: empujar un tag vX.Y.Z
 #   - automática: lo invoca auto-release.yml cuando cambia client/** en main
@@ -20,31 +22,6 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  windows:
-    runs-on: windows-latest
-    defaults: { run: { working-directory: client } }
-    steps:
-      - uses: actions/checkout@v5
-      - uses: subosito/flutter-action@v2
-        with: { channel: stable, cache: true }
-      - name: Sellar versión
-        shell: bash
-        run: |
-          RAW="${{ inputs.version || github.ref_name }}"
-          echo "const appVersion = '${RAW#v}';" > lib/version.dart
-      - run: flutter build windows --release
-        env:
-          # audioplayers_windows usa <experimental/coroutine>; el MSVC nuevo lo
-          # trata como error salvo que se silencie explícitamente
-          CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
-      - name: Instalador Inno Setup
-        shell: pwsh
-        run: |
-          $v = "${{ inputs.version || github.ref_name }}".TrimStart("v")
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\installer.iss /DAppVersion=$v
-      - uses: actions/upload-artifact@v4
-        with: { name: windows, path: client/packaging/out/*.exe }
-
   linux:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: client } }
@@ -69,7 +46,7 @@ jobs:
         with: { name: linux, path: client/packaging/out/*.AppImage }
 
   publish:
-    needs: [windows, linux]
+    needs: [linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

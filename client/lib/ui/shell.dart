@@ -3,6 +3,7 @@ import '../store.dart';
 import '../theme.dart';
 import '../updater.dart';
 import '../voice.dart';
+import 'bootstrap_runner.dart';
 import 'chat.dart';
 import 'members.dart';
 import 'sidebar.dart';
@@ -92,13 +93,7 @@ class _ShellState extends State<Shell> {
                 style: const TextStyle(fontSize: 12.5, color: Colors.white)),
           ),
           TextButton(
-            onPressed: () async {
-              try {
-                await Updater.apply(widget.store.api, update!);
-              } catch (e) {
-                if (mounted) showError(context, e);
-              }
-            },
+            onPressed: () => startUpdate(context, widget.store.api, update!),
             child: const Text('Actualizar ahora',
                 style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.w700,
