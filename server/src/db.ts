@@ -8,7 +8,16 @@ for (const d of ["uploads", "stickers", "sounds", "avatars", "releases"])
   mkdirSync(join(FILES_DIR, d), { recursive: true });
 
 export const db = new Database(join(DATA_DIR, "app.db"), { create: true });
-db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+// WAL necesita memoria compartida; en discos /mnt/c de WSL (drvfs) a veces no
+// está disponible (SQLITE_IOERR_SHMOPEN). En ese caso degradamos a TRUNCATE:
+// más lento bajo concurrencia, pero 100% funcional para desarrollo.
+try {
+  db.exec("PRAGMA journal_mode = WAL;");
+} catch {
+  db.exec("PRAGMA journal_mode = TRUNCATE;");
+  console.warn("⚠ WAL no disponible en este filesystem; usando journal TRUNCATE");
+}
+db.exec("PRAGMA foreign_keys = ON;");
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (

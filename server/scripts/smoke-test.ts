@@ -159,8 +159,10 @@ const sndFail = await api("POST", `/api/channels/${voiceCh.id}/sounds/123/play`,
 check("soundboard requiere estar en el canal", sndFail.status === 400);
 
 console.log("— updates —");
-const upd = await api("GET", "/api/updates/windows", ft);
-check("updates sin release → 404 limpio", upd.status === 404);
+// Plataforma inexistente: nunca tiene asset (ni local ni en GitHub Releases),
+// así el 404 es determinista sin depender de GITHUB_REPO ni de releases publicadas.
+const upd = await api("GET", "/api/updates/freebsd", ft);
+check("plataforma sin build → 404 limpio", upd.status === 404);
 
 ws.close(); botWs.close();
 console.log(failures === 0 ? "\n✅ TODO OK" : `\n❌ ${failures} fallos`);
