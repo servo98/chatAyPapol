@@ -288,7 +288,13 @@ class VoiceManager extends ChangeNotifier {
         .getSources(types: [rtc.SourceType.Screen], thumbnailSize: thumb);
     final windows = await rtc.desktopCapturer
         .getSources(types: [rtc.SourceType.Window], thumbnailSize: thumb);
-    return [...screens, ...windows];
+    // dedupe por id: eventos tardíos del plugin pueden re-inyectar fuentes de
+    // la primera enumeración en el resultado de la segunda (lista duplicada)
+    final byId = <String, rtc.DesktopCapturerSource>{};
+    for (final s in [...screens, ...windows]) {
+      byId[s.id] = s;
+    }
+    return byId.values.toList();
   }
 
   /// [withAudio] es opt-in: el loopback "Remote App Audio" de Windows es
@@ -296,6 +302,10 @@ class VoiceManager extends ChangeNotifier {
   /// screenshare es sólido. [fps] = 15, 30 o 60 (1080p en todos).
   Future<void> startShare(rtc.DesktopCapturerSource source,
       {bool withAudio = false, int fps = 60}) async {
+    // el plugin solo captura fuentes de la ÚLTIMA enumeración (getSources
+    // limpia la lista nativa) y el selector enumera ventanas al final: hay que
+    // re-enumerar el tipo elegido aquí o getDisplayMedia da "source not found"
+    await rtc.desktopCapturer.getSources(types: [source.type]);
     await room?.localParticipant?.setScreenShareEnabled(
       true,
       screenShareCaptureOptions: ScreenShareCaptureOptions(

@@ -98,8 +98,17 @@ Future<void> _diagShare() async {
     // y el plugin C++ hace fastfail). Predicción: 1080/default crashean, fps NO.
     final isWin = variant.startsWith('window');
     final idx = variant.contains(':') ? int.tryParse(variant.split(':')[1]) ?? 0 : 0;
-    final srcs = await rtc.desktopCapturer.getSources(
-        types: [isWin ? rtc.SourceType.Window : rtc.SourceType.Screen]);
+    List<rtc.DesktopCapturerSource> srcs;
+    if (variant == 'app') {
+      // flujo REAL del picker: pantallas y luego ventanas (la lista nativa
+      // queda en "ventanas"); sin la re-enumeración de startShare esto daba
+      // "source not found" al compartir una pantalla
+      srcs = await rtc.desktopCapturer.getSources(types: [rtc.SourceType.Screen]);
+      await rtc.desktopCapturer.getSources(types: [rtc.SourceType.Window]);
+    } else {
+      srcs = await rtc.desktopCapturer.getSources(
+          types: [isWin ? rtc.SourceType.Window : rtc.SourceType.Screen]);
+    }
     await log('2: ${srcs.length} fuentes (${isWin ? "ventanas" : "pantallas"}):');
     for (var i = 0; i < srcs.length; i++) {
       await log('     [$i] ${srcs[i].name}');
@@ -121,6 +130,16 @@ Future<void> _diagShare() async {
             sourceId: src.id,
             maxFrameRate: 30.0,
             params: lk.VideoParametersPresets.screenShareH1080FPS30);
+        break;
+      case 'app': // igual que startShare: re-enumera el tipo elegido y 60fps
+        await rtc.desktopCapturer.getSources(types: [src.type]);
+        opts = lk.ScreenShareCaptureOptions(
+            sourceId: src.id,
+            maxFrameRate: 60.0,
+            params: const lk.VideoParameters(
+                dimensions: lk.VideoDimensionsPresets.h1080_169,
+                encoding:
+                    lk.VideoEncoding(maxBitrate: 8000 * 1000, maxFramerate: 60)));
         break;
       case '60': // 1080p60 (lo que usa la app): mide fps reales del sender
         opts = lk.ScreenShareCaptureOptions(
