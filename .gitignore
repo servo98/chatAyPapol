@@ -7,3 +7,8 @@ server/.env
 # client (flutter tiene su propio .gitignore dentro)
 client/packaging/out/
 client/packaging/AppDir/
+
+# nunca subir llaves de firma
+*.pfx
+client/packaging/out/
+client/packaging/app.7z

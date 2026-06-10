@@ -1,58 +1,76 @@
 #!/usr/bin/env bash
-# Compila el cliente para Windows EN LOCAL y sube el instalador al release de
-# GitHub (el CI solo hace Linux). Pensado para correr desde WSL usando el
-# Flutter de Windows vía interop.
+# Compila el cliente para Windows EN LOCAL, FIRMA los binarios, arma el
+# instalador (Setup.exe auto-extraíble) y sube todo al release de GitHub.
+# El CI solo hace Linux. Pensado para correr desde WSL con el Flutter de Windows.
 #
 # Uso:
 #   client/scripts/publish-windows.sh            # versión = último release de gh
-#   client/scripts/publish-windows.sh 0.1.7      # versión explícita
+#   client/scripts/publish-windows.sh 0.1.8      # versión explícita
 #
-# Requisitos: Flutter Windows en C:\src\flutter, Inno Setup 6, gh autenticado,
-# Modo desarrollador de Windows activado.
+# Requisitos: Flutter Windows en C:\src\flutter, 7zip (WSL), gh autenticado,
+# Modo desarrollador de Windows activado. Para FIRMAR (recomendado): el PFX en
+# CHATPAPOL_PFX (default abajo) — evita que Windows Defender borre el Setup.
 set -euo pipefail
 cd "$(dirname "$0")/.."   # client/
+CLIENT_DIR="$PWD"
 
 REPO="servo98/chatAyPapol"
 FLUTTER='C:\src\flutter\bin\flutter.bat'
-ISCC='C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
 WIN_CLIENT='C:\Users\ferna\Documents\code\chatpapol\client'
+SIGNTOOL="/mnt/c/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x64/signtool.exe"
+PFX="${CHATPAPOL_PFX:-/mnt/c/Users/ferna/Downloads/chatpapol-toolchain/chatpapol-signing.pfx}"
+PFX_PASS="${CHATPAPOL_PFX_PASS:-chatpapol}"
+PFX_WIN="$(wslpath -w "$PFX" 2>/dev/null || echo "$PFX")"
 
-# 1) Versión: argumento o el último release publicado por el CI.
+sign() { # firma un .exe (ruta Windows). No-op si no hay PFX.
+  [ -f "$PFX" ] || { echo "  (sin PFX: $1 sin firmar)"; return 0; }
+  "$SIGNTOOL" sign /f "$PFX_WIN" /p "$PFX_PASS" /fd SHA256 /d ChatPapol "$1" >/dev/null
+  echo "  firmado: $(basename "$1")"
+}
+
+# 1) Versión.
 VERSION="${1:-}"
-if [ -z "$VERSION" ]; then
-  VERSION="$(gh release view --repo "$REPO" --json tagName -q '.tagName' | sed 's/^v//')"
-fi
-echo "▶ Publicando Windows para v$VERSION"
+[ -z "$VERSION" ] && VERSION="$(gh release view --repo "$REPO" --json tagName -q '.tagName' | sed 's/^v//')"
+echo "▶ Publicando Windows v$VERSION"
 
-# 2) Sellar la versión que se compila (igual que hace el CI).
+# 2) Sellar versión (igual que el CI). pub get + build con Flutter de WINDOWS
+#    (si se usó el Flutter de WSL, package_config.json queda con rutas Linux).
 echo "const appVersion = '$VERSION';" > lib/version.dart
-
-# 3) Compilar Windows en local (rápido).
-#    IMPORTANTE: pub get con el Flutter de WINDOWS. Si se corrió `flutter pub get`
-#    o `flutter analyze` con el Flutter de WSL, package_config.json queda con
-#    rutas /root/... (Linux) y el build de Windows falla. Esto lo recompone.
-echo "▶ flutter pub get (Windows) + build windows --release"
+echo "▶ flutter pub get + build windows --release"
 cmd.exe /c "cd /d $WIN_CLIENT && $FLUTTER pub get"
 cmd.exe /c "cd /d $WIN_CLIENT && $FLUTTER build windows --release"
 
-# 4) Empaquetar el .zip del bundle (sirve para primera instalación Y para el
-#    updater in-app). Archivos en la RAÍZ del zip (chatpapol.exe, dll, data/).
-CLIENT_DIR="$PWD"
 BUNDLE="$CLIENT_DIR/build/windows/x64/runner/Release"
-[ -f "$BUNDLE/chatpapol.exe" ] || { echo "✗ No se generó el build de Windows"; exit 1; }
-mkdir -p "$CLIENT_DIR/packaging/out"
-ZIP="$CLIENT_DIR/packaging/out/ChatPapol-windows-$VERSION.zip"
-rm -f "$ZIP"
-( cd "$BUNDLE" && zip -qr -X "$ZIP" . )
-echo "▶ Paquete: $ZIP ($(du -h "$ZIP" 2>/dev/null | cut -f1))"
+BUNDLE_WIN='C:\Users\ferna\Documents\code\chatpapol\client\build\windows\x64\runner\Release'
+[ -f "$BUNDLE/chatpapol.exe" ] || { echo "✗ No se generó el build"; exit 1; }
 
-# 5) Subir al release vX.Y.Z (espera a que el CI lo haya creado). --clobber
-#    reemplaza si ya existía.
-echo "▶ Esperando a que exista el release v$VERSION..."
-for i in $(seq 1 60); do
-  if gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1; then break; fi
-  sleep 5
+# 3) Firmar el ejecutable de la app.
+echo "▶ Firmando binarios"
+sign "$BUNDLE_WIN\\chatpapol.exe"
+
+mkdir -p "$CLIENT_DIR/packaging/out"
+
+# 4) .zip del bundle (para el updater in-app). Archivos en la raíz.
+ZIP="$CLIENT_DIR/packaging/out/ChatPapol-windows-$VERSION.zip"
+rm -f "$ZIP"; ( cd "$BUNDLE" && zip -qr -X "$ZIP" . )
+echo "▶ Paquete update: $(du -h "$ZIP" | cut -f1)"
+
+# 5) Setup.exe auto-extraíble (primera instalación) = 7zSD.sfx + config + .7z,
+#    luego firmado para que Defender no lo borre.
+APP7Z="$CLIENT_DIR/packaging/out/app.7z"
+rm -f "$APP7Z"; ( cd "$BUNDLE" && 7z a -t7z -mx=5 "$APP7Z" . >/dev/null )
+SETUP="$CLIENT_DIR/packaging/out/ChatPapolSetup-$VERSION.exe"
+cat "$CLIENT_DIR/packaging/7zSD.sfx" "$CLIENT_DIR/packaging/sfx-config.txt" "$APP7Z" > "$SETUP"
+rm -f "$APP7Z"
+echo "▶ Instalador: $(du -h "$SETUP" | cut -f1)"
+sign "$(wslpath -w "$SETUP")"
+
+# 6) Subir al release (espera a que el CI lo cree).
+echo "▶ Esperando release v$VERSION…"
+for i in $(seq 1 90); do
+  gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1 && break || sleep 5
 done
-echo "▶ Subiendo paquete Windows al release"
-gh release upload "v$VERSION" "$ZIP" --repo "$REPO" --clobber
-echo "✓ Listo: Windows v$VERSION publicado en el release"
+echo "▶ Subiendo Setup + zip"
+gh release upload "v$VERSION" "$SETUP" "$ZIP" --repo "$REPO" --clobber
+git checkout lib/version.dart 2>/dev/null || true
+echo "✓ Listo: Windows v$VERSION (Setup firmado + zip) publicado"
