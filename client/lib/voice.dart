@@ -35,6 +35,7 @@ class VoiceManager extends ChangeNotifier {
   String? channelId;
   bool muted = false;
   bool deafened = false;
+  bool _mutedByDeafen = false; // el micro lo cerró el propio ensordecer
   bool sharing = false;
   bool connecting = false;
   final speaking = <String>{};
@@ -343,7 +344,16 @@ class VoiceManager extends ChangeNotifier {
 
   Future<void> toggleDeafen() async {
     deafened = !deafened;
-    if (deafened && !muted) await toggleMute();
+    if (deafened) {
+      // al ensordecer, cierra el micro si estaba abierto y recuerda que fuimos
+      // nosotros, para poder restaurarlo al desensordecer.
+      if (!muted) { _mutedByDeafen = true; await toggleMute(); }
+    } else if (_mutedByDeafen) {
+      // al desensordecer, reabre el micro solo si lo cerró el ensordecer
+      // (si el usuario lo había silenciado a mano, lo dejamos como estaba).
+      _mutedByDeafen = false;
+      await toggleMute();
+    }
     // silencia/reactiva todos los streams de audio remotos
     final r = room;
     if (r != null) {
