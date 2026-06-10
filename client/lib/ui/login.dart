@@ -12,12 +12,18 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final user = TextEditingController();
   final pass = TextEditingController();
+  final confirmPass = TextEditingController();
   final invite = TextEditingController();
   bool registering = false;
   bool busy = false;
+  bool showPass = false;
   String? error;
 
   Future<void> _submit() async {
+    if (registering && pass.text != confirmPass.text) {
+      setState(() => error = 'Las contraseñas no coinciden');
+      return;
+    }
     setState(() {
       busy = true;
       error = null;
@@ -74,7 +80,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: TextStyle(color: Pal.muted, fontSize: 13)),
                 const SizedBox(height: 24),
                 _field('USUARIO', user),
-                _field('CONTRASEÑA', pass, obscure: true, onSubmit: _submit),
+                _field('CONTRASEÑA', pass, obscure: true, revealable: true,
+                    onSubmit: _submit),
+                if (registering)
+                  _field('CONFIRMAR CONTRASEÑA', confirmPass,
+                      obscure: true, revealable: true, onSubmit: _submit),
                 if (registering)
                   _field('CÓDIGO DE INVITACIÓN', invite,
                       hint: 'vacío si eres el primero', onSubmit: _submit),
@@ -180,7 +190,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _field(String label, TextEditingController ctrl,
-      {String hint = '', bool obscure = false, VoidCallback? onSubmit}) {
+      {String hint = '', bool obscure = false, bool revealable = false,
+      VoidCallback? onSubmit}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -193,8 +204,21 @@ class _LoginScreenState extends State<LoginScreen> {
           const SizedBox(height: 6),
           TextField(
             controller: ctrl,
-            obscureText: obscure,
-            decoration: InputDecoration(hintText: hint),
+            obscureText: obscure && !showPass,
+            decoration: InputDecoration(
+              hintText: hint,
+              suffixIcon: revealable
+                  ? IconButton(
+                      icon: Icon(
+                          showPass ? Icons.visibility_off : Icons.visibility,
+                          size: 18, color: Pal.muted),
+                      tooltip: showPass
+                          ? 'Ocultar contraseña'
+                          : 'Mostrar contraseña',
+                      onPressed: () => setState(() => showPass = !showPass),
+                    )
+                  : null,
+            ),
             onSubmitted: (_) => onSubmit?.call(),
           ),
         ],
