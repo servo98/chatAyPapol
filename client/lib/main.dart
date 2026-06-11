@@ -345,8 +345,11 @@ class _FocusListener extends WindowListener {
   _FocusListener(this.store, this.voice);
   @override
   void onWindowClose() async {
+    // Desconectar la sala libera el dispositivo de audio. Con timeout: si la
+    // desconexión de WebRTC se cuelga, NO bloqueamos el cierre — destruimos la
+    // ventana igual y el runner nativo fuerza la salida del proceso.
     try {
-      await voice.leave();
+      await voice.leave().timeout(const Duration(seconds: 2));
     } catch (_) {}
     try {
       await windowManager.setPreventClose(false);

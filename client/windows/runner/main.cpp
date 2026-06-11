@@ -51,5 +51,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   StopAudioSessionRenamer();
   ::CoUninitialize();
+
+  // Cierre DURO. Al salir del loop, el runtime de C++ intenta destruir los
+  // estáticos de libwebrtc.dll (hilos del ADM de audio); ahí se cuelga y el
+  // proceso queda vivo —con su sesión en el Mezclador de volumen— por más que
+  // la ventana ya no esté. La voz se desconectó antes (Dart: onWindowClose →
+  // voice.leave()), así que aquí ya es seguro matar el proceso de inmediato.
+  ::TerminateProcess(::GetCurrentProcess(), EXIT_SUCCESS);
   return EXIT_SUCCESS;
 }

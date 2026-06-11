@@ -18,6 +18,8 @@ REPO="servo98/chatAyPapol"
 FLUTTER='C:\src\flutter\bin\flutter.bat'
 WIN_CLIENT='C:\Users\ferna\Documents\code\chatpapol\client'
 SIGNTOOL="/mnt/c/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x64/signtool.exe"
+RCEDIT="${CHATPAPOL_RCEDIT:-/mnt/c/Users/ferna/Downloads/chatpapol-toolchain/rcedit-x64.exe}"
+ICON="$PWD/windows/runner/resources/app_icon.ico"
 PFX="${CHATPAPOL_PFX:-/mnt/c/Users/ferna/Downloads/chatpapol-toolchain/chatpapol-signing.pfx}"
 PFX_PASS="${CHATPAPOL_PFX_PASS:-chatpapol}"
 PFX_WIN="$(wslpath -w "$PFX" 2>/dev/null || echo "$PFX")"
@@ -60,7 +62,19 @@ echo "▶ Paquete update: $(du -h "$ZIP" | cut -f1)"
 APP7Z="$CLIENT_DIR/packaging/out/app.7z"
 rm -f "$APP7Z"; ( cd "$BUNDLE" && 7z a -t7z -mx=5 "$APP7Z" . >/dev/null )
 SETUP="$CLIENT_DIR/packaging/out/ChatPapolSetup-$VERSION.exe"
-cat "$CLIENT_DIR/packaging/7zSD.sfx" "$CLIENT_DIR/packaging/sfx-config.txt" "$APP7Z" > "$SETUP"
+# El ícono del Setup vive en el STUB SFX (PE). Lo incrustamos en una COPIA del
+# stub ANTES de concatenar: rcedit no debe correr sobre el Setup final porque
+# borraría el overlay .7z pegado al final. No-op (Setup sin ícono) si falta rcedit.
+SFX="$CLIENT_DIR/packaging/7zSD.sfx"
+if [ -f "$RCEDIT" ]; then
+  SFX="$CLIENT_DIR/packaging/out/7zSD-icon.sfx"
+  cp "$CLIENT_DIR/packaging/7zSD.sfx" "$SFX"
+  "$RCEDIT" "$(wslpath -w "$SFX")" --set-icon "$(wslpath -w "$ICON")"
+  echo "  ícono ChatPapol incrustado en el stub SFX"
+else
+  echo "  (sin rcedit: Setup sin ícono propio)"
+fi
+cat "$SFX" "$CLIENT_DIR/packaging/sfx-config.txt" "$APP7Z" > "$SETUP"
 rm -f "$APP7Z"
 echo "▶ Instalador: $(du -h "$SETUP" | cut -f1)"
 sign "$(wslpath -w "$SETUP")"

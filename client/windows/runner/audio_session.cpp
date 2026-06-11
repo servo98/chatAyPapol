@@ -14,13 +14,24 @@ namespace {
 std::atomic<bool> g_running{false};
 std::wstring g_desired_name;
 
-// El default horneado en libwebrtc.dll que muestra el Mezclador de volumen.
-constexpr const wchar_t kWebrtcSessionName[] = L"RemoteAudioApp";
+// Ruta del .exe + índice 0 = el ícono embebido (Runner.rc → app_icon.ico). Es
+// lo que el Mezclador de volumen pinta junto al nombre de la sesión.
+const std::wstring& SelfIconPath() {
+  static const std::wstring path = [] {
+    wchar_t buf[MAX_PATH] = {0};
+    DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return std::wstring();
+    return std::wstring(buf) + L",0";
+  }();
+  return path;
+}
 
-// Recorre TODOS los endpoints de render activos y renombra las sesiones de
-// audio de ESTE proceso cuyo display name sea "RemoteAudioApp". Devuelve
-// cuántas renombró (0 si aún no existe la sesión, p.ej. fuera de un canal de
-// voz). No toca sesiones de otros procesos.
+// Recorre TODOS los endpoints de render activos y, para CADA sesión de audio de
+// ESTE proceso, fija el display name y el ícono a los de ChatPapol. Antes solo
+// tocaba las que se llamaban exacto "RemoteAudioApp" (frágil: si libwebrtc
+// cambia ese string, no renombraba nada y quedaba el ícono rojo genérico). Como
+// toda sesión de nuestro PID es nuestra, las marcamos todas. Idempotente: solo
+// escribe si difiere. No toca sesiones de otros procesos. Devuelve cuántas tocó.
 int RenameOnce(const wchar_t* desired) {
   int renamed = 0;
   IMMDeviceEnumerator* enumerator = nullptr;
@@ -58,14 +69,27 @@ int RenameOnce(const wchar_t* desired) {
               DWORD pid = 0;
               ctrl2->GetProcessId(&pid);
               if (pid == self_pid) {
+                bool touched = false;
                 LPWSTR name = nullptr;
-                if (SUCCEEDED(ctrl2->GetDisplayName(&name)) && name) {
-                  if (wcscmp(name, kWebrtcSessionName) == 0) {
+                if (SUCCEEDED(ctrl2->GetDisplayName(&name))) {
+                  if (!name || wcscmp(name, desired) != 0) {
                     ctrl2->SetDisplayName(desired, nullptr);
-                    ++renamed;
+                    touched = true;
                   }
-                  CoTaskMemFree(name);
+                  if (name) CoTaskMemFree(name);
                 }
+                const std::wstring& icon = SelfIconPath();
+                if (!icon.empty()) {
+                  LPWSTR cur = nullptr;
+                  if (SUCCEEDED(ctrl2->GetIconPath(&cur))) {
+                    if (!cur || wcscmp(cur, icon.c_str()) != 0) {
+                      ctrl2->SetIconPath(icon.c_str(), nullptr);
+                      touched = true;
+                    }
+                    if (cur) CoTaskMemFree(cur);
+                  }
+                }
+                if (touched) ++renamed;
               }
               ctrl2->Release();
             }
