@@ -29,6 +29,11 @@ class _ChatViewState extends State<ChatView> {
   final pendingUploads = <Map<String, dynamic>>[];
   bool sending = false;
 
+  // ── autocompletado de @menciones ──
+  bool _mentionOpen = false; // hay overlay de menciones abierto
+  int _mentionSel = 0; // índice resaltado en la lista
+  List<User> _mentionMatches = const [];
+
   AppStore get store => widget.store;
   Channel? get channel => store.selectedChannel;
 
@@ -72,6 +77,8 @@ class _ChatViewState extends State<ChatView> {
         replyingTo = null;
         editing = null;
         pendingUploads.clear();
+        _mentionOpen = false;
+        _mentionMatches = const [];
       });
       _scrollToBottom();
     } catch (e) {
@@ -79,6 +86,64 @@ class _ChatViewState extends State<ChatView> {
     } finally {
       setState(() => sending = false);
     }
+  }
+
+  // ── @menciones: detección/cálculo/inserción ──
+
+  static final _mentionRe = RegExp(r'@([a-zA-Z0-9_.]*)$');
+
+  // recalcula matches según el token bajo el cursor; abre/cierra el overlay
+  void _updateMentions() {
+    final sel = input.selection;
+    if (!sel.isValid || !sel.isCollapsed) {
+      if (_mentionOpen) setState(() => _mentionOpen = false);
+      return;
+    }
+    final before = input.text.substring(0, sel.baseOffset);
+    final m = _mentionRe.firstMatch(before);
+    if (m == null) {
+      if (_mentionOpen) setState(() => _mentionOpen = false);
+      return;
+    }
+    final prefix = m.group(1)!.toLowerCase();
+    final matches = store.users.values
+        .where((u) => u.username.toLowerCase().startsWith(prefix))
+        .toList()
+      ..sort((a, b) {
+        final ao = store.online.contains(a.id) ? 0 : 1;
+        final bo = store.online.contains(b.id) ? 0 : 1;
+        if (ao != bo) return ao - bo;
+        return a.username.toLowerCase().compareTo(b.username.toLowerCase());
+      });
+    final top = matches.take(8).toList();
+    setState(() {
+      _mentionMatches = top;
+      _mentionOpen = top.isNotEmpty;
+      if (_mentionSel >= top.length) _mentionSel = 0;
+    });
+  }
+
+  // inserta el usuario resaltado reemplazando el token '@prefijo'
+  void _insertMention(User u) {
+    final sel = input.selection;
+    if (!sel.isValid) return;
+    final cursor = sel.baseOffset;
+    final before = input.text.substring(0, cursor);
+    final m = _mentionRe.firstMatch(before);
+    if (m == null) return;
+    final start = m.start;
+    final after = input.text.substring(cursor);
+    final inserted = '@${u.username} ';
+    final newText = input.text.substring(0, start) + inserted + after;
+    input.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: start + inserted.length),
+    );
+    setState(() {
+      _mentionOpen = false;
+      _mentionMatches = const [];
+      _mentionSel = 0;
+    });
   }
 
   void _scrollToBottom() {
@@ -340,6 +405,7 @@ class _ChatViewState extends State<ChatView> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (slashMatches.isNotEmpty) _slashPopup(slashMatches),
+          if (_mentionOpen && _mentionMatches.isNotEmpty) _mentionPopup(),
           if (replyingTo != null || editing != null) _contextBar(),
           if (pendingUploads.isNotEmpty) _uploadsBar(),
           ListenableBuilder(
@@ -373,14 +439,40 @@ class _ChatViewState extends State<ChatView> {
                 Expanded(
                   child: Focus(
                     onKeyEvent: (node, e) {
-                      if (e is KeyDownEvent &&
-                          e.logicalKey == LogicalKeyboardKey.enter &&
+                      if (e is! KeyDownEvent && e is! KeyRepeatEvent) {
+                        return KeyEventResult.ignored;
+                      }
+                      // overlay de menciones abierto: ↑/↓ navegan,
+                      // Enter/Tab insertan, Esc cierra (sin enviar).
+                      if (_mentionOpen && _mentionMatches.isNotEmpty) {
+                        final k = e.logicalKey;
+                        if (k == LogicalKeyboardKey.arrowDown) {
+                          setState(() => _mentionSel =
+                              (_mentionSel + 1) % _mentionMatches.length);
+                          return KeyEventResult.handled;
+                        }
+                        if (k == LogicalKeyboardKey.arrowUp) {
+                          setState(() => _mentionSel =
+                              (_mentionSel - 1 + _mentionMatches.length) %
+                                  _mentionMatches.length);
+                          return KeyEventResult.handled;
+                        }
+                        if (k == LogicalKeyboardKey.enter ||
+                            k == LogicalKeyboardKey.tab) {
+                          _insertMention(_mentionMatches[_mentionSel]);
+                          return KeyEventResult.handled;
+                        }
+                        if (k == LogicalKeyboardKey.escape) {
+                          setState(() => _mentionOpen = false);
+                          return KeyEventResult.handled;
+                        }
+                      }
+                      if (e.logicalKey == LogicalKeyboardKey.enter &&
                           !HardwareKeyboard.instance.isShiftPressed) {
                         _send();
                         return KeyEventResult.handled;
                       }
-                      if (e is KeyDownEvent &&
-                          e.logicalKey == LogicalKeyboardKey.escape) {
+                      if (e.logicalKey == LogicalKeyboardKey.escape) {
                         setState(() {
                           editing = null;
                           replyingTo = null;
@@ -397,6 +489,7 @@ class _ChatViewState extends State<ChatView> {
                       minLines: 1,
                       onChanged: (v) {
                         if (v.isNotEmpty) store.sendTyping(ch.id);
+                        _updateMentions();
                         setState(() {});
                       },
                       decoration: InputDecoration(
@@ -472,6 +565,59 @@ class _ChatViewState extends State<ChatView> {
                 ]),
               ),
             )).toList(),
+      ),
+    );
+  }
+
+  Widget _mentionPopup() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      constraints: const BoxConstraints(maxHeight: 264),
+      decoration: BoxDecoration(
+          color: Pal.bg0,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Pal.borderDefault)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: ListView.builder(
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          itemCount: _mentionMatches.length,
+          itemBuilder: (_, i) {
+            final u = _mentionMatches[i];
+            final sel = i == _mentionSel;
+            final online = store.online.contains(u.id);
+            return InkWell(
+              onTap: () => _insertMention(u),
+              child: Container(
+                color: sel ? Pal.bg3 : null,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: Row(children: [
+                  Avatar(u, store, size: 24, showOnline: true),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(u.username,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight:
+                                sel ? FontWeight.w700 : FontWeight.w500,
+                            color: sel ? Pal.text : Pal.muted)),
+                  ),
+                  if (online) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                            color: Pal.green, shape: BoxShape.circle)),
+                  ],
+                ]),
+              ),
+            );
+          },
+        ),
       ),
     );
   }

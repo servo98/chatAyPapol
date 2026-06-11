@@ -185,6 +185,7 @@ class _SidebarState extends State<Sidebar> {
   Widget _channelTile(Channel ch) {
     final selected = store.selectedChannelId == ch.id;
     final hasUnread = store.unread.contains(ch.id);
+    final hasMention = store.mentionedChannels.contains(ch.id);
     final voiceUsers = ch.isVoice ? store.voiceUsersIn(ch.id) : const <VoiceState>[];
     return Column(
       children: [
@@ -243,9 +244,25 @@ class _SidebarState extends State<Sidebar> {
                                   ? Pal.text
                                   : hasUnread ? Pal.text : Pal.muted)),
                     ),
-                    if (hasUnread)
+                    // ping rojo de mención tiene prioridad sobre el unread normal
+                    if (hasMention)
                       Container(
-                          width: 8, height: 8,
+                          width: 9,
+                          height: 9,
+                          decoration: BoxDecoration(
+                            color: Pal.red,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                  color: Pal.red.withValues(alpha: .6),
+                                  blurRadius: 5,
+                                  spreadRadius: 1),
+                            ],
+                          ))
+                    else if (hasUnread)
+                      Container(
+                          width: 8,
+                          height: 8,
                           decoration: const BoxDecoration(
                               color: Pal.text, shape: BoxShape.circle)),
                     if (hover && store.canI(P.manageRoles))

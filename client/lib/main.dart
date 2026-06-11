@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'api.dart';
 import 'config.dart';
 import 'installer.dart';
+import 'notifications.dart';
 import 'sfx.dart';
 import 'updater.dart';
 import 'version.dart';
@@ -307,10 +308,36 @@ Future<void> main(List<String> args) async {
   }
 
   await SfxService.instance.init();
+  await NotificationService.instance.init();
   final store = AppStore();
   final voice = VoiceManager(store);
+  // Click en un toast del SO: traer la ventana al frente y abrir el canal.
+  NotificationService.instance.onOpenChannel = (chId) async {
+    try {
+      await windowManager.show();
+      await windowManager.focus();
+    } catch (_) {}
+    store.selectChannel(chId);
+  };
+  // Foco de ventana: solo notificamos por toast cuando la app NO está enfocada.
+  if (_desktop) {
+    try {
+      store.setWindowFocused(await windowManager.isFocused());
+    } catch (_) {}
+    windowManager.addListener(_FocusListener(store));
+  }
   store.tryRestore();
   runApp(ChatPapolApp(store: store, voice: voice));
+}
+
+/// Mantiene `store.windowFocused` al día según el foco real de la ventana.
+class _FocusListener extends WindowListener {
+  final AppStore store;
+  _FocusListener(this.store);
+  @override
+  void onWindowFocus() => store.setWindowFocused(true);
+  @override
+  void onWindowBlur() => store.setWindowFocused(false);
 }
 
 /// Compone la barra de título propia encima del contenido de la app.

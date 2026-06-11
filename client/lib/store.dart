@@ -1,15 +1,20 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 import 'config.dart';
 import 'gateway.dart';
 import 'models.dart';
+import 'notifications.dart';
 import 'perms.dart';
 import 'sfx.dart';
 
 /// Username del dueño: única cuenta que ve el Sound Lab (auth username-only).
 const _soundLabOwner = 'ferservo98';
+
+/// Modo de notificación por canal (estilo Discord).
+enum ChannelNotify { all, mentions, muted }
 
 /// Estado global de la app. Singleton creado en main.dart.
 class AppStore extends ChangeNotifier {
@@ -37,7 +42,21 @@ class AppStore extends ChangeNotifier {
   final messages = <String, List<Message>>{};
   final _hasMore = <String, bool>{};
   final unread = <String>{};
+  // Canales con una MENCIÓN sin leer (a mí o @everyone). Distinto de `unread`:
+  // se pinta más fuerte. Se limpia en selectChannel().
+  final mentionedChannels = <String>{};
   final typing = <String, Map<String, int>>{}; // channelId -> userId -> expiry
+
+  // ---------- preferencias de notificaciones ----------
+  /// Maestro global: si está en false, no se muestra ningún toast del SO.
+  bool notificationsEnabled = true;
+  /// No molestar: calla el sonido in-app y el toast (no toca `unread`).
+  bool dnd = false;
+  /// ¿La ventana de la app tiene el foco? Lo mantiene main.dart (WindowListener).
+  /// Solo notificamos por toast del SO cuando la ventana NO está enfocada.
+  bool windowFocused = true;
+  /// Modo de notificación por canal. Default: ChannelNotify.mentions.
+  final _channelNotify = <String, ChannelNotify>{};
   int _lastTypingSent = 0;
   Timer? _typingCleaner;
 
@@ -51,6 +70,7 @@ class AppStore extends ChangeNotifier {
   bool get isSoundLabOwner => me?.username == _soundLabOwner;
 
   AppStore() {
+    _loadNotifPrefs();
     gateway.onEvent = _handleEvent;
     gateway.onStatus = (c) {
       if (wsConnected != c) {
@@ -218,10 +238,66 @@ class AppStore extends ChangeNotifier {
         .toList();
   }
 
+  // ---------- preferencias de notificaciones ----------
+  Future<void> _loadNotifPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    notificationsEnabled = prefs.getBool('notifs_enabled') ?? true;
+    dnd = prefs.getBool('dnd') ?? false;
+    final raw = prefs.getString('channel_notify');
+    if (raw != null) {
+      try {
+        final map = jsonDecode(raw) as Map<String, dynamic>;
+        map.forEach((k, v) {
+          final mode = ChannelNotify.values
+              .where((m) => m.name == v)
+              .firstOrNull;
+          if (mode != null) _channelNotify[k] = mode;
+        });
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  ChannelNotify channelNotifyMode(String channelId) =>
+      _channelNotify[channelId] ?? ChannelNotify.mentions;
+
+  Future<void> setChannelNotify(String channelId, ChannelNotify mode) async {
+    if (mode == ChannelNotify.mentions) {
+      _channelNotify.remove(channelId); // el default no se persiste
+    } else {
+      _channelNotify[channelId] = mode;
+    }
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('channel_notify',
+        jsonEncode(_channelNotify.map((k, v) => MapEntry(k, v.name))));
+  }
+
+  Future<void> setNotificationsEnabled(bool v) async {
+    notificationsEnabled = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('notifs_enabled', v);
+  }
+
+  Future<void> setDnd(bool v) async {
+    dnd = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('dnd', v);
+  }
+
+  void setWindowFocused(bool v) {
+    if (windowFocused == v) return;
+    windowFocused = v;
+    notifyListeners();
+  }
+
   // ---------- mensajes ----------
   Future<void> selectChannel(String id) async {
     selectedChannelId = id;
     unread.remove(id);
+    mentionedChannels.remove(id);
     notifyListeners();
     if (!messages.containsKey(id) && channels[id]?.isVoice != true) {
       await loadMessages(id);
@@ -270,14 +346,38 @@ class AppStore extends ChangeNotifier {
         final m = Message.fromJson(d);
         messages[m.channelId]?.add(m);
         (typing[m.channelId] ?? {}).remove(m.authorId);
-        if (m.channelId != selectedChannelId) unread.add(m.channelId);
-        // SFX: solo para mensajes de OTROS. Mención (a mí o @everyone) suena
-        // distinto que un mensaje normal de un canal sin foco.
+        // Mis propios mensajes nunca notifican.
         if (m.authorId != me?.id) {
-          if (_mentionsMe(m.content)) {
-            SfxService.instance.play(UiSound.mention);
-          } else if (m.channelId != selectedChannelId) {
-            SfxService.instance.play(UiSound.messageReceived);
+          final mode = channelNotifyMode(m.channelId);
+          final isMention = _mentionsMe(m.content);
+          final nonActive = m.channelId != selectedChannelId;
+          // Badge de no leído: incluso en 'muted' (se ve tenue).
+          if (nonActive) unread.add(m.channelId);
+          if (isMention && nonActive) mentionedChannels.add(m.channelId);
+          // Sonido in-app: respeta DND y el modo del canal. En 'mentions' los
+          // mensajes normales NO suenan (solo el badge de no leído).
+          if (!dnd && mode != ChannelNotify.muted) {
+            if (isMention) {
+              SfxService.instance.play(UiSound.mention);
+            } else if (mode == ChannelNotify.all && nonActive) {
+              SfxService.instance.play(UiSound.messageReceived);
+            }
+          }
+          // Toast del SO: SOLO con la ventana sin foco (decisión del usuario).
+          if (notificationsEnabled &&
+              !dnd &&
+              !windowFocused &&
+              mode != ChannelNotify.muted &&
+              (isMention || mode == ChannelNotify.all)) {
+            final author = users[m.authorId]?.username ?? 'Alguien';
+            final chName = channels[m.channelId]?.name ?? 'canal';
+            var body = m.content.trim();
+            if (body.length > 140) body = '${body.substring(0, 140)}…';
+            NotificationService.instance.show(
+              title: '$author en #$chName',
+              body: body,
+              channelId: m.channelId,
+            );
           }
         }
         break;

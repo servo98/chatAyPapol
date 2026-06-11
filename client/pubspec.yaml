@@ -28,6 +28,8 @@ dependencies:
   crypto: ^3.0.0
   # ventana sin marco del OS: barra de título y botones propios
   window_manager: ^0.4.3
+  # notificaciones nativas del SO (Windows/Linux/macOS) — toasts de menciones
+  local_notifier: ^0.1.6
   # descompresión del paquete de actualización (instalador/updater propio)
   archive: ^3.6.0
   path: ^1.9.0
