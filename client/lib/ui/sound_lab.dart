@@ -94,7 +94,7 @@ class _SoundLabPanelState extends State<SoundLabPanel> {
       const SizedBox(height: 6),
       TextField(
         controller: _rootCtrl,
-        style: const TextStyle(fontSize: 12.5, fontFamily: 'monospace'),
+        style: const TextStyle(fontSize: 12.5, fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback),
         decoration: const InputDecoration(
             hintText: 'ruta absoluta a la carpeta de .wav'),
         onChanged: _saveRoot,
@@ -138,7 +138,7 @@ class _SoundLabPanelState extends State<SoundLabPanel> {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                   fontSize: 11.5,
-                  fontFamily: 'monospace',
+                  fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback,
                   color: path == null ? Pal.faint : Pal.accent)),
         ),
         SmallIconBtn(LucideIcons.play, 'Reproducir',
@@ -194,7 +194,7 @@ class _SoundLabPanelState extends State<SoundLabPanel> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text('Escrito en:\n$writtenTo',
-                    style: const TextStyle(fontSize: 11.5, color: Pal.green, fontFamily: 'monospace')),
+                    style: const TextStyle(fontSize: 11.5, color: Pal.green, fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback)),
               ),
             if (writeErr != null)
               Padding(
@@ -209,7 +209,7 @@ class _SoundLabPanelState extends State<SoundLabPanel> {
                   color: Pal.inset, borderRadius: BorderRadius.circular(6)),
               child: SingleChildScrollView(
                 child: SelectableText(json,
-                    style: const TextStyle(fontSize: 11.5, fontFamily: 'monospace', color: Pal.text)),
+                    style: const TextStyle(fontSize: 11.5, fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback, color: Pal.text)),
               ),
             ),
           ]),
@@ -297,7 +297,7 @@ class _PackBrowserState extends State<_PackBrowser> {
         Expanded(
           child: Text(_name(_cwd),
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 15, fontFamily: 'monospace')),
+              style: const TextStyle(fontSize: 15, fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback)),
         ),
       ]),
       content: SizedBox(

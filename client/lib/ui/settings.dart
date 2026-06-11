@@ -861,7 +861,7 @@ class _InvitesPanelState extends State<_InvitesPanel> {
                 leading: const Icon(LucideIcons.mail, color: Pal.accent, size: 18),
                 title: SelectableText(i['code'],
                     style: const TextStyle(
-                        fontFamily: 'monospace', fontSize: 14,
+                        fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback, fontSize: 14,
                         fontWeight: FontWeight.w700)),
                 subtitle: Text(
                     'Usos: ${i['uses']}${i['max_uses'] > 0 ? '/${i['max_uses']}' : ' (∞)'}',
@@ -1157,7 +1157,7 @@ class _WebhooksPanelState extends State<_WebhooksPanel> {
               subtitle: Text(url,
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      fontSize: 11, color: Pal.faint, fontFamily: 'monospace')),
+                      fontSize: 11, color: Pal.faint, fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback)),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 SmallIconBtn(LucideIcons.copy, 'Copiar URL', () {
                   Clipboard.setData(ClipboardData(text: url));
@@ -1230,7 +1230,7 @@ class _BotsPanelState extends State<_BotsPanel> {
                 subtitle: Text('token: ${b['token']}',
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        fontSize: 11, color: Pal.faint, fontFamily: 'monospace')),
+                        fontSize: 11, color: Pal.faint, fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback)),
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                   SmallIconBtn(LucideIcons.copy, 'Copiar token', () {
                     Clipboard.setData(ClipboardData(text: b['token']));
