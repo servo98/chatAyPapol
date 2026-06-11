@@ -102,8 +102,12 @@ class _WinBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tip,
+    // Sin Tooltip visual: la cajita de Material bajo los botones de ventana
+    // (en el borde de la pantalla) se ve fuera de lugar. Mantenemos solo la
+    // etiqueta de accesibilidad (lectores de pantalla) vía Semantics.
+    return Semantics(
+      label: tip,
+      button: true,
       child: InkWell(
         onTap: onTap,
         hoverColor: hoverColor,
