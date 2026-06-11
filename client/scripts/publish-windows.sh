@@ -65,12 +65,17 @@ rm -f "$APP7Z"
 echo "▶ Instalador: $(du -h "$SETUP" | cut -f1)"
 sign "$(wslpath -w "$SETUP")"
 
+# Copia con nombre FIJO (sin versión): permite que la landing use un link
+# permanente .../releases/latest/download/ChatPapolSetup.exe (HTML puro, sin JS).
+SETUP_LATEST="$CLIENT_DIR/packaging/out/ChatPapolSetup.exe"
+cp "$SETUP" "$SETUP_LATEST"
+
 # 6) Subir al release (espera a que el CI lo cree).
 echo "▶ Esperando release v$VERSION…"
 for i in $(seq 1 90); do
   gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1 && break || sleep 5
 done
-echo "▶ Subiendo Setup + zip"
-gh release upload "v$VERSION" "$SETUP" "$ZIP" --repo "$REPO" --clobber
+echo "▶ Subiendo Setup (versionado + fijo) + zip"
+gh release upload "v$VERSION" "$SETUP" "$SETUP_LATEST" "$ZIP" --repo "$REPO" --clobber
 git checkout lib/version.dart 2>/dev/null || true
 echo "✓ Listo: Windows v$VERSION (Setup firmado + zip) publicado"
