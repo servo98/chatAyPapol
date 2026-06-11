@@ -1,6 +1,7 @@
 import type { ServerWebSocket } from "bun";
 import { db, publicUser, EVERYONE_ID } from "./db";
 import { P, can } from "./perms";
+import { liveVoiceParticipants } from "./livekit";
 
 export type WSData = { userId: string };
 type Sock = ServerWebSocket<WSData>;
@@ -60,6 +61,50 @@ function leaveVoice(userId: string) {
   if (!vs) return;
   voiceStates.delete(userId);
   broadcast("VOICE_STATE", { user_id: userId, channel_id: null });
+}
+
+// Sincroniza voiceStates (en memoria) con quién está REALMENTE en el SFU. Cubre el
+// caso en que el backend se reinicia y pierde voiceStates pero LiveKit mantiene a la
+// gente conectada: sin esto, los oyes pero NO salen en la UI (lo que pasó). También
+// sana cualquier deriva (un VOICE_JOIN/LEAVE perdido, un cliente que murió sin
+// despedirse). Si el SFU no responde, NO toca nada: jamás borra por un fallo de red.
+let reconcileTimer: ReturnType<typeof setInterval> | null = null;
+export async function reconcileVoice() {
+  let live: Map<string, string>;
+  try {
+    live = await liveVoiceParticipants();
+  } catch {
+    return; // SFU inalcanzable → conservamos el estado actual
+  }
+  // Altas/cambios de canal según el SFU (mute/deaf no los conoce LiveKit: en altas
+  // nuevas quedan en false hasta que el cliente reafirme su VOICE_STATE).
+  for (const [uid, room] of live) {
+    const cur = voiceStates.get(uid);
+    if (!cur) {
+      const vs: VoiceState = { channel_id: room, mute: false, deaf: false, streaming: false };
+      voiceStates.set(uid, vs);
+      broadcast("VOICE_STATE", { user_id: uid, ...vs });
+    } else if (cur.channel_id !== room) {
+      cur.channel_id = room;
+      broadcast("VOICE_STATE", { user_id: uid, ...cur });
+    }
+  }
+  // Bajas: en voiceStates pero ya no en el SFU.
+  for (const uid of [...voiceStates.keys()]) {
+    if (!live.has(uid)) {
+      voiceStates.delete(uid);
+      broadcast("VOICE_STATE", { user_id: uid, channel_id: null });
+    }
+  }
+}
+
+// Arranca la reconciliación: una pasada al inicio (sana el reinicio) y luego
+// periódica como red de seguridad. El camino normal sigue siendo instantáneo vía
+// los VOICE_JOIN/LEAVE del cliente; esto solo corrige la deriva.
+export function startVoiceReconciler() {
+  if (reconcileTimer) return;
+  setTimeout(reconcileVoice, 3000);
+  reconcileTimer = setInterval(reconcileVoice, 20_000);
 }
 
 export const websocket = {
