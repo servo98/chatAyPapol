@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 import 'package:livekit_client/livekit_client.dart'
     show VideoTrack, VideoTrackRenderer, VideoViewFit;
@@ -49,8 +50,8 @@ class VoicePanel extends StatelessWidget {
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(children: [
-          const Icon(Icons.volume_up_rounded, color: Pal.faint, size: 20),
-          const SizedBox(width: 6),
+          const Icon(LucideIcons.volume2, color: Pal.faint, size: 20),
+          const SizedBox(width: 8),
           Text(channel.name,
               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
         ]),
@@ -62,7 +63,7 @@ class VoicePanel extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             child: VideoTrackRenderer(videos.first,
                 fit: VideoViewFit.contain),
           ),
@@ -106,7 +107,7 @@ class VoicePanel extends StatelessWidget {
       margin: small ? const EdgeInsets.only(right: 8) : null,
       decoration: BoxDecoration(
         color: Pal.bg2,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
             color: isSpeaking ? Pal.green : Colors.transparent, width: 2),
       ),
@@ -120,25 +121,25 @@ class VoicePanel extends StatelessWidget {
           child: Row(children: [
             Text(user?.username ?? '…',
                 style: TextStyle(
-                    fontSize: small ? 11 : 13, fontWeight: FontWeight.w600)),
+                    fontSize: small ? 11 : 13, fontWeight: FontWeight.w700)),
             if (v.mute)
               const Padding(
                 padding: EdgeInsets.only(left: 4),
-                child: Icon(Icons.mic_off, size: 12, color: Pal.red),
+                child: Icon(LucideIcons.micOff, size: 14, color: Pal.red),
               ),
             if (v.streaming)
               const Padding(
                 padding: EdgeInsets.only(left: 4),
-                child: Icon(Icons.screen_share, size: 12, color: Pal.green),
+                child: Icon(LucideIcons.screenShare, size: 14, color: Pal.green),
               ),
             if (voice.userVolume(v.userId) != 1.0)
               Padding(
                 padding: const EdgeInsets.only(left: 4),
                 child: Icon(
                     voice.userVolume(v.userId) == 0
-                        ? Icons.volume_off
-                        : Icons.volume_down,
-                    size: 12,
+                        ? LucideIcons.volumeX
+                        : LucideIcons.volume1,
+                    size: 14,
                     color: Pal.muted),
               ),
           ]),
@@ -166,7 +167,7 @@ class VoicePanel extends StatelessWidget {
           builder: (ctx, setSt) {
             final v = voice.userVolume(userId);
             return Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(v == 0 ? Icons.volume_off : Icons.volume_up,
+              Icon(v == 0 ? LucideIcons.volumeX : LucideIcons.volume2,
                   size: 18, color: Pal.muted),
               SizedBox(
                 width: 260,
@@ -205,44 +206,44 @@ class VoicePanel extends StatelessWidget {
 
   Widget _controls(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: joinedHere
             ? [
                 _roundBtn(
-                  voice.muted ? Icons.mic_off : Icons.mic,
+                  voice.muted ? LucideIcons.micOff : LucideIcons.mic,
                   voice.muted ? 'Activar micro' : 'Silenciar',
                   voice.toggleMute,
                   active: !voice.muted,
                 ),
                 _roundBtn(
-                  voice.deafened ? Icons.headset_off : Icons.headset,
+                  voice.deafened ? LucideIcons.volumeX : LucideIcons.headphones,
                   voice.deafened ? 'Activar sonido' : 'Ensordecer',
                   voice.toggleDeafen,
                   active: !voice.deafened,
                 ),
                 if (store.canI(P.stream, channel.id))
                   _roundBtn(
-                    voice.sharing ? Icons.stop_screen_share : Icons.screen_share,
+                    voice.sharing ? LucideIcons.screenShareOff : LucideIcons.screenShare,
                     voice.sharing ? 'Dejar de compartir' : 'Compartir pantalla',
                     () => voice.sharing ? voice.stopShare() : _pickShareSource(context),
                     active: voice.sharing,
                     activeColor: Pal.green,
                   ),
                 if (store.canI(P.useSoundboard, channel.id))
-                  _roundBtn(Icons.music_note, 'Soundboard',
+                  _roundBtn(LucideIcons.music, 'Soundboard',
                       () => _soundboard(context)),
-                _roundBtn(Icons.call_end, 'Desconectar', voice.leave,
+                _roundBtn(LucideIcons.phoneOff, 'Desconectar', voice.leave,
                     activeColor: Pal.red, active: true),
               ]
             : [
                 ElevatedButton.icon(
                   onPressed: voice.connecting ? null : () => voice.join(channel.id),
-                  icon: const Icon(Icons.headset, size: 18),
-                  label: Text(voice.connecting ? 'Conectando…' : 'Unirse a la voz'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Pal.green,
-                      foregroundColor: Colors.black),
+                  icon: const Icon(LucideIcons.headphones, size: 18),
+                  label: Text(voice.connecting ? 'conectando…' : '❯ unirse a la voz'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Pal.accentDim,
+                      foregroundColor: Pal.greenInk),
                 ),
               ],
       ),
@@ -252,7 +253,7 @@ class VoicePanel extends StatelessWidget {
   Widget _roundBtn(IconData icon, String tip, VoidCallback onTap,
       {bool active = false, Color activeColor = Pal.accent}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Tooltip(
         message: tip,
         child: InkWell(
@@ -401,13 +402,13 @@ class VoicePanel extends StatelessWidget {
       void Function(rtc.DesktopCapturerSource) onTap) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Text(title,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(title.toUpperCase(),
             style: const TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w500,
                 color: Pal.muted,
-                letterSpacing: 0.5)),
+                letterSpacing: 1.44)),
       ),
       GridView.count(
         crossAxisCount: 2,
@@ -425,7 +426,8 @@ class VoicePanel extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                    color: sel ? Pal.accent : Pal.bg3, width: sel ? 2 : 1),
+                    color: sel ? Pal.accent : Pal.borderDefault,
+                    width: sel ? 2 : 1),
                 color: Pal.bg3,
               ),
               padding: const EdgeInsets.all(4),
@@ -441,8 +443,8 @@ class VoicePanel extends StatelessWidget {
                         : Center(
                             child: Icon(
                                 s.type == rtc.SourceType.Screen
-                                    ? Icons.monitor
-                                    : Icons.window,
+                                    ? LucideIcons.monitor
+                                    : LucideIcons.appWindow,
                                 color: Pal.muted,
                                 size: 36)),
                   ),
@@ -451,11 +453,11 @@ class VoicePanel extends StatelessWidget {
                 Row(mainAxisSize: MainAxisSize.min, children: [
                   Icon(
                       s.type == rtc.SourceType.Screen
-                          ? Icons.monitor
-                          : Icons.window,
-                      size: 13,
+                          ? LucideIcons.monitor
+                          : LucideIcons.appWindow,
+                      size: 14,
                       color: sel ? Pal.accent : Pal.muted),
-                  const SizedBox(width: 5),
+                  const SizedBox(width: 8),
                   Flexible(
                     child: Text(s.name,
                         maxLines: 1,
@@ -485,28 +487,28 @@ class VoicePanel extends StatelessWidget {
                     textAlign: TextAlign.center, style: TextStyle(color: Pal.muted)))
             : GridView.count(
                 crossAxisCount: 5,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
                 childAspectRatio: 1.6,
                 children: store.sounds.map((s) => InkWell(
                       onTap: () => voice.triggerSound(s),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(8),
                       child: Container(
                         decoration: BoxDecoration(
                             color: Pal.bg3,
-                            borderRadius: BorderRadius.circular(10)),
+                            borderRadius: BorderRadius.circular(8)),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(s.emoji ?? '♪',
                                 style: const TextStyle(
-                                    fontSize: 22, color: Pal.accent)),
+                                    fontSize: 24, color: Pal.accent)),
                             const SizedBox(height: 4),
                             Text(s.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                    fontSize: 11.5, color: Pal.muted)),
+                                    fontSize: 11, color: Pal.muted)),
                           ],
                         ),
                       ),

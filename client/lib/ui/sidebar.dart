@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models.dart';
 import '../perms.dart';
 import '../store.dart';
@@ -71,7 +72,7 @@ class _SidebarState extends State<Sidebar> {
                   title: const Text('Invitación creada', style: TextStyle(fontSize: 17)),
                   content: SelectableText(r['code'],
                       style: const TextStyle(
-                          fontSize: 26, fontWeight: FontWeight.w700, color: Pal.accent)),
+                          fontSize: 24, fontWeight: FontWeight.w700, color: Pal.accent)),
                   actions: [
                     TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Listo'))
                   ],
@@ -109,8 +110,8 @@ class _SidebarState extends State<Sidebar> {
       child: Container(
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: Colors.black.withValues(alpha: .3))),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: Pal.borderSubtle)),
         ),
         child: Row(
           children: [
@@ -130,11 +131,11 @@ class _SidebarState extends State<Sidebar> {
                 ),
               ),
             ),
-            Icon(Icons.expand_more, color: Pal.muted, size: 18),
+            Icon(LucideIcons.chevronDown, color: Pal.muted, size: 18),
             if (!store.wsConnected)
               const Padding(
                 padding: EdgeInsets.only(left: 6),
-                child: Icon(Icons.wifi_off, color: Pal.yellow, size: 15),
+                child: Icon(LucideIcons.wifiOff, color: Pal.yellow, size: 15),
               ),
           ],
         ),
@@ -151,7 +152,7 @@ class _SidebarState extends State<Sidebar> {
           padding: const EdgeInsets.fromLTRB(8, 14, 8, 4),
           child: Row(
             children: [
-              Icon(isCollapsed ? Icons.chevron_right : Icons.expand_more,
+              Icon(isCollapsed ? LucideIcons.chevronRight : LucideIcons.chevronDown,
                   size: 13, color: Pal.faint),
               const SizedBox(width: 2),
               Expanded(
@@ -161,13 +162,13 @@ class _SidebarState extends State<Sidebar> {
                         color: Pal.faint, letterSpacing: 1.2)),
               ),
               if (hover && store.canI(P.manageChannels)) ...[
-                SmallIconBtn(Icons.add, 'Crear canal aquí', () async {
+                SmallIconBtn(LucideIcons.plus, 'Crear canal aquí', () async {
                   final name = await promptText(ctx, 'Canal en ${cat.name}', hint: 'nombre');
                   if (name == null || name.isEmpty) return;
                   store.api.post('/api/channels',
                       {'name': name, 'type': 'text', 'category_id': cat.id});
                 }, size: 14),
-                SmallIconBtn(Icons.delete_outline, 'Borrar categoría', () async {
+                SmallIconBtn(LucideIcons.trash2, 'Borrar categoría', () async {
                   if (await confirm(ctx, '¿Borrar "${cat.name}"?',
                       'Los canales quedan sin categoría.')) {
                     store.api.delete('/api/categories/${cat.id}');
@@ -215,7 +216,7 @@ class _SidebarState extends State<Sidebar> {
                 child: Row(
                   children: [
                     ch.isVoice
-                        ? Icon(Icons.volume_up_rounded,
+                        ? Icon(LucideIcons.volume2,
                             size: 17,
                             color: selected
                                 ? Pal.accent
@@ -248,10 +249,10 @@ class _SidebarState extends State<Sidebar> {
                           decoration: const BoxDecoration(
                               color: Pal.text, shape: BoxShape.circle)),
                     if (hover && store.canI(P.manageRoles))
-                      SmallIconBtn(Icons.settings, 'Permisos del canal',
+                      SmallIconBtn(LucideIcons.settings, 'Permisos del canal',
                           () => openChannelPerms(ctx, store, ch), size: 14),
                     if (hover && store.canI(P.manageChannels))
-                      SmallIconBtn(Icons.delete_outline, 'Borrar canal', () async {
+                      SmallIconBtn(LucideIcons.trash2, 'Borrar canal', () async {
                         if (await confirm(ctx, '¿Borrar #${ch.name}?',
                             'Se borran todos sus mensajes. No hay vuelta atrás.')) {
                           store.api.delete('/api/channels/${ch.id}');
@@ -281,10 +282,10 @@ class _SidebarState extends State<Sidebar> {
                               : Pal.muted)),
                 ),
                 if (vs.streaming)
-                  const Icon(Icons.screen_share, size: 13, color: Pal.green),
-                if (vs.mute) const Icon(Icons.mic_off, size: 13, color: Pal.faint),
+                  const Icon(LucideIcons.screenShare, size: 13, color: Pal.green),
+                if (vs.mute) const Icon(LucideIcons.micOff, size: 13, color: Pal.faint),
                 if (vs.deaf)
-                  const Icon(Icons.headset_off, size: 13, color: Pal.faint),
+                  const Icon(LucideIcons.volumeX, size: 13, color: Pal.faint),
               ],
             ),
           ),
@@ -298,11 +299,11 @@ class _SidebarState extends State<Sidebar> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Pal.bg0.withValues(alpha: .6),
-        border: Border(top: BorderSide(color: Colors.black.withValues(alpha: .3))),
+        border: const Border(top: BorderSide(color: Pal.borderSubtle)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.graphic_eq, color: Pal.green, size: 18),
+          const Icon(LucideIcons.activity, color: Pal.green, size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -310,14 +311,14 @@ class _SidebarState extends State<Sidebar> {
               children: [
                 const Text('Voz conectada',
                     style: TextStyle(
-                        color: Pal.green, fontSize: 12.5, fontWeight: FontWeight.w700)),
+                        color: Pal.green, fontSize: 12, fontWeight: FontWeight.w700)),
                 Text(ch?.name ?? '',
-                    style: const TextStyle(color: Pal.muted, fontSize: 11.5),
+                    style: const TextStyle(color: Pal.muted, fontSize: 11),
                     overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
-          SmallIconBtn(Icons.call_end, 'Desconectar', () => voice.leave(),
+          SmallIconBtn(LucideIcons.phoneOff, 'Desconectar', () => voice.leave(),
               color: Pal.red),
         ],
       ),
@@ -338,7 +339,7 @@ class _SidebarState extends State<Sidebar> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(me?.username ?? '',
-                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                     overflow: TextOverflow.ellipsis),
                 Text(store.wsConnected ? 'En línea' : 'Reconectando…',
                     style: TextStyle(
@@ -351,18 +352,18 @@ class _SidebarState extends State<Sidebar> {
             listenable: voice,
             builder: (_, __) => Row(children: [
               SmallIconBtn(
-                voice.muted ? Icons.mic_off : Icons.mic,
+                voice.muted ? LucideIcons.micOff : LucideIcons.mic,
                 voice.muted ? 'Activar micro' : 'Silenciar',
                 () => voice.toggleMute(),
                 color: voice.muted ? Pal.red : Pal.muted,
               ),
               SmallIconBtn(
-                voice.deafened ? Icons.headset_off : Icons.headset,
+                voice.deafened ? LucideIcons.volumeX : LucideIcons.headphones,
                 voice.deafened ? 'Activar sonido' : 'Ensordecer',
                 () => voice.toggleDeafen(),
                 color: voice.deafened ? Pal.red : Pal.muted,
               ),
-              SmallIconBtn(Icons.settings, 'Ajustes',
+              SmallIconBtn(LucideIcons.settings, 'Ajustes',
                   () => openSettings(context, store, voice)),
             ]),
           ),

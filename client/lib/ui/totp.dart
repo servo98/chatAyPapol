@@ -25,12 +25,12 @@ Future<void> showTotpEnroll(BuildContext context, AppStore store,
                 'Escanea el QR con tu app de autenticación (Google Authenticator, '
                 'Authy, 1Password…). Te pedirá el código solo para cambios '
                 'sensibles y para recuperar tu contraseña.',
-                style: TextStyle(fontSize: 12.5, color: Pal.muted)),
+                style: TextStyle(fontSize: 13, color: Pal.muted)),
             const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                  color: Colors.white, borderRadius: BorderRadius.circular(10)),
+                  color: Colors.white, borderRadius: BorderRadius.circular(8)),
               child: QrImageView(data: uri, size: 168),
             ),
             const SizedBox(height: 8),
@@ -56,7 +56,7 @@ Future<void> showTotpEnroll(BuildContext context, AppStore store,
             if (err != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text(err!, style: const TextStyle(color: Pal.red, fontSize: 12.5)),
+                child: Text(err!, style: const TextStyle(color: Pal.red, fontSize: 13)),
               ),
           ]),
         ),
@@ -96,7 +96,7 @@ Future<String?> askTotpCode(BuildContext context, {String? reason}) {
         width: 280,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Text(reason ?? 'Confirma con el código de tu app de autenticación.',
-              style: const TextStyle(fontSize: 12.5, color: Pal.muted)),
+              style: const TextStyle(fontSize: 13, color: Pal.muted)),
           const SizedBox(height: 12),
           TextField(
             controller: code,

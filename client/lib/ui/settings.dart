@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import '../models.dart';
 import '../perms.dart';
@@ -41,16 +42,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final isAdmin = store.canI(P.administrator);
     final tabs = <(String, String, IconData)>[
-      ('cuenta', 'Mi cuenta', Icons.person),
-      ('voz', 'Voz y micrófono', Icons.mic),
-      if (store.canI(P.manageRoles)) ('roles', 'Roles', Icons.theater_comedy),
-      if (store.canI(P.createInvites)) ('invites', 'Invitaciones', Icons.mail),
-      if (store.canI(P.manageExpressions)) ('stickers', 'Stickers', Icons.emoji_emotions),
-      if (store.canI(P.manageExpressions)) ('sounds', 'Soundboard', Icons.music_note),
-      if (isAdmin) ('automod', 'AutoMod', Icons.shield),
-      if (store.canI(P.manageWebhooks)) ('webhooks', 'Webhooks', Icons.webhook),
-      if (isAdmin) ('bots', 'Bots', Icons.smart_toy),
-      ('updates', 'Actualizaciones', Icons.system_update_alt),
+      ('cuenta', 'Mi cuenta', LucideIcons.user),
+      ('voz', 'Voz y micrófono', LucideIcons.mic),
+      if (store.canI(P.manageRoles)) ('roles', 'Roles', LucideIcons.venetianMask),
+      if (store.canI(P.createInvites)) ('invites', 'Invitaciones', LucideIcons.mail),
+      if (store.canI(P.manageExpressions)) ('stickers', 'Stickers', LucideIcons.smile),
+      if (store.canI(P.manageExpressions)) ('sounds', 'Soundboard', LucideIcons.music),
+      if (isAdmin) ('automod', 'AutoMod', LucideIcons.shield),
+      if (store.canI(P.manageWebhooks)) ('webhooks', 'Webhooks', LucideIcons.webhook),
+      if (isAdmin) ('bots', 'Bots', LucideIcons.bot),
+      ('updates', 'Actualizaciones', LucideIcons.download),
     ];
     return SizedBox(
       width: 860,
@@ -69,12 +70,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: tabs.map((t) {
                       final selected = tab == t.$1;
                       return InkWell(
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(5),
                         onTap: () => setState(() => tab = t.$1),
                         child: Container(
                           decoration: BoxDecoration(
                               color: selected ? Pal.bg3 : null,
-                              borderRadius: BorderRadius.circular(6)),
+                              borderRadius: BorderRadius.circular(5)),
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 8),
                           margin: const EdgeInsets.only(bottom: 2),
@@ -106,7 +107,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Navigator.pop(context);
                         await store.logout();
                       },
-                      icon: const Icon(Icons.logout, size: 15, color: Pal.red),
+                      icon: const Icon(LucideIcons.logOut, size: 15, color: Pal.red),
                       label: const Text('Cerrar sesión',
                           style: TextStyle(color: Pal.red, fontSize: 12.5)),
                     ),
@@ -125,7 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     alignment: Alignment.centerRight,
                     child: IconButton(
                       onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close, color: Pal.muted),
+                      icon: const Icon(LucideIcons.x, color: Pal.muted),
                     ),
                   ),
                 ),
@@ -345,7 +346,8 @@ class _VoicePanelState extends State<_VoicePanel> {
   int _gen = 0;
 
   static const _label = TextStyle(
-      fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700);
+      fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700,
+      letterSpacing: 1.3);
 
   @override
   void initState() {
@@ -543,7 +545,7 @@ class _VoicePanelState extends State<_VoicePanel> {
           Row(children: [
             ElevatedButton.icon(
               onPressed: testing ? _stopTest : _startTest,
-              icon: Icon(testing ? Icons.stop : Icons.graphic_eq, size: 16),
+              icon: Icon(testing ? LucideIcons.square : LucideIcons.activity, size: 16),
               label: Text(testing ? 'Detener' : 'Probar micrófono'),
             ),
             const SizedBox(width: 14),
@@ -614,7 +616,7 @@ class _VoicePanelState extends State<_VoicePanel> {
           const SizedBox(height: 12),
           const Text('VOLUMEN DE SALIDA', style: _label),
           Row(children: [
-            const Icon(Icons.volume_down, size: 18, color: Pal.muted),
+            const Icon(LucideIcons.volume1, size: 18, color: Pal.muted),
             Expanded(
               child: Slider(
                 value: voice.outputVolume,
@@ -622,7 +624,7 @@ class _VoicePanelState extends State<_VoicePanel> {
                 onChanged: (v) => voice.setOutputVolume(v),
               ),
             ),
-            const Icon(Icons.volume_up, size: 18, color: Pal.muted),
+            const Icon(LucideIcons.volume2, size: 18, color: Pal.muted),
             SizedBox(
               width: 42,
               child: Text('${(voice.outputVolume * 100).round()}%',
@@ -677,7 +679,7 @@ class _RolesPanelState extends State<_RolesPanel> {
                     {'name': name, 'permissions': 0});
                 setState(() => selectedId = r['id']);
               },
-              icon: const Icon(Icons.add, size: 16),
+              icon: const Icon(LucideIcons.plus, size: 16),
               label: const Text('Crear rol'),
             ),
           ]),
@@ -693,9 +695,9 @@ class _RolesPanelState extends State<_RolesPanel> {
                               horizontal: 10, vertical: 8),
                           decoration: BoxDecoration(
                               color: selectedId == r.id ? Pal.bg3 : null,
-                              borderRadius: BorderRadius.circular(6)),
+                              borderRadius: BorderRadius.circular(5)),
                           child: Row(children: [
-                            Icon(Icons.circle, size: 10,
+                            Icon(LucideIcons.circle, size: 10,
                                 color: r.color != null
                                     ? Color(int.parse(
                                         r.color!.replaceFirst('#', '0xff')))
@@ -733,22 +735,22 @@ class _RolesPanelState extends State<_RolesPanel> {
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
         ),
         if (!role.isEveryone) ...[
-          SmallIconBtn(Icons.edit, 'Renombrar', () async {
+          SmallIconBtn(LucideIcons.pencil, 'Renombrar', () async {
             final name = await promptText(context, 'Renombrar rol',
                 initial: role.name, action: 'Guardar');
             if (name != null && name.isNotEmpty) {
               store.api.patch('/api/roles/${role.id}', {'name': name});
             }
           }),
-          SmallIconBtn(Icons.arrow_upward, 'Subir jerarquía', () {
+          SmallIconBtn(LucideIcons.arrowUp, 'Subir jerarquía', () {
             store.api.patch('/api/roles/${role.id}',
                 {'position': role.position + 1});
           }),
-          SmallIconBtn(Icons.arrow_downward, 'Bajar jerarquía', () {
+          SmallIconBtn(LucideIcons.arrowDown, 'Bajar jerarquía', () {
             store.api.patch('/api/roles/${role.id}',
                 {'position': role.position - 1});
           }),
-          SmallIconBtn(Icons.delete_outline, 'Borrar rol', () async {
+          SmallIconBtn(LucideIcons.trash2, 'Borrar rol', () async {
             if (await confirm(context, '¿Borrar "${role.name}"?', '')) {
               setState(() => selectedId = null);
               store.api.delete('/api/roles/${role.id}');
@@ -758,14 +760,15 @@ class _RolesPanelState extends State<_RolesPanel> {
       ]),
       const SizedBox(height: 10),
       const Text('COLOR',
-          style: TextStyle(fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700)),
+          style: TextStyle(fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700,
+              letterSpacing: 1.3)),
       const SizedBox(height: 6),
       Wrap(
         spacing: 6,
         children: swatches.map((c) => InkWell(
               onTap: () => store.api.patch('/api/roles/${role.id}', {'color': c}),
               child: Container(
-                width: 26, height: 26,
+                width: 24, height: 24,
                 decoration: BoxDecoration(
                   color: c != null
                       ? Color(int.parse(c.replaceFirst('#', '0xff')))
@@ -776,14 +779,15 @@ class _RolesPanelState extends State<_RolesPanel> {
                       : null,
                 ),
                 child: c == null
-                    ? const Icon(Icons.block, size: 14, color: Pal.faint)
+                    ? const Icon(LucideIcons.ban, size: 14, color: Pal.faint)
                     : null,
               ),
             )).toList(),
       ),
       const SizedBox(height: 16),
       const Text('PERMISOS',
-          style: TextStyle(fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700)),
+          style: TextStyle(fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700,
+              letterSpacing: 1.3)),
       ...permLabels.entries.map((e) {
         final has = (role.permissions & e.key) != 0;
         return SwitchListTile(
@@ -840,7 +844,7 @@ class _InvitesPanelState extends State<_InvitesPanel> {
             await widget.store.api.post('/api/invites', {'max_uses': 0});
             _load();
           },
-          icon: const Icon(Icons.add, size: 16),
+          icon: const Icon(LucideIcons.plus, size: 16),
           label: const Text('Nueva'),
         ),
       ]),
@@ -848,7 +852,7 @@ class _InvitesPanelState extends State<_InvitesPanel> {
         child: ListView(
           children: invites.map((i) => ListTile(
                 dense: true,
-                leading: const Icon(Icons.mail_outline, color: Pal.accent, size: 18),
+                leading: const Icon(LucideIcons.mail, color: Pal.accent, size: 18),
                 title: SelectableText(i['code'],
                     style: const TextStyle(
                         fontFamily: 'monospace', fontSize: 14,
@@ -857,10 +861,10 @@ class _InvitesPanelState extends State<_InvitesPanel> {
                     'Usos: ${i['uses']}${i['max_uses'] > 0 ? '/${i['max_uses']}' : ' (∞)'}',
                     style: const TextStyle(fontSize: 11.5, color: Pal.faint)),
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  SmallIconBtn(Icons.copy, 'Copiar', () {
+                  SmallIconBtn(LucideIcons.copy, 'Copiar', () {
                     Clipboard.setData(ClipboardData(text: i['code']));
                   }),
-                  SmallIconBtn(Icons.delete_outline, 'Revocar', () async {
+                  SmallIconBtn(LucideIcons.trash2, 'Revocar', () async {
                     await widget.store.api.delete('/api/invites/${i['code']}');
                     _load();
                   }, color: Pal.red),
@@ -889,7 +893,7 @@ class _ExpressionsPanel extends StatelessWidget {
             const Spacer(),
             ElevatedButton.icon(
               onPressed: () => _upload(context),
-              icon: const Icon(Icons.upload, size: 16),
+              icon: const Icon(LucideIcons.upload, size: 16),
               label: Text(stickers ? 'Subir sticker' : 'Subir sonido'),
             ),
           ]),
@@ -918,7 +922,7 @@ class _ExpressionsPanel extends StatelessWidget {
                           ),
                           Positioned(
                             right: 2, top: 2,
-                            child: SmallIconBtn(Icons.close, 'Borrar ${s.name}',
+                            child: SmallIconBtn(LucideIcons.x, 'Borrar ${s.name}',
                                 () => store.api.delete('/api/stickers/${s.id}'),
                                 color: Pal.red, size: 14),
                           ),
@@ -931,7 +935,7 @@ class _ExpressionsPanel extends StatelessWidget {
                               style: const TextStyle(
                                   fontSize: 18, color: Pal.accent)),
                           title: Text(s.name, style: const TextStyle(fontSize: 13.5)),
-                          trailing: SmallIconBtn(Icons.delete_outline, 'Borrar',
+                          trailing: SmallIconBtn(LucideIcons.trash2, 'Borrar',
                               () => store.api.delete('/api/sounds/${s.id}'),
                               color: Pal.red),
                         )).toList(),
@@ -1040,7 +1044,7 @@ class _AutomodPanelState extends State<_AutomodPanel> {
         const Spacer(),
         ElevatedButton.icon(
             onPressed: _create,
-            icon: const Icon(Icons.add, size: 16),
+            icon: const Icon(LucideIcons.plus, size: 16),
             label: const Text('Nueva regla')),
       ]),
       const Text('Los administradores están exentos de los filtros.',
@@ -1052,10 +1056,10 @@ class _AutomodPanelState extends State<_AutomodPanel> {
                 dense: true,
                 leading: Icon(
                     r['type'] == 'links'
-                        ? Icons.link_off
+                        ? LucideIcons.unlink
                         : r['type'] == 'regex'
-                            ? Icons.code
-                            : Icons.block,
+                            ? LucideIcons.code
+                            : LucideIcons.ban,
                     size: 18,
                     color: r['enabled'] == 1 ? Pal.accent : Pal.faint),
                 title: Text(r['name'], style: const TextStyle(fontSize: 13.5)),
@@ -1072,7 +1076,7 @@ class _AutomodPanelState extends State<_AutomodPanel> {
                       _load();
                     },
                   ),
-                  SmallIconBtn(Icons.delete_outline, 'Borrar', () async {
+                  SmallIconBtn(LucideIcons.trash2, 'Borrar', () async {
                     await widget.store.api.delete('/api/automod/${r['id']}');
                     _load();
                   }, color: Pal.red),
@@ -1126,7 +1130,7 @@ class _WebhooksPanelState extends State<_WebhooksPanel> {
                       {'name': name});
                   _load();
                 },
-          icon: const Icon(Icons.add, size: 16),
+          icon: const Icon(LucideIcons.plus, size: 16),
           label: const Text('Crear'),
         ),
       ]),
@@ -1140,7 +1144,7 @@ class _WebhooksPanelState extends State<_WebhooksPanel> {
                 '${store.api.base}/api/webhooks/${h['id']}/${h['token']}';
             return ListTile(
               dense: true,
-              leading: const Icon(Icons.webhook, color: Pal.accent, size: 18),
+              leading: const Icon(LucideIcons.webhook, color: Pal.accent, size: 18),
               title: Text(
                   '${h['name']}  →  #${store.channels[h['channel_id']]?.name ?? '?'}',
                   style: const TextStyle(fontSize: 13.5)),
@@ -1149,10 +1153,10 @@ class _WebhooksPanelState extends State<_WebhooksPanel> {
                   style: const TextStyle(
                       fontSize: 11, color: Pal.faint, fontFamily: 'monospace')),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                SmallIconBtn(Icons.copy, 'Copiar URL', () {
+                SmallIconBtn(LucideIcons.copy, 'Copiar URL', () {
                   Clipboard.setData(ClipboardData(text: url));
                 }),
-                SmallIconBtn(Icons.delete_outline, 'Borrar', () async {
+                SmallIconBtn(LucideIcons.trash2, 'Borrar', () async {
                   await store.api.delete('/api/webhooks/${h['id']}');
                   _load();
                 }, color: Pal.red),
@@ -1203,7 +1207,7 @@ class _BotsPanelState extends State<_BotsPanel> {
               if (context.mounted) showError(context, e);
             }
           },
-          icon: const Icon(Icons.add, size: 16),
+          icon: const Icon(LucideIcons.plus, size: 16),
           label: const Text('Crear bot'),
         ),
       ]),
@@ -1215,17 +1219,17 @@ class _BotsPanelState extends State<_BotsPanel> {
         child: ListView(
           children: bots.map((b) => ListTile(
                 dense: true,
-                leading: const Icon(Icons.smart_toy, color: Pal.accent, size: 18),
+                leading: const Icon(LucideIcons.bot, color: Pal.accent, size: 18),
                 title: Text(b['username'], style: const TextStyle(fontSize: 13.5)),
                 subtitle: Text('token: ${b['token']}',
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                         fontSize: 11, color: Pal.faint, fontFamily: 'monospace')),
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  SmallIconBtn(Icons.copy, 'Copiar token', () {
+                  SmallIconBtn(LucideIcons.copy, 'Copiar token', () {
                     Clipboard.setData(ClipboardData(text: b['token']));
                   }),
-                  SmallIconBtn(Icons.delete_outline, 'Borrar bot', () async {
+                  SmallIconBtn(LucideIcons.trash2, 'Borrar bot', () async {
                     await widget.store.api.delete('/api/bots/${b['id']}');
                     _load();
                   }, color: Pal.red),
@@ -1274,7 +1278,7 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
         const CircularProgressIndicator(strokeWidth: 2)
       else if (available == null)
         const Row(children: [
-          Icon(Icons.check_circle, color: Pal.green, size: 18),
+          Icon(LucideIcons.checkCircle, color: Pal.green, size: 18),
           SizedBox(width: 8),
           Text('✔ estás al día', style: TextStyle(fontSize: 14, color: Pal.green)),
         ])
@@ -1282,7 +1286,7 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-              color: Pal.bg0, borderRadius: BorderRadius.circular(10)),
+              color: Pal.bg0, borderRadius: BorderRadius.circular(8)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('❯ nueva versión: v${available!.version}',
                 style: const TextStyle(
@@ -1301,7 +1305,7 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
                       Navigator.of(context).pop(); // cerrar Ajustes
                       startUpdate(context, widget.store.api, available!);
                     },
-              icon: const Icon(Icons.download, size: 16),
+              icon: const Icon(LucideIcons.download, size: 16),
               label: Text(applying
                   ? 'Descargando…'
                   : 'Actualizar y reiniciar'),

@@ -31,7 +31,7 @@ dependencies:
   # descompresión del paquete de actualización (instalador/updater propio)
   archive: ^3.6.0
   path: ^1.9.0
-
+  lucide_icons_flutter: ^3.1.14+2
 dev_dependencies:
   flutter_lints: ^6.0.0
 

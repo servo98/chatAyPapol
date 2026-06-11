@@ -56,6 +56,86 @@ abstract final class Pal {
   static List<BoxShadow> glowGreenSm = const [
     BoxShadow(color: Color(0x8C39FF14), blurRadius: 12, spreadRadius: -2),
   ];
+
+  // Movimiento (readme §3): sobrio, easing con salida rápida.
+  static const ease = Cubic(0.2, 0.8, 0.2, 1.0);
+  static const durFast = Duration(milliseconds: 120);
+  static const dur = Duration(milliseconds: 180);
+  static const durSlow = Duration(milliseconds: 320);
+
+  // Textura de fondo: rejilla verde muy tenue a 28px (readme §10 — bg-grid).
+  static const gridLine = Color(0x0B39FF14); // rgba(57,255,20,0.043)
+  static const gridSize = 28.0;
+}
+
+/// Rejilla verde tenue del "papol-canvas": líneas a [Pal.gridSize] px sobre
+/// el fondo. Estática (sin animación) — coherente con readme §10.
+class PapolGridPainter extends CustomPainter {
+  const PapolGridPainter();
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = Pal.gridLine
+      ..strokeWidth = 1;
+    for (double x = 0; x <= size.width; x += Pal.gridSize) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), p);
+    }
+    for (double y = 0; y <= size.height; y += Pal.gridSize) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Envuelve un input (o cualquier subárbol enfocable) y enciende el glow neón
+/// cuando él o un descendiente tiene foco. Material no soporta box-shadow en
+/// los inputs nativos, así que el halo se aplica aquí (readme §3 — focus).
+class GlowOnFocus extends StatefulWidget {
+  final Widget child;
+  final double radius;
+  const GlowOnFocus({super.key, required this.child, this.radius = 5});
+  @override
+  State<GlowOnFocus> createState() => _GlowOnFocusState();
+}
+
+class _GlowOnFocusState extends State<GlowOnFocus> {
+  bool _focused = false;
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (f) => setState(() => _focused = f),
+      child: AnimatedContainer(
+        duration: Pal.dur,
+        curve: Pal.ease,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(widget.radius),
+          boxShadow: _focused ? Pal.glowGreenSm : null,
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// Envuelve [child] con el fondo de página + la rejilla papol detrás.
+class PapolCanvas extends StatelessWidget {
+  final Widget child;
+  final Color? color;
+  const PapolCanvas({super.key, required this.child, this.color});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: color ?? Pal.bg2,
+      child: CustomPaint(
+        painter: const PapolGridPainter(),
+        child: child,
+      ),
+    );
+  }
 }
 
 ThemeData buildTheme() {
@@ -101,7 +181,7 @@ ThemeData buildTheme() {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(5),
-        borderSide: const BorderSide(color: Pal.accent, width: 1.5),
+        borderSide: const BorderSide(color: Pal.accent),
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
@@ -109,9 +189,21 @@ ThemeData buildTheme() {
         backgroundColor: Pal.accentDim,
         foregroundColor: Pal.greenInk,
         elevation: 0,
-        textStyle: const TextStyle(fontWeight: FontWeight.w700),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+      ).copyWith(
+        // glow neón en hover: sombra verde que florece (readme §3 — hover).
+        shadowColor: const WidgetStatePropertyAll(Pal.accent),
+        animationDuration: Pal.dur,
+        backgroundColor: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.hovered) ? Pal.accent : Pal.accentDim),
+        elevation: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.pressed)
+                ? 2.0
+                : s.contains(WidgetState.hovered)
+                    ? 10.0
+                    : 0.0),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -128,7 +220,7 @@ ThemeData buildTheme() {
     popupMenuTheme: PopupMenuThemeData(
       color: Pal.bg0,
       surfaceTintColor: Colors.transparent,
-      textStyle: const TextStyle(color: Pal.text, fontSize: 13.5),
+      textStyle: const TextStyle(color: Pal.text, fontSize: 13),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: const BorderSide(color: Pal.borderDefault),

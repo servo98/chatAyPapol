@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:window_manager/window_manager.dart';
 import '../theme.dart';
 
@@ -44,7 +45,7 @@ class _TitleBarState extends State<TitleBar> with WindowListener {
     return Material(
       color: Pal.bg0,
       child: SizedBox(
-        height: 34,
+        height: 36,
         child: Row(children: [
           Expanded(
             child: GestureDetector(
@@ -77,12 +78,12 @@ class _TitleBarState extends State<TitleBar> with WindowListener {
               ),
             ),
           ),
-          _WinBtn(Icons.horizontal_rule, 'Minimizar',
+          _WinBtn(LucideIcons.minus, 'Minimizar',
               () => windowManager.minimize()),
-          _WinBtn(maximized ? Icons.filter_none : Icons.crop_square,
+          _WinBtn(maximized ? LucideIcons.copy : LucideIcons.square,
               maximized ? 'Restaurar' : 'Maximizar', _toggleMax,
-              iconSize: maximized ? 13 : 15),
-          _WinBtn(Icons.close, 'Cerrar', () => windowManager.close(),
+              iconSize: maximized ? 14 : 16),
+          _WinBtn(LucideIcons.x, 'Cerrar', () => windowManager.close(),
               hoverColor: Pal.red),
         ]),
       ),
@@ -97,7 +98,7 @@ class _WinBtn extends StatelessWidget {
   final Color hoverColor;
   final double iconSize;
   const _WinBtn(this.icon, this.tip, this.onTap,
-      {this.hoverColor = Pal.bg4, this.iconSize = 15});
+      {this.hoverColor = Pal.bg4, this.iconSize = 16});
 
   @override
   Widget build(BuildContext context) {

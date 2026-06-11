@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../updater.dart';
@@ -68,13 +69,16 @@ class _ShellState extends State<Shell> {
                       ? VoicePanel(
                           store: store, voice: widget.voice, channel: ch!)
                       : Stack(children: [
-                          ChatView(store: store),
+                          PapolCanvas(child: ChatView(store: store)),
                           Positioned(
                             right: 8, top: 8,
                             child: SmallIconBtn(
-                              showMembers ? Icons.people : Icons.people_outline,
+                              showMembers
+                                  ? LucideIcons.panelRightClose
+                                  : LucideIcons.users,
                               'Miembros',
                               () => setState(() => showMembers = !showMembers),
+                              color: showMembers ? Pal.accent : null,
                             ),
                           ),
                         ]),
@@ -95,7 +99,7 @@ class _ShellState extends State<Shell> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         child: Row(children: [
-          const Icon(Icons.system_update_alt, size: 16, color: Pal.greenInk),
+          const Icon(LucideIcons.download, size: 16, color: Pal.greenInk),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -103,20 +107,20 @@ class _ShellState extends State<Shell> {
                 '${update!.notes.isNotEmpty ? '— ${update!.notes}' : ''}',
                 maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
                     color: Pal.greenInk)),
           ),
           TextButton(
             onPressed: () => startUpdate(context, widget.store.api, update!),
             child: const Text('actualizar ahora',
                 style: TextStyle(
-                    color: Pal.greenInk, fontWeight: FontWeight.w800,
-                    fontSize: 12.5)),
+                    color: Pal.greenInk, fontWeight: FontWeight.w700,
+                    fontSize: 13)),
           ),
-          SmallIconBtn(Icons.close, 'Luego',
+          SmallIconBtn(LucideIcons.x, 'Luego',
               () => setState(() => updateDismissed = true),
-              color: Pal.greenInk, size: 15),
+              color: Pal.greenInk, size: 16),
         ]),
       ),
     );

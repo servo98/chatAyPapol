@@ -283,16 +283,16 @@ Future<void> main(List<String> args) async {
   if (args.contains('--preview-install')) {
     runApp(const _BootstrapApp(
         child: BootstrapScreen(
-            title: 'Instalando ChatPapol',
-            status: 'Instalando…',
+            title: 'instalando ChatPapol',
+            status: 'instalando…',
             progress: 0.62)));
     return;
   }
   if (args.contains('--preview-update')) {
     runApp(const _BootstrapApp(
         child: BootstrapScreen(
-            title: 'Actualizando ChatPapol',
-            status: 'Descargando actualización…',
+            title: 'actualizando ChatPapol',
+            status: 'descargando actualización…',
             progress: 0.41)));
     return;
   }
@@ -311,6 +311,25 @@ Future<void> main(List<String> args) async {
   runApp(ChatPapolApp(store: store, voice: voice));
 }
 
+/// Compone la barra de título propia encima del contenido de la app.
+/// El TitleBar va dentro de su PROPIO Overlay para que sus Tooltip encuentren
+/// un Overlay ancestro (se monta por encima del Navigator de la MaterialApp).
+/// El [child] (el Navigator) queda FUERA del Overlay para que se reconstruya
+/// con normalidad en cada rebuild.
+Widget _withTitleBar(Widget? child) {
+  final content = child ?? const SizedBox.shrink();
+  if (!_desktop) return content;
+  return Column(children: [
+    SizedBox(
+      height: 36,
+      child: Overlay(initialEntries: [
+        OverlayEntry(builder: (_) => const TitleBar()),
+      ]),
+    ),
+    Expanded(child: content),
+  ]);
+}
+
 class _BootstrapApp extends StatelessWidget {
   final Widget child;
   const _BootstrapApp({required this.child});
@@ -320,10 +339,7 @@ class _BootstrapApp extends StatelessWidget {
       title: 'ChatPapol',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
-      builder: (ctx, c) => Column(children: [
-        if (_desktop) const TitleBar(),
-        Expanded(child: c ?? const SizedBox.shrink()),
-      ]),
+      builder: (ctx, c) => _withTitleBar(c),
       home: child,
     );
   }
@@ -340,10 +356,7 @@ class ChatPapolApp extends StatelessWidget {
       title: 'ChatPapol',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
-      builder: (ctx, child) => Column(children: [
-        if (_desktop) const TitleBar(),
-        Expanded(child: child ?? const SizedBox.shrink()),
-      ]),
+      builder: (ctx, child) => _withTitleBar(child),
       home: ListenableBuilder(
         listenable: store,
         builder: (ctx, _) {

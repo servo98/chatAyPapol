@@ -89,7 +89,7 @@ class SmallIconBtn extends StatelessWidget {
   Widget build(BuildContext context) => Tooltip(
         message: tip,
         child: InkWell(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(5),
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.all(4),

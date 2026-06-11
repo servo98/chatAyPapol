@@ -51,7 +51,7 @@ class MemberList extends StatelessWidget {
       builder: (_, hover) => Container(
         decoration: BoxDecoration(
             color: hover ? Pal.bg3 : null,
-            borderRadius: BorderRadius.circular(6)),
+            borderRadius: BorderRadius.circular(5)),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         child: Opacity(
           opacity: isOnline ? 1 : .45,
@@ -62,7 +62,7 @@ class MemberList extends StatelessWidget {
               child: Text(u.username,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                      fontSize: 13.5, fontWeight: FontWeight.w600, color: color)),
+                      fontSize: 14, fontWeight: FontWeight.w700, color: color)),
             ),
             if (u.isBot)
               Container(
@@ -71,7 +71,7 @@ class MemberList extends StatelessWidget {
                     color: Pal.accent, borderRadius: BorderRadius.circular(3)),
                 child: const Text('BOT',
                     style: TextStyle(
-                        fontSize: 9, fontWeight: FontWeight.w800,
+                        fontSize: 11, fontWeight: FontWeight.w800,
                         color: Pal.greenInk)),
               ),
           ]),
@@ -138,7 +138,7 @@ class MemberList extends StatelessWidget {
                     activeColor: Pal.accent,
                     title: Text(r.name,
                         style: TextStyle(
-                            fontSize: 13.5,
+                            fontSize: 14,
                             color: r.color != null
                                 ? Color(int.parse(r.color!.replaceFirst('#', '0xff')))
                                 : Pal.text)),

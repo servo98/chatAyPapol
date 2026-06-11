@@ -42,7 +42,7 @@ class Bootstrap {
   }) async {
     final src = Directory(_exeDir);
     final dst = Directory(installDir);
-    onProgress('Preparando…', null);
+    onProgress('preparando…', null);
     if (await dst.exists()) {
       try { await dst.delete(recursive: true); } catch (_) {}
     }
@@ -60,10 +60,10 @@ class Bootstrap {
       onProgress('Instalando…', files.isEmpty ? null : done / files.length);
     }
 
-    onProgress('Creando accesos directos…', 1);
+    onProgress('creando accesos directos…', 1);
     await _createShortcuts(p.join(dst.path, _exeName));
 
-    onProgress('Abriendo ChatPapol…', 1);
+    onProgress('abriendo ChatPapol…', 1);
     await Process.start(p.join(dst.path, _exeName), const [],
         mode: ProcessStartMode.detached, workingDirectory: dst.path);
   }
@@ -98,7 +98,7 @@ foreach (\$lnk in @('$desktop','$startMenu')) {
     String sha256hex, {
     required void Function(String status, double? progress) onProgress,
   }) async {
-    onProgress('Descargando actualización…', 0);
+    onProgress('descargando actualización…', 0);
     final req = http.Request('GET', Uri.parse(url));
     final res = await req.send();
     if (res.statusCode != 200) {
@@ -110,7 +110,7 @@ foreach (\$lnk in @('$desktop','$startMenu')) {
     await for (final chunk in res.stream) {
       bytes.addAll(chunk);
       received += chunk.length;
-      onProgress('Descargando actualización…',
+      onProgress('descargando actualización…',
           total > 0 ? received / total : null);
     }
     if (sha256hex.isNotEmpty &&
@@ -118,7 +118,7 @@ foreach (\$lnk in @('$desktop','$startMenu')) {
       throw Exception('Checksum inválido: descarga corrupta');
     }
 
-    onProgress('Instalando…', null);
+    onProgress('instalando…', null);
     final tmp = await Directory.systemTemp.createTemp('chatpapol-update-');
     final archive = ZipDecoder().decodeBytes(bytes);
     for (final entry in archive) {

@@ -3,6 +3,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import '../md.dart';
 import '../models.dart';
@@ -159,11 +160,11 @@ class _ChatViewState extends State<ChatView> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.file_upload, size: 42, color: Pal.accent),
+                    Icon(LucideIcons.upload, size: 40, color: Pal.accent),
                     SizedBox(height: 8),
                     Text('Suelta para adjuntar',
                         style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600)),
+                            fontSize: 16, fontWeight: FontWeight.w700)),
                   ]),
                 ),
               ),
@@ -190,15 +191,15 @@ class _ChatViewState extends State<ChatView> {
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.black.withValues(alpha: .25))),
+        border: Border(bottom: BorderSide(color: Pal.borderSubtle)),
       ),
       child: Row(
         children: [
           const Text('#',
               style: TextStyle(
-                  color: Pal.faint, fontSize: 19, fontWeight: FontWeight.w700,
+                  color: Pal.faint, fontSize: 20, fontWeight: FontWeight.w700,
                   height: 1)),
-          const SizedBox(width: 7),
+          const SizedBox(width: 8),
           Text(ch.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
           if (ch.topic != null && ch.topic!.isNotEmpty) ...[
             Container(
@@ -230,7 +231,7 @@ class _ChatViewState extends State<ChatView> {
             alignment: Alignment.center,
             child: const Text('#',
                 style: TextStyle(
-                    fontSize: 34, fontWeight: FontWeight.w700, color: Pal.accent)),
+                    fontSize: 30, fontWeight: FontWeight.w700, color: Pal.accent)),
           ),
           const SizedBox(height: 12),
           Text('bienvenido a #${ch.name}',
@@ -292,7 +293,7 @@ class _ChatViewState extends State<ChatView> {
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Text(fmtDate(ms),
               style: const TextStyle(
-                  color: Pal.faint, fontSize: 11.5, fontWeight: FontWeight.w700)),
+                  color: Pal.faint, fontSize: 11, fontWeight: FontWeight.w700)),
         ),
         const Expanded(child: Divider()),
       ]),
@@ -360,10 +361,10 @@ class _ChatViewState extends State<ChatView> {
                   Padding(
                     padding: const EdgeInsets.only(left: 6, bottom: 6),
                     child: SmallIconBtn(
-                        Icons.add_circle, 'Adjuntar archivo', _attach, size: 22),
+                        LucideIcons.plusCircle, 'Adjuntar archivo', _attach, size: 22),
                   ),
                 const Padding(
-                  padding: EdgeInsets.only(left: 10, right: 2, bottom: 11),
+                  padding: EdgeInsets.only(left: 10, right: 2, bottom: 12),
                   child: Text('❯',
                       style: TextStyle(
                           color: Pal.accent, fontSize: 14, height: 1,
@@ -409,9 +410,9 @@ class _ChatViewState extends State<ChatView> {
                 Padding(
                   padding: const EdgeInsets.only(right: 4, bottom: 6),
                   child: Row(children: [
-                    SmallIconBtn(Icons.emoji_emotions_outlined, 'Stickers',
+                    SmallIconBtn(LucideIcons.smile, 'Stickers',
                         () => _stickerPicker(), size: 22),
-                    SmallIconBtn(Icons.send_rounded, 'Enviar', _send,
+                    SmallIconBtn(LucideIcons.send, 'Enviar', _send,
                         color: Pal.accent, size: 22),
                   ]),
                 ),
@@ -462,12 +463,12 @@ class _ChatViewState extends State<ChatView> {
                 child: Row(children: [
                   Text('/${m.$1}',
                       style: const TextStyle(
-                          color: Pal.accent, fontWeight: FontWeight.w700, fontSize: 13.5)),
+                          color: Pal.accent, fontWeight: FontWeight.w700, fontSize: 13)),
                   const SizedBox(width: 10),
                   Flexible(
                       child: Text(m.$2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Pal.muted, fontSize: 12.5))),
+                          style: const TextStyle(color: Pal.muted, fontSize: 12))),
                 ]),
               ),
             )).toList(),
@@ -487,10 +488,10 @@ class _ChatViewState extends State<ChatView> {
           color: Pal.bg0,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(8))),
       child: Row(children: [
-        Icon(isEdit ? Icons.edit : Icons.reply, size: 14, color: Pal.muted),
+        Icon(isEdit ? LucideIcons.pencil : LucideIcons.reply, size: 14, color: Pal.muted),
         const SizedBox(width: 8),
-        Expanded(child: Text(name, style: const TextStyle(color: Pal.muted, fontSize: 12.5))),
-        SmallIconBtn(Icons.close, 'Cancelar', () => setState(() {
+        Expanded(child: Text(name, style: const TextStyle(color: Pal.muted, fontSize: 12))),
+        SmallIconBtn(LucideIcons.x, 'Cancelar', () => setState(() {
               replyingTo = null;
               editing = null;
               if (isEdit) input.clear();
@@ -507,7 +508,7 @@ class _ChatViewState extends State<ChatView> {
         children: pendingUploads.map((u) => Chip(
               backgroundColor: Pal.bg3,
               label: Text(u['name'] ?? 'archivo', style: const TextStyle(fontSize: 12)),
-              deleteIcon: const Icon(Icons.close, size: 14),
+              deleteIcon: const Icon(LucideIcons.x, size: 14),
               onDeleted: () => setState(() => pendingUploads.remove(u)),
             )).toList(),
       ),
@@ -594,7 +595,7 @@ class _MessageTile extends StatelessWidget {
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(fmtTime(m.createdAt),
                                   style: const TextStyle(
-                                      color: Pal.faint, fontSize: 10)))
+                                      color: Pal.faint, fontSize: 11)))
                           : null)
                       : Avatar(author, store, size: 38),
                 ),
@@ -611,7 +612,7 @@ class _MessageTile extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                     fontWeight: FontWeight.w700,
-                                    fontSize: 14.5,
+                                    fontSize: 14,
                                     color: nameColor)),
                           ),
                           if (author?.isBot == true || m.webhookName != null)
@@ -621,11 +622,12 @@ class _MessageTile extends StatelessWidget {
                                   horizontal: 5, vertical: 1),
                               decoration: BoxDecoration(
                                   color: Pal.accent,
-                                  borderRadius: BorderRadius.circular(4)),
+                                  borderRadius: BorderRadius.circular(3)),
                               child: const Text('BOT',
                                   style: TextStyle(
-                                      fontSize: 9.5,
+                                      fontSize: 11,
                                       fontWeight: FontWeight.w800,
+                                      letterSpacing: 1.3,
                                       color: Pal.greenInk)),
                             ),
                           const SizedBox(width: 8),
@@ -637,7 +639,7 @@ class _MessageTile extends StatelessWidget {
                         ...renderMarkdown(m.content, store),
                       if (m.editedAt != null)
                         const Text('(editado)',
-                            style: TextStyle(color: Pal.faint, fontSize: 10.5)),
+                            style: TextStyle(color: Pal.faint, fontSize: 11)),
                       if (m.stickerId != null) _sticker(),
                       ...m.attachments.map(_attachment),
                       ...m.embeds.map(_embed),
@@ -652,13 +654,15 @@ class _MessageTile extends StatelessWidget {
                 top: 0,
                 child: Container(
                   decoration: BoxDecoration(
-                      color: Pal.bg0, borderRadius: BorderRadius.circular(6)),
+                      color: Pal.bg0,
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: Pal.borderDefault)),
                   child: Row(children: [
-                    SmallIconBtn(Icons.reply, 'Responder', onReply, size: 16),
+                    SmallIconBtn(LucideIcons.reply, 'Responder', onReply, size: 16),
                     if (onEdit != null)
-                      SmallIconBtn(Icons.edit, 'Editar', onEdit!, size: 16),
+                      SmallIconBtn(LucideIcons.pencil, 'Editar', onEdit!, size: 16),
                     if (onDelete != null)
-                      SmallIconBtn(Icons.delete_outline, 'Borrar', onDelete!,
+                      SmallIconBtn(LucideIcons.trash2, 'Borrar', onDelete!,
                           color: Pal.red, size: 16),
                   ]),
                 ),
@@ -674,10 +678,10 @@ class _MessageTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(children: [
-        const Icon(Icons.subdirectory_arrow_right, size: 14, color: Pal.faint),
+        const Icon(LucideIcons.cornerDownRight, size: 14, color: Pal.faint),
         Text('${author?.username ?? replied.webhookName ?? '?'}: ',
             style: const TextStyle(
-                color: Pal.accent, fontSize: 12, fontWeight: FontWeight.w600)),
+                color: Pal.accent, fontSize: 12, fontWeight: FontWeight.w700)),
         Flexible(
           child: Text(
               replied.content.isEmpty ? '[adjunto]' : replied.content,
@@ -723,7 +727,7 @@ class _MessageTile extends StatelessWidget {
           decoration: BoxDecoration(
               color: Pal.bg0, borderRadius: BorderRadius.circular(8)),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.attach_file, size: 18, color: Pal.accent),
+            const Icon(LucideIcons.paperclip, size: 18, color: Pal.accent),
             const SizedBox(width: 8),
             Text(a.name, style: const TextStyle(color: Pal.link, fontSize: 13)),
             const SizedBox(width: 8),
@@ -763,13 +767,13 @@ class _MessageTile extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(e.description!,
-                  style: const TextStyle(color: Pal.muted, fontSize: 12.5)),
+                  style: const TextStyle(color: Pal.muted, fontSize: 12)),
             ),
           if (e.image != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(5),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxHeight: 220),
                   child: Image.network(e.image!, fit: BoxFit.contain,
