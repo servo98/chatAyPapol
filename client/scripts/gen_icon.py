@@ -78,12 +78,19 @@ def main():
         master.resize((sz, sz), Image.LANCZOS).save(p)
         print("✓", p)
 
-    # Linux / AppImage
+    # Linux / AppImage — la fuente TRACKED es assets/icon.png (make-appimage.sh
+    # la copia al AppDir, que está gitignoreado).
+    assets = os.path.join(CLIENT, "assets")
+    os.makedirs(assets, exist_ok=True)
+    src = os.path.join(assets, "icon.png")
+    master.resize((512, 512), Image.LANCZOS).save(src)
+    print("✓", src)
+    # también poblar el AppDir local si existe (build local)
     appdir = os.path.join(CLIENT, "packaging", "AppDir")
-    png = os.path.join(appdir, "chatpapol.png")
-    master.resize((512, 512), Image.LANCZOS).save(png)
-    master.resize((512, 512), Image.LANCZOS).save(os.path.join(appdir, ".DirIcon"), format="PNG")
-    print("✓", png, "+ .DirIcon")
+    if os.path.isdir(appdir):
+        master.resize((512, 512), Image.LANCZOS).save(os.path.join(appdir, "chatpapol.png"))
+        master.resize((512, 512), Image.LANCZOS).save(os.path.join(appdir, ".DirIcon"), format="PNG")
+        print("✓", appdir, "(chatpapol.png + .DirIcon)")
 
     print("✓ preview:", os.path.join(CLIENT, "icon_preview.png"))
 
