@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../store.dart';
 import '../theme.dart';
 
@@ -12,12 +13,19 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final user = TextEditingController();
   final pass = TextEditingController();
+  final confirmPass = TextEditingController();
   final invite = TextEditingController();
   bool registering = false;
   bool busy = false;
+  // labels de campos cuya contraseña está revelada (visibilidad por-campo).
+  final _revealed = <String>{};
   String? error;
 
   Future<void> _submit() async {
+    if (registering && pass.text != confirmPass.text) {
+      setState(() => error = 'las contraseñas no coinciden');
+      return;
+    }
     setState(() {
       busy = true;
       error = null;
@@ -90,7 +98,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: TextStyle(color: Pal.muted, fontSize: 13)),
                 const SizedBox(height: 24),
                 _field('USUARIO', user),
-                _field('CONTRASEÑA', pass, obscure: true, onSubmit: _submit),
+                _field('CONTRASEÑA', pass, obscure: true, revealable: true,
+                    onSubmit: _submit),
+                if (registering)
+                  _field('CONFIRMAR CONTRASEÑA', confirmPass,
+                      obscure: true, revealable: true, onSubmit: _submit),
                 if (registering)
                   _field('CÓDIGO DE INVITACIÓN', invite,
                       hint: 'vacío si eres el primero', onSubmit: _submit),
@@ -196,7 +208,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _field(String label, TextEditingController ctrl,
-      {String hint = '', bool obscure = false, VoidCallback? onSubmit}) {
+      {String hint = '', bool obscure = false, bool revealable = false,
+      VoidCallback? onSubmit}) {
+    final shown = _revealed.contains(label);
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -210,8 +224,21 @@ class _LoginScreenState extends State<LoginScreen> {
           GlowOnFocus(
             child: TextField(
               controller: ctrl,
-              obscureText: obscure,
-              decoration: InputDecoration(hintText: hint),
+              obscureText: obscure && !shown,
+              decoration: InputDecoration(
+                hintText: hint,
+                suffixIcon: revealable
+                    ? IconButton(
+                        icon: Icon(
+                            shown ? LucideIcons.eyeOff : LucideIcons.eye,
+                            size: 18, color: Pal.muted),
+                        tooltip: shown ? 'ocultar contraseña' : 'mostrar contraseña',
+                        onPressed: () => setState(() {
+                          if (!_revealed.remove(label)) _revealed.add(label);
+                        }),
+                      )
+                    : null,
+              ),
               onSubmitted: (_) => onSubmit?.call(),
             ),
           ),
