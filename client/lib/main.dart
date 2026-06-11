@@ -324,16 +324,36 @@ Future<void> main(List<String> args) async {
     try {
       store.setWindowFocused(await windowManager.isFocused());
     } catch (_) {}
-    windowManager.addListener(_FocusListener(store));
+    // Interceptamos el cierre para desconectar la sala de voz ANTES de morir:
+    // si no, WebRTC nunca libera el dispositivo de salida y la sesión queda
+    // colgada en el Mezclador de volumen de Windows.
+    try {
+      await windowManager.setPreventClose(true);
+    } catch (_) {}
+    windowManager.addListener(_FocusListener(store, voice));
   }
   store.tryRestore();
   runApp(ChatPapolApp(store: store, voice: voice));
 }
 
-/// Mantiene `store.windowFocused` al día según el foco real de la ventana.
+/// Mantiene `store.windowFocused` al día y, al cerrar la ventana, desconecta la
+/// voz antes de destruirla (libera el dispositivo de audio → la sesión
+/// desaparece del Mezclador de volumen).
 class _FocusListener extends WindowListener {
   final AppStore store;
-  _FocusListener(this.store);
+  final VoiceManager voice;
+  _FocusListener(this.store, this.voice);
+  @override
+  void onWindowClose() async {
+    try {
+      await voice.leave();
+    } catch (_) {}
+    try {
+      await windowManager.setPreventClose(false);
+      await windowManager.destroy();
+    } catch (_) {}
+  }
+
   @override
   void onWindowFocus() => store.setWindowFocused(true);
   @override

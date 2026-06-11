@@ -144,6 +144,24 @@ bool Win32Window::Create(const std::wstring& title,
     return false;
   }
 
+  // Fuerza el ícono de la app (big para Alt-Tab/título, small para la barra de
+  // tareas). El WNDCLASS ya lo trae, pero fijarlo por ventana evita que algunos
+  // shells de Windows muestren un ícono cacheado/por defecto en arranques
+  // posteriores.
+  HMODULE module = GetModuleHandle(nullptr);
+  HICON big = static_cast<HICON>(
+      LoadImage(module, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
+                GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON),
+                LR_DEFAULTCOLOR));
+  HICON small_icon = static_cast<HICON>(
+      LoadImage(module, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
+                GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
+                LR_DEFAULTCOLOR));
+  if (big) SendMessage(window, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(big));
+  if (small_icon)
+    SendMessage(window, WM_SETICON, ICON_SMALL,
+                reinterpret_cast<LPARAM>(small_icon));
+
   UpdateTheme(window);
 
   return OnCreate();

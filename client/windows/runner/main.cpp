@@ -1,7 +1,9 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <shobjidl.h>
 #include <windows.h>
 
+#include "audio_session.h"
 #include "flutter_window.h"
 #include "utils.h"
 
@@ -16,6 +18,15 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+
+  // AppUserModelID explícito y estable: ancla el ícono de la barra de tareas a
+  // la app (sin esto Windows deriva un id por proceso y a veces sirve un ícono
+  // cacheado/erróneo en arranques posteriores).
+  ::SetCurrentProcessExplicitAppUserModelID(L"ChatPapol");
+
+  // Renombra la sesión de audio de WebRTC ("RemoteAudioApp") por "ChatPapol"
+  // en el Mezclador de volumen. Hilo de fondo (la sesión nace al entrar a voz).
+  StartAudioSessionRenamer(L"ChatPapol");
 
   flutter::DartProject project(L"data");
 
@@ -38,6 +49,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::DispatchMessage(&msg);
   }
 
+  StopAudioSessionRenamer();
   ::CoUninitialize();
   return EXIT_SUCCESS;
 }
