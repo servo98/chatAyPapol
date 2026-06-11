@@ -1,8 +1,15 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 import 'package:livekit_client/livekit_client.dart'
-    show VideoTrack, VideoTrackRenderer, VideoViewFit;
+    show
+        VideoTrack,
+        VideoTrackRenderer,
+        VideoViewFit,
+        LocalVideoTrack,
+        RemoteVideoTrack;
 import '../models.dart' as m;
 import '../perms.dart';
 import '../store.dart';
@@ -10,6 +17,11 @@ import '../theme.dart';
 import '../voice.dart';
 import 'screenshare_fullscreen.dart';
 import 'widgets.dart';
+
+// Tokens del design system que no viven en Pal (color-mix / washes).
+const _inset = Color(0xFF070A09); // --surface-inset
+const _washGreen = Color(0x1A39FF14); // rgba(57,255,20,0.10)
+const _washRed = Color(0x1FFF4D4D); // rgba(255,77,77,0.12)
 
 /// Vista principal cuando el canal seleccionado es de voz:
 /// tiles de participantes, screenshare grande y barra de controles.
@@ -33,10 +45,10 @@ class VoicePanel extends StatelessWidget {
         // poder abrir fullscreen y controlar su volumen
         final shares = joinedHere ? voice.screenShares : const <ScreenShare>[];
         return Container(
-          color: Pal.bg0,
+          color: Pal.bg2,
           child: Column(
             children: [
-              _header(),
+              _header(users.length),
               Expanded(
                 child: videos.isNotEmpty
                     ? _withScreenshare(context, videos, shares, users)
@@ -50,17 +62,35 @@ class VoicePanel extends StatelessWidget {
     );
   }
 
-  Widget _header() => Container(
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+  // ----- header (.vhead): barras + nombre + "/ N conectados · baja latencia"
+  Widget _header(int connected) => Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: Pal.borderSubtle)),
+        ),
         child: Row(children: [
-          const Icon(LucideIcons.volume2, color: Pal.faint, size: 20),
-          const SizedBox(width: 8),
+          const _EqBars(height: 12),
+          const SizedBox(width: 9),
           Text(channel.name,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              style: const TextStyle(
+                  fontWeight: FontWeight.w700, fontSize: 16, color: Pal.text)),
+          const SizedBox(width: 13),
+          Container(width: 1, height: 16, color: Pal.borderDefault),
+          const SizedBox(width: 13),
+          Text.rich(TextSpan(children: [
+            const TextSpan(text: '/ '),
+            TextSpan(
+                text: '$connected',
+                style: const TextStyle(
+                    color: Pal.accent, fontWeight: FontWeight.w700)),
+            const TextSpan(text: ' conectados · baja latencia'),
+          ]),
+              style: const TextStyle(fontSize: 13, color: Pal.faint)),
         ]),
       );
 
+  // ----- escenario con screenshare: frame grande + tira de participantes
   Widget _withScreenshare(BuildContext context, List<VideoTrack> videos,
       List<ScreenShare> shares, List<m.VoiceState> users) {
     final main = videos.first;
@@ -73,132 +103,174 @@ class VoicePanel extends StatelessWidget {
         break;
       }
     }
-    void openFullscreen() {
-      final s = share;
-      if (s == null) return;
-      Navigator.of(context).push(MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => ScreenShareFullscreen(
-          track: s.track,
-          identity: s.identity,
-          name: s.name,
-          voice: voice,
-        ),
-      ));
+    final sharerName = share != null
+        ? (share.name ?? store.users[share.identity]?.username ?? 'alguien')
+        : (store.me?.username ?? 'tú');
+
+    // doble-clic / botón expandir: solo para screenshare REMOTO (share != null)
+    VoidCallback? onFs;
+    final sh = share;
+    if (sh != null) {
+      onFs = () => Navigator.of(context).push(MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => ScreenShareFullscreen(
+              track: sh.track,
+              identity: sh.identity,
+              name: sh.name,
+              voice: voice,
+            ),
+          ));
     }
 
     return Column(children: [
       Expanded(
         child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            // doble-clic para entrar a pantalla completa (solo screenshare
-            // remoto) + botón flotante de expandir
-            child: GestureDetector(
-              onDoubleTap: share != null ? openFullscreen : null,
-              child: Stack(children: [
-                Positioned.fill(
-                  child: VideoTrackRenderer(main, fit: VideoViewFit.contain),
-                ),
-                if (share != null)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Material(
-                      color: Colors.black54,
-                      shape: const CircleBorder(),
-                      child: IconButton(
-                        tooltip: 'Pantalla completa',
-                        icon: const Icon(LucideIcons.expand,
-                            size: 18, color: Pal.text),
-                        onPressed: openFullscreen,
-                      ),
-                    ),
-                  ),
-              ]),
-            ),
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+          child: _ShareStage(
+            track: main,
+            share: share,
+            sharerName: sharerName,
+            voice: voice,
+            onFullscreen: onFs,
           ),
         ),
       ),
       SizedBox(
-        height: 84,
+        height: 96,
         child: ListView(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
           children: users.map((v) => _tile(v, small: true)).toList(),
         ),
       ),
-      const SizedBox(height: 8),
     ]);
   }
 
+  // ----- escenario sin screenshare: grid de tiles centrado
   Widget _tilesOnly(List<m.VoiceState> users) {
     if (users.isEmpty) {
       return const Center(
           child: Text('❯ nadie por aquí todavía — únete',
               style: TextStyle(color: Pal.muted)));
     }
-    return Center(
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 16,
-        alignment: WrapAlignment.center,
-        children: users.map((v) => _tile(v)).toList(),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(22),
+      child: Center(
+        child: Wrap(
+          spacing: 14,
+          runSpacing: 14,
+          alignment: WrapAlignment.center,
+          children: users.map((v) => _tile(v)).toList(),
+        ),
       ),
     );
   }
 
+  // ----- tile de participante (.vtile)
   Widget _tile(m.VoiceState v, {bool small = false}) {
     final user = store.users[v.userId];
     final isSpeaking = voice.speaking.contains(v.userId);
-    final size = small ? 64.0 : 160.0;
-    final tile = Container(
-      width: small ? 110 : 220,
-      height: small ? 80 : size,
-      margin: small ? const EdgeInsets.only(right: 8) : null,
+    final isSelf = v.userId == store.me?.id;
+    final avatar = small ? 34.0 : 56.0;
+    final customVol = !isSelf && voice.userVolume(v.userId) != 1.0;
+
+    final tile = AnimatedContainer(
+      duration: Pal.dur,
+      curve: Pal.ease,
+      width: small ? 150 : 200,
+      height: small ? 84 : 125, // 16:10
+      margin: small ? const EdgeInsets.only(right: 12) : null,
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Pal.bg2,
+        color: _inset,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-            color: isSpeaking ? Pal.green : Colors.transparent, width: 2),
+            color: isSpeaking
+                ? Pal.green.withValues(alpha: 0.60)
+                : Pal.borderDefault),
+        boxShadow: isSpeaking
+            ? [
+                BoxShadow(
+                    color: Pal.green.withValues(alpha: 0.35),
+                    blurRadius: 12,
+                    spreadRadius: -2),
+              ]
+            : null,
       ),
       child: Stack(children: [
-        Center(
-            child:
-                Avatar(user, store, size: small ? 36 : 64)),
+        // mic arriba-derecha (rojo si silenciado)
         Positioned(
-          left: 8,
-          bottom: 6,
-          child: Row(children: [
-            Text(user?.username ?? '…',
-                style: TextStyle(
-                    fontSize: small ? 11 : 13, fontWeight: FontWeight.w700)),
-            if (v.mute)
-              const Padding(
-                padding: EdgeInsets.only(left: 4),
-                child: Icon(LucideIcons.micOff, size: 14, color: Pal.red),
+          top: 0,
+          right: 0,
+          child: Icon(v.mute ? LucideIcons.micOff : LucideIcons.mic,
+              size: 15, color: v.mute ? Pal.red : Pal.faint),
+        ),
+        // compartiendo: indicador arriba-izquierda
+        if (v.streaming)
+          const Positioned(
+            top: 0,
+            left: 0,
+            child: Icon(LucideIcons.screenShare, size: 15, color: Pal.green),
+          ),
+        // avatar + nombre + badge centrados
+        Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: isSpeaking
+                      ? [
+                          BoxShadow(
+                              color: Pal.green.withValues(alpha: 0.28),
+                              blurRadius: 0,
+                              spreadRadius: 3),
+                        ]
+                      : null,
+                ),
+                child: Avatar(user, store, size: avatar),
               ),
-            if (v.streaming)
-              const Padding(
-                padding: EdgeInsets.only(left: 4),
-                child: Icon(LucideIcons.screenShare, size: 14, color: Pal.green),
-              ),
-            if (voice.userVolume(v.userId) != 1.0)
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: Icon(
-                    voice.userVolume(v.userId) == 0
-                        ? LucideIcons.volumeX
-                        : LucideIcons.volume1,
-                    size: 14,
-                    color: Pal.muted),
-              ),
-          ]),
+              const SizedBox(height: 9),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                Flexible(
+                  child: Text(
+                    user?.username ?? '…',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: small ? 12 : 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: isSpeaking ? Pal.accent : Pal.text),
+                  ),
+                ),
+                if (isSelf)
+                  const Text(' (tú)',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: Pal.faint)),
+                if (customVol)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Icon(
+                        voice.userVolume(v.userId) == 0
+                            ? LucideIcons.volumeX
+                            : LucideIcons.volume1,
+                        size: 13,
+                        color: Pal.muted),
+                  ),
+              ]),
+              if (!small && (isSpeaking || v.mute)) ...[
+                const SizedBox(height: 5),
+                _badge(isSpeaking),
+              ],
+            ],
+          ),
         ),
       ]),
     );
-    if (v.userId == store.me?.id) return tile; // tu propio volumen no aplica
+    if (isSelf) return tile; // tu propio volumen no aplica
     // click derecho (o mantener presionado): volumen individual, como Discord
     return Builder(
       builder: (ctx) => GestureDetector(
@@ -208,6 +280,28 @@ class VoicePanel extends StatelessWidget {
       ),
     );
   }
+
+  // badge "hablando" (verde + barras) o "silenciado" (rojo)
+  Widget _badge(bool speaking) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+        decoration: BoxDecoration(
+          color: Pal.bg0.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: speaking
+            ? const [
+                _EqBars(height: 9),
+                SizedBox(width: 6),
+                Text('hablando',
+                    style: TextStyle(fontSize: 11, color: Pal.accent)),
+              ]
+            : const [
+                Icon(LucideIcons.micOff, size: 11, color: Pal.red),
+                SizedBox(width: 6),
+                Text('silenciado',
+                    style: TextStyle(fontSize: 11, color: Pal.red)),
+              ]),
+      );
 
   void _showUserVolume(BuildContext context, String userId, String? name) {
     showDialog(
@@ -256,45 +350,56 @@ class VoicePanel extends StatelessWidget {
     );
   }
 
+  // ----- controles (.vcontrols)
   Widget _controls(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 20),
+      decoration: const BoxDecoration(
+        color: Pal.bg0,
+        border: Border(top: BorderSide(color: Pal.borderSubtle)),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: joinedHere
             ? [
-                _roundBtn(
+                _vctl(
                   voice.muted ? LucideIcons.micOff : LucideIcons.mic,
                   voice.muted ? 'Activar micro' : 'Silenciar',
                   voice.toggleMute,
-                  active: !voice.muted,
+                  danger: voice.muted,
                 ),
-                _roundBtn(
+                _vctl(
                   voice.deafened ? LucideIcons.volumeX : LucideIcons.headphones,
                   voice.deafened ? 'Activar sonido' : 'Ensordecer',
                   voice.toggleDeafen,
-                  active: !voice.deafened,
+                  danger: voice.deafened,
                 ),
                 if (store.canI(P.stream, channel.id))
-                  _roundBtn(
-                    voice.sharing ? LucideIcons.screenShareOff : LucideIcons.screenShare,
+                  _vctl(
+                    voice.sharing
+                        ? LucideIcons.screenShareOff
+                        : LucideIcons.screenShare,
                     voice.sharing ? 'Dejar de compartir' : 'Compartir pantalla',
-                    () => voice.sharing ? voice.stopShare() : _pickShareSource(context),
+                    () => voice.sharing
+                        ? voice.stopShare()
+                        : _pickShareSource(context),
                     active: voice.sharing,
-                    activeColor: Pal.green,
                   ),
                 if (store.canI(P.useSoundboard, channel.id))
-                  _roundBtn(LucideIcons.music, 'Soundboard',
+                  _vctl(LucideIcons.music, 'Soundboard',
                       () => _soundboard(context)),
-                _roundBtn(LucideIcons.phoneOff, 'Desconectar', voice.leave,
-                    activeColor: Pal.red, active: true),
+                const SizedBox(width: 4),
+                _hangBtn(voice.leave),
               ]
             : [
                 ElevatedButton.icon(
-                  onPressed: voice.connecting ? null : () => voice.join(channel.id),
+                  onPressed:
+                      voice.connecting ? null : () => voice.join(channel.id),
                   icon: const Icon(LucideIcons.headphones, size: 18),
-                  label: Text(voice.connecting ? 'conectando…' : '❯ unirse a la voz'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Pal.accentDim,
+                  label: Text(
+                      voice.connecting ? 'conectando…' : '❯ unirse a la voz'),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: Pal.accentDim,
                       foregroundColor: Pal.greenInk),
                 ),
               ],
@@ -302,25 +407,67 @@ class VoicePanel extends StatelessWidget {
     );
   }
 
-  Widget _roundBtn(IconData icon, String tip, VoidCallback onTap,
-      {bool active = false, Color activeColor = Pal.accent}) {
+  // botón circular de control con estados active(verde)/danger(rojo)
+  Widget _vctl(IconData icon, String tip, VoidCallback onTap,
+      {bool active = false, bool danger = false}) {
+    final Color bg = danger
+        ? _washRed
+        : active
+            ? _washGreen
+            : Pal.bg3;
+    final Color border = danger
+        ? Pal.red.withValues(alpha: 0.45)
+        : active
+            ? Pal.green.withValues(alpha: 0.45)
+            : Pal.borderDefault;
+    final Color fg = danger
+        ? Pal.red
+        : active
+            ? Pal.accent
+            : Pal.muted;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 5),
       child: Tooltip(
         message: tip,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: onTap,
-          child: CircleAvatar(
-            radius: 23,
-            backgroundColor: active ? activeColor : Pal.bg3,
-            child: Icon(icon,
-                size: 20, color: active ? Colors.white : Pal.muted),
+        child: Material(
+          color: bg,
+          shape: CircleBorder(side: BorderSide(color: border)),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: SizedBox(
+                width: 46, height: 46, child: Icon(icon, size: 20, color: fg)),
           ),
         ),
       ),
     );
   }
+
+  // botón pill rojo "salir" (.vhang)
+  Widget _hangBtn(VoidCallback onTap) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 5),
+        child: Material(
+          color: const Color(0xFFC42B2B), // --red-600
+          borderRadius: BorderRadius.circular(999),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Container(
+              height: 46,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(LucideIcons.phoneOff, size: 18, color: Colors.white),
+                SizedBox(width: 8),
+                Text('salir',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white)),
+              ]),
+            ),
+          ),
+        ),
+      );
 
   Future<void> _pickShareSource(BuildContext context) async {
     try {
@@ -566,6 +713,246 @@ class VoicePanel extends StatelessWidget {
                       ),
                     )).toList(),
               ),
+      ),
+    );
+  }
+}
+
+/// Frame de pantalla compartida (.share): video + barra de info que aparece
+/// SOLO en hover (override del diseño: nada de [EN VIVO]/resolución permanente).
+/// La resolución/fps son REALES, sondeadas vía stats de LiveKit mientras el
+/// puntero está encima.
+class _ShareStage extends StatefulWidget {
+  final VideoTrack track;
+  final ScreenShare? share;
+  final String sharerName;
+  final VoiceManager voice;
+  final VoidCallback? onFullscreen;
+  const _ShareStage({
+    required this.track,
+    required this.share,
+    required this.sharerName,
+    required this.voice,
+    required this.onFullscreen,
+  });
+
+  @override
+  State<_ShareStage> createState() => _ShareStageState();
+}
+
+class _ShareStageState extends State<_ShareStage>
+    with SingleTickerProviderStateMixin {
+  bool _hover = false;
+  String? _stats; // "1920×1080 · 60fps"
+  Timer? _poll;
+  late final AnimationController _pulse = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1600))
+    ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  void _onEnter() {
+    if (_hover) return;
+    setState(() => _hover = true);
+    _readStats(); // lectura inmediata
+    _poll = Timer.periodic(const Duration(milliseconds: 1500), (_) => _readStats());
+  }
+
+  void _onExit() {
+    _poll?.cancel();
+    _poll = null;
+    if (mounted) setState(() => _hover = false);
+  }
+
+  Future<void> _readStats() async {
+    final t = widget.track;
+    try {
+      num w = 0, h = 0, fps = 0;
+      if (t is LocalVideoTrack) {
+        // varias capas posibles: tomamos la de mayor ancho (la activa)
+        for (final s in await t.getSenderStats()) {
+          final sw = s.frameWidth ?? 0;
+          if (sw > w) {
+            w = sw;
+            h = s.frameHeight ?? 0;
+            fps = s.framesPerSecond ?? 0;
+          }
+        }
+      } else if (t is RemoteVideoTrack) {
+        final s = await t.getReceiverStats();
+        w = s?.frameWidth ?? 0;
+        h = s?.frameHeight ?? 0;
+        fps = s?.framesPerSecond ?? 0;
+      }
+      final next = (w > 0 && h > 0)
+          ? '${w.round()}×${h.round()} · ${fps.round()}fps'
+          : null;
+      if (mounted && next != _stats) setState(() => _stats = next);
+    } catch (_) {/* stats best-effort */}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => _onEnter(),
+      onExit: (_) => _onExit(),
+      child: GestureDetector(
+        onDoubleTap: widget.onFullscreen,
+        child: Container(
+          decoration: BoxDecoration(
+            color: _inset,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Pal.green.withValues(alpha: 0.42)),
+            boxShadow: [
+              BoxShadow(
+                  color: Pal.green.withValues(alpha: 0.30),
+                  blurRadius: 12,
+                  spreadRadius: -2),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(children: [
+            Positioned.fill(
+              child: VideoTrackRenderer(widget.track, fit: VideoViewFit.contain),
+            ),
+            // barra de info SOLO en hover
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                ignoring: !_hover,
+                child: AnimatedOpacity(
+                  duration: Pal.durFast,
+                  opacity: _hover ? 1.0 : 0.0,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(14, 9, 10, 14),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.80),
+                          Colors.black.withValues(alpha: 0.0),
+                        ],
+                      ),
+                    ),
+                    child: Row(children: [
+                      // [EN VIVO] con punto pulsante
+                      FadeTransition(
+                        opacity: Tween(begin: 1.0, end: 0.35).animate(_pulse),
+                        child: Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Pal.accent,
+                            boxShadow: [
+                              BoxShadow(
+                                  color: Pal.green.withValues(alpha: 0.55),
+                                  blurRadius: 8),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Text('EN VIVO',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.7,
+                              color: Pal.accent)),
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: Text('${widget.sharerName} comparte pantalla',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 12, color: Pal.text)),
+                      ),
+                      const Spacer(),
+                      if (_stats != null)
+                        Text(_stats!,
+                            style: const TextStyle(
+                                fontSize: 12, color: Pal.muted)),
+                      if (widget.onFullscreen != null) ...[
+                        const SizedBox(width: 10),
+                        InkWell(
+                          onTap: widget.onFullscreen,
+                          borderRadius: BorderRadius.circular(6),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(LucideIcons.expand,
+                                size: 18, color: Pal.text),
+                          ),
+                        ),
+                      ],
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Ecualizador animado (.bars): 4 barras verdes que "respiran".
+class _EqBars extends StatefulWidget {
+  final double height;
+  const _EqBars({this.height = 11});
+
+  @override
+  State<_EqBars> createState() => _EqBarsState();
+}
+
+class _EqBarsState extends State<_EqBars>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1000))
+    ..repeat();
+  static const _base = [0.40, 1.00, 0.60, 0.85]; // alturas relativas
+  static const _delay = [0.0, 0.15, 0.30, 0.45]; // desfases
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: widget.height,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (ctx, _) => Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(4, (i) {
+            final phase = (_c.value - _delay[i]) % 1.0;
+            // scaleY entre .5 y 1, como el @keyframes papol-eq
+            final scale = 0.75 + 0.25 * math.sin(2 * math.pi * phase);
+            return Padding(
+              padding: EdgeInsets.only(right: i < 3 ? 2 : 0),
+              child: Container(
+                width: 2.5,
+                height: widget.height * _base[i] * scale,
+                decoration: BoxDecoration(
+                  color: Pal.accent,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+            );
+          }),
+        ),
       ),
     );
   }
