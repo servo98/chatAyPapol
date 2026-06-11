@@ -14,6 +14,7 @@ import '../version.dart';
 import 'totp.dart';
 import '../voice.dart';
 import 'bootstrap_runner.dart';
+import 'sound_lab.dart';
 import 'widgets.dart';
 
 void openSettings(BuildContext context, AppStore store, VoiceManager voice) {
@@ -51,6 +52,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (isAdmin) ('automod', 'AutoMod', LucideIcons.shield),
       if (store.canI(P.manageWebhooks)) ('webhooks', 'Webhooks', LucideIcons.webhook),
       if (isAdmin) ('bots', 'Bots', LucideIcons.bot),
+      if (store.isSoundLabOwner) ('sfx', 'Sound Lab', LucideIcons.music2),
       ('updates', 'Actualizaciones', LucideIcons.download),
     ];
     return SizedBox(
@@ -154,6 +156,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'automod' => _AutomodPanel(store),
         'webhooks' => _WebhooksPanel(store),
         'bots' => _BotsPanel(store),
+        'sfx' => SoundLabPanel(store),
         'updates' => _UpdatesPanel(store),
         _ => const SizedBox.shrink(),
       };

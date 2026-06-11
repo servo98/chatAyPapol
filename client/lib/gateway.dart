@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'sfx.dart';
 
 /// Conexión WS al gateway con reconexión automática y heartbeat.
 class Gateway {
@@ -9,6 +10,9 @@ class Gateway {
   Timer? _reconnect;
   bool _closed = false;
   String _url = '';
+  // Estado de conexión SOLO para disparar SFX en transiciones reales (onStatus
+  // se llama en cada mensaje, así que no sirve para detectar el flanco).
+  bool _sfxConnected = false;
 
   void Function(String t, dynamic d)? onEvent;
   void Function(bool connected)? onStatus;
@@ -26,6 +30,11 @@ class Gateway {
     _ch = ch;
     ch.stream.listen((raw) {
       onStatus?.call(true);
+      // SFX solo en el flanco: primer mensaje tras (re)conectar.
+      if (!_sfxConnected) {
+        _sfxConnected = true;
+        SfxService.instance.play(UiSound.connected);
+      }
       final msg = jsonDecode(raw as String);
       if (msg['t'] != 'PONG') onEvent?.call(msg['t'], msg['d']);
     }, onDone: _scheduleReconnect, onError: (_) => _scheduleReconnect());
@@ -35,6 +44,12 @@ class Gateway {
 
   void _scheduleReconnect() {
     onStatus?.call(false);
+    // SFX solo si veníamos conectados: evita ruido en reintentos en bucle
+    // (el flag no se rearma hasta que llega de nuevo el primer mensaje).
+    if (_sfxConnected) {
+      _sfxConnected = false;
+      SfxService.instance.play(UiSound.disconnected);
+    }
     if (_closed) return;
     _reconnect?.cancel();
     _reconnect = Timer(const Duration(seconds: 3), _open);
@@ -48,6 +63,7 @@ class Gateway {
 
   void dispose() {
     _closed = true;
+    _sfxConnected = false; // logout intencional: no suena 'desconectado'
     _heartbeat?.cancel();
     _reconnect?.cancel();
     _ch?.sink.close();

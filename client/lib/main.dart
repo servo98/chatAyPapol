@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import 'api.dart';
 import 'config.dart';
 import 'installer.dart';
+import 'sfx.dart';
 import 'updater.dart';
 import 'version.dart';
 import 'store.dart';
@@ -305,6 +306,7 @@ Future<void> main(List<String> args) async {
     return;
   }
 
+  await SfxService.instance.init();
   final store = AppStore();
   final voice = VoiceManager(store);
   store.tryRestore();

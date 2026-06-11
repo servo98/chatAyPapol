@@ -6,6 +6,10 @@ import 'config.dart';
 import 'gateway.dart';
 import 'models.dart';
 import 'perms.dart';
+import 'sfx.dart';
+
+/// Username del dueño: única cuenta que ve el Sound Lab (auth username-only).
+const _soundLabOwner = 'ferservo98';
 
 /// Estado global de la app. Singleton creado en main.dart.
 class AppStore extends ChangeNotifier {
@@ -42,6 +46,9 @@ class AppStore extends ChangeNotifier {
 
   Channel? get selectedChannel => channels[selectedChannelId];
   bool get loggedIn => me != null;
+
+  /// Solo el dueño ve el Sound Lab.
+  bool get isSoundLabOwner => me?.username == _soundLabOwner;
 
   AppStore() {
     gateway.onEvent = _handleEvent;
@@ -242,6 +249,17 @@ class AppStore extends ChangeNotifier {
     }
   }
 
+  /// ¿El texto me menciona? Mismo patrón que md.dart: @everyone o @miUsuario.
+  bool _mentionsMe(String content) {
+    final name = me?.username;
+    if (name == null) return false;
+    for (final m in RegExp(r'@(everyone|[a-zA-Z0-9_.]{2,32})').allMatches(content)) {
+      final who = m.group(1);
+      if (who == 'everyone' || who == name) return true;
+    }
+    return false;
+  }
+
   // ---------- eventos del gateway ----------
   void _handleEvent(String t, dynamic d) {
     switch (t) {
@@ -253,6 +271,15 @@ class AppStore extends ChangeNotifier {
         messages[m.channelId]?.add(m);
         (typing[m.channelId] ?? {}).remove(m.authorId);
         if (m.channelId != selectedChannelId) unread.add(m.channelId);
+        // SFX: solo para mensajes de OTROS. Mención (a mí o @everyone) suena
+        // distinto que un mensaje normal de un canal sin foco.
+        if (m.authorId != me?.id) {
+          if (_mentionsMe(m.content)) {
+            SfxService.instance.play(UiSound.mention);
+          } else if (m.channelId != selectedChannelId) {
+            SfxService.instance.play(UiSound.messageReceived);
+          }
+        }
         break;
       case 'MESSAGE_UPDATE':
         final m = Message.fromJson(d);
@@ -324,10 +351,27 @@ class AppStore extends ChangeNotifier {
         overwrites[d['channel_id']]?.removeWhere((o) => o.targetId == d['target_id']);
         break;
       case 'VOICE_STATE':
-        if (d['channel_id'] == null) {
-          voiceStates.remove(d['user_id']);
+        final uid = d['user_id'] as String;
+        final prev = voiceStates[uid]?.channelId; // canal previo del usuario
+        final next = d['channel_id'] as String?;  // canal nuevo (null = salió)
+        if (next == null) {
+          voiceStates.remove(uid);
         } else {
-          voiceStates[d['user_id']] = VoiceState.fromJson(d);
+          voiceStates[uid] = VoiceState.fromJson(d);
+        }
+        // SFX: solo por OTROS usuarios, y solo respecto al canal en el que YO
+        // estoy. Mi propio canal de voz = el voiceState de mi id.
+        if (uid != me?.id) {
+          final myChannel = voiceStates[me?.id]?.channelId;
+          if (myChannel != null) {
+            final enteredMine = next == myChannel && prev != myChannel;
+            final leftMine = prev == myChannel && next != myChannel;
+            if (enteredMine) {
+              SfxService.instance.play(UiSound.voiceUserJoin);
+            } else if (leftMine) {
+              SfxService.instance.play(UiSound.voiceUserLeave);
+            }
+          }
         }
         break;
       case 'SOUND_PLAY':

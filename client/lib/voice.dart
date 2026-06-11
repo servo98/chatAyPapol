@@ -7,12 +7,44 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart' as m;
 import 'store.dart';
+import 'sfx.dart';
+
+/// Un screenshare remoto visible: track de video + quién lo comparte.
+/// Se usa para el grid y para el modo pantalla completa.
+class ScreenShare {
+  final VideoTrack track;
+  final String identity;
+  final String? name;
+  const ScreenShare(
+      {required this.track, required this.identity, this.name});
+}
 
 /// livekit no trae preset de screenshare a 60fps; 1080p60 fluido necesita
 /// más bitrate que el preset de 30fps (4Mbps) para no verse borroso.
 const _share1080FPS60 = VideoParameters(
   dimensions: VideoDimensionsPresets.h1080_169,
   encoding: VideoEncoding(maxBitrate: 8000 * 1000, maxFramerate: 60),
+);
+
+/// Publicación del MICRO: voz clara pero económica. dtx/red ON (ahorra ancho
+/// de banda en silencios y resiste pérdida de paquetes), 96kbps. Va por
+/// RoomOptions.defaultAudioPublishOptions porque setMicrophoneEnabled en
+/// livekit 2.8.0 NO acepta audioPublishOptions (solo audioCaptureOptions).
+const _micPublishOptions = AudioPublishOptions(
+  dtx: true,
+  red: true,
+  encoding: AudioEncoding.presetMusicHighQuality, // 96kbps
+);
+
+/// Publicación del AUDIO DEL SISTEMA (screenshare): ALTA FIDELIDAD ESTÉREO
+/// FIJA. dtx:false y red:false (no recortar en "silencios" musicales ni meter
+/// redundancia que enturbie), 128kbps estéreo. NO se puede setear por
+/// RoomOptions (eso también afectaría al micro): se publica el track a mano
+/// con estas opciones en startShare. Esto arregla el "se oye lejano".
+const _sharePublishOptions = AudioPublishOptions(
+  dtx: false,
+  red: false,
+  encoding: AudioEncoding.presetMusicHighQualityStereo, // 128kbps estéreo
 );
 
 VideoParameters _shareParamsFor(int fps) => switch (fps) {
@@ -58,6 +90,9 @@ class VoiceManager extends ChangeNotifier {
   // Volumen POR USUARIO (identity → 0.0..2.0; 1.0 = normal). Persistido en
   // local: si te encuentras a la misma persona en otro canal, se respeta.
   final userVolumes = <String, double>{};
+  // Volumen del AUDIO DEL SCREENSHARE por usuario (identity → 0.0..2.0),
+  // SEPARADO del volumen del micro. Persistido en local igual que userVolumes.
+  final shareVolumes = <String, double>{};
 
   bool get connected => room != null && channelId != null;
 
@@ -91,6 +126,13 @@ class VoiceManager extends ChangeNotifier {
             (k, v) => userVolumes[k] = (v as num).toDouble().clamp(0.0, 2.0));
       }
     } catch (_) {}
+    try {
+      final raw = prefs.getString('voice_share_volumes');
+      if (raw != null) {
+        (jsonDecode(raw) as Map<String, dynamic>).forEach(
+            (k, v) => shareVolumes[k] = (v as num).toDouble().clamp(0.0, 2.0));
+      }
+    } catch (_) {}
     notifyListeners();
   }
 
@@ -107,6 +149,21 @@ class VoiceManager extends ChangeNotifier {
   }
 
   double userVolume(String identity) => userVolumes[identity] ?? 1.0;
+
+  /// Volumen del AUDIO DEL SCREENSHARE de [identity] (0.0..2.0). Independiente
+  /// del volumen del micro de esa persona. Se guarda en local y se aplica ya.
+  Future<void> setShareVolume(String identity, double v) async {
+    v = v.clamp(0.0, 2.0);
+    (v - 1.0).abs() < 0.01
+        ? shareVolumes.remove(identity)
+        : shareVolumes[identity] = v;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('voice_share_volumes', jsonEncode(shareVolumes));
+    _applyOutputVolumeAll();
+    notifyListeners();
+  }
+
+  double shareVolume(String identity) => shareVolumes[identity] ?? 1.0;
 
   Future<void> _saveMicPrefs() async {
     final prefs = await SharedPreferences.getInstance();
@@ -182,12 +239,18 @@ class VoiceManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _applyOutputVolume(Track t, String identity) {
+  /// Aplica el volumen de salida a UNA publicación de audio remota,
+  /// distinguiendo la fuente: el audio del SCREENSHARE usa shareVolume(identity)
+  /// y el MICRO usa userVolume(identity) — son dos sliders distintos.
+  void _applyOutputVolume(RemoteTrackPublication pub, String identity) {
+    final t = pub.track;
     if (t is! RemoteAudioTrack) return;
+    final perUser = pub.source == TrackSource.screenShareAudio
+        ? shareVolume(identity)
+        : userVolume(identity);
     try {
       rtc.Helper.setVolume(
-          (outputVolume * userVolume(identity)).clamp(0.0, 2.0),
-          t.mediaStreamTrack);
+          (outputVolume * perUser).clamp(0.0, 2.0), t.mediaStreamTrack);
     } catch (_) {}
   }
 
@@ -196,8 +259,7 @@ class VoiceManager extends ChangeNotifier {
     if (r == null) return;
     for (final p in r.remoteParticipants.values) {
       for (final pub in p.audioTrackPublications) {
-        final t = pub.track;
-        if (t != null) _applyOutputVolume(t, p.identity);
+        if (pub.track != null) _applyOutputVolume(pub, p.identity);
       }
     }
   }
@@ -214,6 +276,11 @@ class VoiceManager extends ChangeNotifier {
           adaptiveStream: true,
           dynacast: true,
           defaultAudioCaptureOptions: micOptions,
+          // publicación del micro (96kbps, dtx/red ON): setMicrophoneEnabled no
+          // acepta publish options en 2.8.0, así que se gobierna desde aquí.
+          // El audio del screenshare NO usa este default (se publica a mano en
+          // startShare con opciones de alta fidelidad estéreo).
+          defaultAudioPublishOptions: _micPublishOptions,
           // captureScreenAudio va por llamada en startShare (opt-in): el
           // loopback de audio en Windows puede crashear el capturador nativo
           // maxFrameRate explícito SIEMPRE: si queda null, livekit manda
@@ -256,7 +323,7 @@ class VoiceManager extends ChangeNotifier {
         })
         ..on<RoomDisconnectedEvent>((_) => _cleanup())
         ..on<TrackSubscribedEvent>((e) {
-          _applyOutputVolume(e.track, e.participant.identity);
+          _applyOutputVolume(e.publication, e.participant.identity);
           notifyListeners();
         })
         ..on<TrackUnsubscribedEvent>((_) => notifyListeners())
@@ -341,12 +408,25 @@ class VoiceManager extends ChangeNotifier {
         await applyMicOptions();
       }
     } catch (_) {}
+    // SFX solo si el usuario lo hizo a mano (no cuando el mute viene del deafen,
+    // que ya suena con su propio selfDeafen).
+    if (!fromDeafen) {
+      SfxService.instance.play(muted ? UiSound.selfMute : UiSound.selfUnmute);
+    }
     store.gateway.send('VOICE_STATE', {'mute': muted});
     notifyListeners();
   }
 
   Future<void> toggleDeafen() async {
     deafened = !deafened;
+    // SfxService.muted sigue a deafened para callar todos los avisos mientras
+    // estás sordo. Orden cuidado para que el propio aviso de (des)ensordecer SÍ
+    // suene: al des-ensordecer abrimos el SFX ANTES de reproducir el undeafen;
+    // al ensordecer reproducimos el deafen ANTES de silenciar.
+    if (!deafened) SfxService.instance.muted = false;
+    SfxService.instance
+        .play(deafened ? UiSound.selfDeafen : UiSound.selfUndeafen);
+    if (deafened) SfxService.instance.muted = true;
     if (deafened) {
       // al ensordecer, cierra el micro si estaba abierto y recuerda que fuimos
       // nosotros, para poder restaurarlo al desensordecer.
@@ -397,30 +477,57 @@ class VoiceManager extends ChangeNotifier {
   /// 15, 30 o 60 (1080p en todos).
   Future<void> startShare(rtc.DesktopCapturerSource source,
       {bool withAudio = false, int fps = 60}) async {
+    final lp = room?.localParticipant;
+    if (lp == null) return;
     // el plugin solo captura fuentes de la ÚLTIMA enumeración (getSources
     // limpia la lista nativa) y el selector enumera ventanas al final: hay que
     // re-enumerar el tipo elegido aquí o getDisplayMedia da "source not found"
     await rtc.desktopCapturer.getSources(types: [source.type]);
-    await room?.localParticipant?.setScreenShareEnabled(
-      true,
-      // OJO: livekit revisa este PARÁMETRO (no el campo de las opciones)
-      // para crear y publicar el track de audio del sistema (loopback)
+    // captureOptions con el fix de crash de Windows intacto: maxFrameRate
+    // SIEMPRE explícito (null → fastfail en ParseConstraints del plugin C++).
+    final captureOptions = ScreenShareCaptureOptions(
+      sourceId: source.id,
       captureScreenAudio: withAudio,
-      screenShareCaptureOptions: ScreenShareCaptureOptions(
-        sourceId: source.id,
-        captureScreenAudio: withAudio,
-        // null aquí mata el proceso en Windows (mandatory frameRate:null →
-        // fastfail en ParseConstraints del plugin C++); ver RoomOptions.
-        maxFrameRate: fps.toDouble(),
-        params: _shareParamsFor(fps),
-      ),
+      maxFrameRate: fps.toDouble(),
+      params: _shareParamsFor(fps),
     );
+    if (withAudio) {
+      // ALTA FIDELIDAD: setScreenShareEnabled(captureScreenAudio:true) publica
+      // el audio del sistema con AudioPublishOptions por defecto (48kbps mono,
+      // dtx/red ON) → "se oye lejano". livekit 2.8.0 no deja pasar opciones de
+      // publicación del audio del screenshare ni por parámetro ni post-publish
+      // sin re-publicar, así que se publican AMBOS tracks a mano:
+      // createScreenShareTracksWithAudio captura video+audio en UNA sola
+      // getDisplayMedia (en loopback no se pueden separar) usando el MISMO
+      // captureOptions (fix de crash preservado), y aquí se publica el audio
+      // con _sharePublishOptions (128kbps estéreo, dtx/red OFF).
+      final tracks =
+          await LocalVideoTrack.createScreenShareTracksWithAudio(captureOptions);
+      for (final t in tracks) {
+        if (t is LocalVideoTrack) {
+          await lp.publishVideoTrack(t,
+              publishOptions: const VideoPublishOptions(simulcast: false));
+        } else if (t is LocalAudioTrack) {
+          await lp.publishAudioTrack(t, publishOptions: _sharePublishOptions);
+        }
+      }
+    } else {
+      // sin audio: ruta probada de siempre (un solo track de video).
+      await lp.setScreenShareEnabled(
+        true,
+        captureScreenAudio: false,
+        screenShareCaptureOptions: captureOptions,
+      );
+    }
     sharing = true;
     store.gateway.send('VOICE_STATE', {'streaming': true});
     notifyListeners();
   }
 
   Future<void> stopShare() async {
+    // setScreenShareEnabled(false) quita el track de video Y busca/quita el de
+    // screenShareAudio por source, así que esto cierra también el audio que
+    // publicamos a mano en startShare (mismo source = screenShareAudio).
     await room?.localParticipant?.setScreenShareEnabled(false);
     sharing = false;
     store.gateway.send('VOICE_STATE', {'streaming': false});
@@ -454,6 +561,27 @@ class VoiceManager extends ChangeNotifier {
       if (t != null) tracks.add(t as VideoTrack);
     }
     return tracks;
+  }
+
+  /// Screenshares REMOTOS visibles, con quién comparte (para fullscreen y para
+  /// el slider de volumen del screenshare). Filtra por source para distinguir
+  /// el screenshare de una cámara.
+  List<ScreenShare> get screenShares {
+    final r = room;
+    if (r == null) return [];
+    final out = <ScreenShare>[];
+    for (final p in r.remoteParticipants.values) {
+      for (final pub in p.videoTrackPublications) {
+        final t = pub.track;
+        if (t != null &&
+            pub.subscribed &&
+            pub.source == TrackSource.screenShareVideo) {
+          out.add(ScreenShare(
+              track: t, identity: p.identity, name: p.name.isEmpty ? null : p.name));
+        }
+      }
+    }
+    return out;
   }
 
   @override

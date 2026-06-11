@@ -8,6 +8,7 @@ import '../perms.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../voice.dart';
+import 'screenshare_fullscreen.dart';
 import 'widgets.dart';
 
 /// Vista principal cuando el canal seleccionado es de voz:
@@ -28,6 +29,9 @@ class VoicePanel extends StatelessWidget {
       builder: (ctx, _) {
         final users = store.voiceUsersIn(channel.id);
         final videos = joinedHere ? voice.videoTracks : const <VideoTrack>[];
+        // screenshares REMOTOS enriquecidos (track + identity + nombre) para
+        // poder abrir fullscreen y controlar su volumen
+        final shares = joinedHere ? voice.screenShares : const <ScreenShare>[];
         return Container(
           color: Pal.bg0,
           child: Column(
@@ -35,7 +39,7 @@ class VoicePanel extends StatelessWidget {
               _header(),
               Expanded(
                 child: videos.isNotEmpty
-                    ? _withScreenshare(videos, users)
+                    ? _withScreenshare(context, videos, shares, users)
                     : _tilesOnly(users),
               ),
               _controls(context),
@@ -57,15 +61,63 @@ class VoicePanel extends StatelessWidget {
         ]),
       );
 
-  Widget _withScreenshare(List<VideoTrack> videos, List<m.VoiceState> users) {
+  Widget _withScreenshare(BuildContext context, List<VideoTrack> videos,
+      List<ScreenShare> shares, List<m.VoiceState> users) {
+    final main = videos.first;
+    // si el video principal es un screenshare remoto, tenemos su info para
+    // abrir fullscreen y su volumen; si es el share local, share == null.
+    ScreenShare? share;
+    for (final s in shares) {
+      if (s.track == main) {
+        share = s;
+        break;
+      }
+    }
+    void openFullscreen() {
+      final s = share;
+      if (s == null) return;
+      Navigator.of(context).push(MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => ScreenShareFullscreen(
+          track: s.track,
+          identity: s.identity,
+          name: s.name,
+          voice: voice,
+        ),
+      ));
+    }
+
     return Column(children: [
       Expanded(
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: VideoTrackRenderer(videos.first,
-                fit: VideoViewFit.contain),
+            // doble-clic para entrar a pantalla completa (solo screenshare
+            // remoto) + botón flotante de expandir
+            child: GestureDetector(
+              onDoubleTap: share != null ? openFullscreen : null,
+              child: Stack(children: [
+                Positioned.fill(
+                  child: VideoTrackRenderer(main, fit: VideoViewFit.contain),
+                ),
+                if (share != null)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Material(
+                      color: Colors.black54,
+                      shape: const CircleBorder(),
+                      child: IconButton(
+                        tooltip: 'Pantalla completa',
+                        icon: const Icon(LucideIcons.expand,
+                            size: 18, color: Pal.text),
+                        onPressed: openFullscreen,
+                      ),
+                    ),
+                  ),
+              ]),
+            ),
           ),
         ),
       ),
