@@ -18,9 +18,43 @@
       - dart: `flutter pub get` + `flutter analyze lib/audio` → **No issues found!** (sin bugs; el único "Float32List" era falso positivo, foundation lo reexporta vía serialization.dart).
       - flutter de Windows desde WSL: `cmd.exe /c '... C:\src\flutter\bin\flutter.bat ...'`. Native build Linux: `cmake -S client/native/voicefx -B build && cmake --build build`.
 - [x] #3 Redactar prompt UX para Claude Design — HECHO (ver abajo), pendiente pasarlo
-- [ ] #4 Subsistema de ambiente de sala sincronizado (gateway, no WebRTC) — PENDIENTE
-- [ ] (futuro) Implementar la UI del motor cuando vuelva el diseño de Claude Design
+- [x] #4 Subsistema de ambiente de sala sincronizado (gateway, no WebRTC) — IMPLEMENTADO Y COMMITEADO (6a7649f). Ver sección abajo.
+- [ ] (futuro) Implementar la UI del motor de efectos cuando vuelva el diseño de Claude Design
+- [ ] (diseño) Reemplazar el control TEMP de ambiente en voice_panel.dart (_ambience) por el diseño de Claude Design
 - [ ] (merge) Cablear vfx_process en el capture-hook nativo al integrar con el fork RNNoise (ver client/docs/voice-fx-integration.md)
+
+## AMBIENTE DE SALA — IMPLEMENTADO (commit 6a7649f)
+Cama de sonido compartida por canal de voz. NO va por WebRTC: clip bundleado +
+sincronía por gateway.
+- Flujo: cliente envía `AMBIENCE_SET/STOP/PAUSE {channel_id,...}` → server valida
+  (estar en el canal + permiso USE_SOUNDBOARD) y hace broadcast `AMBIENCE_STATE
+  {channel_id, ambience_id, started_at, paused, paused_at?}` al canal. Cada cliente
+  reproduce el clip local en loop y hace seek a la posición derivada de started_at.
+- Server (server/src/gateway.ts): `roomAmbience` en memoria por canal, handlers,
+  `ambience_states` en el snapshot READY (late joiners sincronizan), y limpieza al
+  vaciarse el canal (cleanupAmbience).
+- Cliente: `lib/ambience.dart` (AmbienceService: loop, seek-sync, volumen propio
+  persistido), `AmbienceState` en models, `ambienceStates`+`onAmbienceChange` en
+  store, enganche en voice.dart (join/leave/deafen + setAmbience/stopAmbience/
+  toggleAmbiencePause), e init en main.dart.
+- Assets: 6 clips loopables en client/assets/ambience/ (rain, ocean, wind, fire,
+  cave, scifi) generados por client/scripts/gen_ambience.py + ambience_manifest.json.
+  Sustituibles por un pack royalty-free con los mismos nombres (freesound.org CC0).
+- UI: control TEMP funcional en voice_panel.dart (botón "Ambiente de sala" → hoja
+  con catálogo, pausar/detener, slider de volumen). Reemplazar por Claude Design.
+- VERIFICADO: flutter analyze lib = limpio; gateway.ts transpila; clips generados.
+  PENDIENTE de prueba en vivo: sincronía real con server+LiveKit corriendo.
+- LIMITACIÓN conocida: la sincronía usa el reloj LOCAL como proxy del reloj del
+  server (sin estimar offset). Para una cama en loop es suficiente; mejora futura:
+  estimar el offset cliente-server con el round-trip de PING/PONG del gateway.
+
+### Cómo probar el ambiente (cuando levantes server + cliente)
+1. Server: `cd server && bun install && bun run dev` (+ LiveKit: `bun run livekit`).
+2. Cliente: `cd client && flutter run -d windows` (o linux).
+3. Entra a un canal de VOZ, pulsa el botón "Ambiente de sala" (icono de olas) en
+   la barra de controles → elige un ambiente. Debe sonar en loop para todos los del
+   canal. Probar pausar/reanudar, detener, slider de volumen, y que un segundo
+   cliente que entra tarde caiga sincronizado.
 - [ ] (futuro) Implementar la UI cuando vuelva el diseño
 
 ---
