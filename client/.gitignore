@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Pack de sonidos PAGADO — bodega local del Sound Lab, NO va al repo (público).
+# El bake (gen_sfx.dart) copia solo los elegidos a assets/sfx/.
+/lib/sounds/
