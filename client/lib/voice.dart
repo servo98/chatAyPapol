@@ -372,13 +372,21 @@ class VoiceManager extends ChangeNotifier {
         await r.localParticipant
             ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
       } catch (_) {/* sin permiso SPEAK: solo escucha */}
-      // Reaplicar RNNoise (el APM es global; el estado persistido se reactiva
-      // en cada sesión tras publicar el micro).
-      debugPrint('[voice] aplicando RNNoise=$rnnoise');
-      await WebrtcApm.setRnnoise(rnnoise);
-      // Reaplicar la cadena de efectos al nuevo track publicado (APM global).
-      debugPrint('[voice] aplicando voicefx');
-      await _pushVoiceFx();
+      // Post-procesado nativo del micro (RNNoise + efectos de voz). Tocar
+      // SetCapturePostProcessing del fork de WebRTC CRASHEA el proceso en
+      // Windows (desajuste de ABI con el libwebrtc prebuilt), incluso pasando
+      // null para "desactivar". En un proceso recién arrancado el APM ya está
+      // en su estado por defecto (sin post-procesado), así que NO hay nada que
+      // reaplicar salvo que el usuario tenga RNNoise o los FX encendidos: solo
+      // entonces llamamos al nativo. Esto destraba entrar a voz por defecto.
+      if (rnnoise) {
+        debugPrint('[voice] aplicando RNNoise=$rnnoise');
+        await WebrtcApm.setRnnoise(rnnoise);
+      }
+      if (VoiceFxEngine.instance.enabled) {
+        debugPrint('[voice] aplicando voicefx');
+        await _pushVoiceFx();
+      }
       debugPrint('[voice] join OK');
       _startSelfSpeaking();
       store.gateway.send('VOICE_JOIN', {'channel_id': chId, 'mute': muted, 'deaf': deafened});
