@@ -467,12 +467,25 @@ class VoicePanel extends StatelessWidget {
                 ElevatedButton.icon(
                   onPressed:
                       voice.connecting ? null : () => voice.join(channel.id),
-                  icon: const Icon(LucideIcons.headphones, size: 18),
+                  icon: voice.connecting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Pal.greenInk),
+                        )
+                      : const Icon(LucideIcons.headphones, size: 18),
                   label: Text(
                       voice.connecting ? 'conectando…' : '❯ unirse a la voz'),
+                  // Estado "conectando" = deshabilitado: sin estos colores,
+                  // Material pinta texto/ícono desvaídos sobre el verde
+                  // (ilegible). Lo mantenemos verde con tinta oscura legible.
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: Pal.accentDim,
-                      foregroundColor: Pal.greenInk),
+                    backgroundColor: Pal.accentDim,
+                    foregroundColor: Pal.greenInk,
+                    disabledBackgroundColor: Pal.accentDim.withValues(alpha: .65),
+                    disabledForegroundColor: Pal.greenInk,
+                  ),
                 ),
               ],
       ),

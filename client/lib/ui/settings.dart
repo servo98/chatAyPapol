@@ -13,6 +13,7 @@ import '../store.dart';
 import '../theme.dart';
 import '../updater.dart';
 import '../version.dart';
+import '../webrtc_apm.dart';
 import 'totp.dart';
 import '../voice.dart';
 import 'bootstrap_runner.dart';
@@ -398,6 +399,7 @@ class _VoicePanelState extends State<_VoicePanel> {
   VoiceManager get voice => widget.voice;
 
   List<lk.MediaDevice> inputs = [];
+  List<lk.MediaDevice> outputs = [];
   StreamSubscription<List<lk.MediaDevice>>? _devSub;
 
   // Prueba de micro: track local SIN sala (o el publicado si ya hay voz).
@@ -444,8 +446,14 @@ class _VoicePanelState extends State<_VoicePanel> {
   }
 
   Future<void> _loadDevices() async {
-    final devs = await lk.Hardware.instance.audioInputs();
-    if (mounted) setState(() => inputs = devs);
+    final ins = await lk.Hardware.instance.audioInputs();
+    final outs = await lk.Hardware.instance.audioOutputs();
+    if (mounted) {
+      setState(() {
+        inputs = ins;
+        outputs = outs;
+      });
+    }
   }
 
   /// Crea (si hace falta) el track de prueba y su visualizer. Si la época
@@ -607,6 +615,56 @@ class _VoicePanelState extends State<_VoicePanel> {
                   inputs.where((d) => d.deviceId == id).firstOrNull;
               await _applyMicChange(() => voice.setMicDevice(dev));
             },
+          ),
+          const SizedBox(height: 20),
+          // ── DISPOSITIVO DE SALIDA (altavoces/auriculares) ──
+          const Text('DISPOSITIVO DE SALIDA', style: _label),
+          const SizedBox(height: 6),
+          Builder(builder: (ctx) {
+            final outVal = outputs.any((d) => d.deviceId == voice.outputDeviceId)
+                ? voice.outputDeviceId
+                : null;
+            return DropdownButtonFormField<String?>(
+              key: ValueKey<String?>('out_$outVal'),
+              initialValue: outVal,
+              dropdownColor: Pal.bg0,
+              style: const TextStyle(fontSize: 13.5, color: Pal.text),
+              items: [
+                const DropdownMenuItem<String?>(
+                    value: null, child: Text('Predeterminado del sistema')),
+                ...outputs.map((d) => DropdownMenuItem<String?>(
+                      value: d.deviceId,
+                      child: Text(d.label.isEmpty ? d.deviceId : d.label,
+                          overflow: TextOverflow.ellipsis),
+                    )),
+              ],
+              onChanged: (id) async {
+                final dev = outputs.where((d) => d.deviceId == id).firstOrNull;
+                await voice.setOutputDevice(dev);
+              },
+            );
+          }),
+          const SizedBox(height: 6),
+          const Text('Por dónde oyes a los demás. El monitor "escucharme" usa '
+              'el dispositivo PREDETERMINADO de Windows.',
+              style: TextStyle(color: Pal.faint, fontSize: 12)),
+          const SizedBox(height: 20),
+          // ── ESCUCHARME (monitor local) ──
+          const Text('ESCUCHARME (MONITOR)', style: _label),
+          ListenableBuilder(
+            listenable: VoiceMonitor.instance,
+            builder: (ctx, _) => SwitchListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              activeTrackColor: Pal.accent,
+              value: VoiceMonitor.instance.on,
+              onChanged: (v) => VoiceMonitor.instance.set(v),
+              title: const Text('Oírme a mí mismo con los efectos'),
+              subtitle: const Text(
+                  'Reproduce tu micro (ya procesado) en tus altavoces. Solo suena '
+                  'dentro de un canal de voz. Usa AURICULARES para evitar eco.',
+                  style: TextStyle(color: Pal.faint, fontSize: 11.5)),
+            ),
           ),
           const SizedBox(height: 20),
           const Text('PROBAR MICRÓFONO', style: _label),

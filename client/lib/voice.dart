@@ -101,6 +101,9 @@ class VoiceManager extends ChangeNotifier {
 
   // Opciones de micrófono persistidas (ajustes de "Voz y micrófono").
   String? micDeviceId;
+  // Dispositivo de SALIDA (altavoces/auriculares) por el que se oye a los demás.
+  // null = predeterminado del sistema. Persistido y reaplicado en cada join.
+  String? outputDeviceId;
   bool noiseSuppression = true;
   bool echoCancellation = true;
   bool autoGainControl = true;
@@ -138,6 +141,7 @@ class VoiceManager extends ChangeNotifier {
   Future<void> _loadPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     micDeviceId = prefs.getString('mic_device_id');
+    outputDeviceId = prefs.getString('output_device_id');
     noiseSuppression = prefs.getBool('mic_noise_suppression') ?? true;
     echoCancellation = prefs.getBool('mic_echo_cancellation') ?? true;
     autoGainControl = prefs.getBool('mic_auto_gain') ?? true;
@@ -220,6 +224,37 @@ class VoiceManager extends ChangeNotifier {
     await _saveMicPrefs();
     await applyMicOptions();
     notifyListeners();
+  }
+
+  /// Cambia el dispositivo de SALIDA (null = predeterminado del sistema). Aplica
+  /// el playout de los tracks remotos a ese dispositivo y lo persiste.
+  Future<void> setOutputDevice(MediaDevice? device) async {
+    outputDeviceId = device?.deviceId;
+    final prefs = await SharedPreferences.getInstance();
+    outputDeviceId == null
+        ? await prefs.remove('output_device_id')
+        : await prefs.setString('output_device_id', outputDeviceId!);
+    if (device != null) {
+      try {
+        await Hardware.instance.selectAudioOutput(device); // solo desktop
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  /// Reaplica el dispositivo de salida guardado (en cada join: el playout se
+  /// resetea al predeterminado al crear la sala).
+  Future<void> _applyOutputDevice() async {
+    final id = outputDeviceId;
+    if (id == null) return;
+    try {
+      final outs = await Hardware.instance.audioOutputs();
+      MediaDevice? dev;
+      for (final d in outs) {
+        if (d.deviceId == id) { dev = d; break; }
+      }
+      if (dev != null) await Hardware.instance.selectAudioOutput(dev);
+    } catch (_) {}
   }
 
   Future<void> setNoiseSuppression(bool v) =>
@@ -387,6 +422,9 @@ class VoiceManager extends ChangeNotifier {
         debugPrint('[voice] aplicando voicefx');
         await _pushVoiceFx();
       }
+      // reaplica el dispositivo de salida elegido (el playout se resetea al
+      // predeterminado al crear la sala)
+      await _applyOutputDevice();
       debugPrint('[voice] join OK');
       _startSelfSpeaking();
       store.gateway.send('VOICE_JOIN', {'channel_id': chId, 'mute': muted, 'deaf': deafened});

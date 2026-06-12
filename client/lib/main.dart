@@ -329,6 +329,12 @@ Future<void> _main(List<String> args) async {
     await _diagVoiceFx();
     return;
   }
+  // Desinstalación (la invoca Windows con la UninstallString del registro):
+  // limpia registro + accesos directos y borra la carpeta. Headless, sin UI.
+  if (args.contains('--uninstall')) {
+    await Bootstrap.uninstall();
+    return;
+  }
   if (_desktop) {
     // tras una actualización quedan los binarios viejos como *.old (el swap
     // in-process los aparta porque estaban en uso): bórralos sin bloquear
@@ -375,6 +381,12 @@ Future<void> _main(List<String> args) async {
       (!args.contains('--no-install') && Bootstrap.needsInstall())) {
     runApp(const _BootstrapApp(child: BootstrapRunner(install: true)));
     return;
+  }
+
+  // App instalada corriendo desde su carpeta: asegura la entrada de
+  // "Desinstalar" (idempotente; auto-repara instalaciones viejas sin la clave).
+  if (Platform.isWindows && !Bootstrap.needsInstall()) {
+    unawaited(Bootstrap.ensureUninstallEntry());
   }
 
   await SfxService.instance.init();
