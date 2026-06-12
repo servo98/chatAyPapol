@@ -300,10 +300,12 @@ class VoiceManager extends ChangeNotifier {
 
   Future<void> join(String chId) async {
     if (channelId == chId) return;
+    debugPrint('[voice] join canal=$chId — leave previo');
     await leave();
     connecting = true;
     notifyListeners();
     try {
+      debugPrint('[voice] pidiendo voice-token');
       final t = await store.api.post('/api/channels/$chId/voice-token');
       final r = Room(
         roomOptions: RoomOptions(
@@ -330,7 +332,9 @@ class VoiceManager extends ChangeNotifier {
               const VideoPublishOptions(simulcast: false),
         ),
       );
+      debugPrint('[voice] conectando a LiveKit…');
       await r.connect(t['url'], t['token']);
+      debugPrint('[voice] conectado; montando listeners');
       room = r;
       channelId = chId;
       _listener = r.createListener()
@@ -364,14 +368,18 @@ class VoiceManager extends ChangeNotifier {
         ..on<ParticipantConnectedEvent>((_) => notifyListeners())
         ..on<ParticipantDisconnectedEvent>((_) => notifyListeners());
       try {
+        debugPrint('[voice] publicando micro (mute=$muted)');
         await r.localParticipant
             ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
       } catch (_) {/* sin permiso SPEAK: solo escucha */}
       // Reaplicar RNNoise (el APM es global; el estado persistido se reactiva
       // en cada sesión tras publicar el micro).
+      debugPrint('[voice] aplicando RNNoise=$rnnoise');
       await WebrtcApm.setRnnoise(rnnoise);
       // Reaplicar la cadena de efectos al nuevo track publicado (APM global).
+      debugPrint('[voice] aplicando voicefx');
       await _pushVoiceFx();
+      debugPrint('[voice] join OK');
       _startSelfSpeaking();
       store.gateway.send('VOICE_JOIN', {'channel_id': chId, 'mute': muted, 'deaf': deafened});
       // si el canal ya tenía un ambiente sonando, engánchate sincronizado

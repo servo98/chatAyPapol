@@ -6,6 +6,7 @@ import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:window_manager/window_manager.dart';
 import 'api.dart';
 import 'config.dart';
+import 'crash_log.dart';
 import 'installer.dart';
 import 'notifications.dart';
 import 'sfx.dart';
@@ -17,6 +18,7 @@ import 'store.dart';
 import 'theme.dart';
 import 'ui/bootstrap_runner.dart';
 import 'ui/bootstrap_screen.dart';
+import 'ui/crash_overlay.dart';
 import 'ui/login.dart';
 import 'ui/shell.dart';
 import 'ui/titlebar.dart';
@@ -247,8 +249,22 @@ Future<void> _diagUpdate() async {
   }
 }
 
+/// Punto de entrada: TODO corre dentro de un runZonedGuarded para que ningún
+/// error asíncrono se pierda — el CrashLog lo captura, lo persiste a disco y
+/// levanta el banner copiable. La inicialización del binding va DENTRO de la
+/// misma zona que runApp (Flutter avisa si no coinciden).
 Future<void> main(List<String> args) async {
+  runZonedGuarded(() => _main(args), (error, stack) {
+    CrashLog.instance.reportError(error, stack, fatal: true);
+  });
+}
+
+Future<void> _main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Lo más temprano posible: engancha debugPrint + errores globales y abre el
+  // archivo de log (rota la sesión anterior y detecta si crasheó).
+  await CrashLog.instance.init();
+  CrashLog.instance.install();
   if (args.contains('--diag')) {
     await _diag();
     return;
@@ -355,6 +371,9 @@ class _FocusListener extends WindowListener {
     try {
       await voice.leave().timeout(const Duration(seconds: 2));
     } catch (_) {}
+    // Marca el cierre como limpio: si la próxima sesión no ve este marcador,
+    // sabrá que la app murió de golpe (crash) y ofrecerá copiar esos logs.
+    CrashLog.instance.markCleanShutdown();
     try {
       await windowManager.setPreventClose(false);
       await windowManager.destroy();
@@ -374,16 +393,18 @@ class _FocusListener extends WindowListener {
 /// con normalidad en cada rebuild.
 Widget _withTitleBar(Widget? child) {
   final content = child ?? const SizedBox.shrink();
-  if (!_desktop) return content;
-  return Column(children: [
-    SizedBox(
-      height: 36,
-      child: Overlay(initialEntries: [
-        OverlayEntry(builder: (_) => const TitleBar()),
-      ]),
-    ),
-    Expanded(child: content),
-  ]);
+  if (!_desktop) return CrashOverlay(child: content);
+  return CrashOverlay(
+    child: Column(children: [
+      SizedBox(
+        height: 36,
+        child: Overlay(initialEntries: [
+          OverlayEntry(builder: (_) => const TitleBar()),
+        ]),
+      ),
+      Expanded(child: content),
+    ]),
+  );
 }
 
 class _BootstrapApp extends StatelessWidget {
