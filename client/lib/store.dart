@@ -8,6 +8,7 @@ import 'gateway.dart';
 import 'models.dart';
 import 'notifications.dart';
 import 'perms.dart';
+import 'package:window_manager/window_manager.dart';
 import 'sfx.dart';
 
 /// Username del dueño: única cuenta que ve el Sound Lab (auth username-only).
@@ -336,6 +337,29 @@ class AppStore extends ChangeNotifier {
     return false;
   }
 
+  /// Muestra el toast del SO y parpadea la barra de tareas, pero SOLO si la
+  /// ventana no tiene foco AHORA (consulta el estado real; el cache
+  /// windowFocused puede estar desactualizado si el evento de blur no llegó).
+  Future<void> _notifyOS(Message m) async {
+    bool focused;
+    try {
+      focused = await windowManager.isFocused();
+    } catch (_) {
+      focused = windowFocused; // fallback al cache si la consulta falla
+    }
+    if (focused) return;
+    final author = users[m.authorId]?.username ?? 'Alguien';
+    final chName = channels[m.channelId]?.name ?? 'canal';
+    var body = m.content.trim();
+    if (body.length > 140) body = '${body.substring(0, 140)}…';
+    await NotificationService.instance.show(
+      title: '$author en #$chName',
+      body: body,
+      channelId: m.channelId,
+    );
+    await NotificationService.instance.flashTaskbar();
+  }
+
   // ---------- eventos del gateway ----------
   void _handleEvent(String t, dynamic d) {
     switch (t) {
@@ -363,21 +387,15 @@ class AppStore extends ChangeNotifier {
               SfxService.instance.play(UiSound.messageReceived);
             }
           }
-          // Toast del SO: SOLO con la ventana sin foco (decisión del usuario).
+          // Toast del SO + parpadeo de la barra de tareas: SOLO con la ventana
+          // sin foco. Se decide con el foco REAL del SO (no el cache
+          // windowFocused, que quedaba en true si el evento de blur no llegaba →
+          // suprimía el toast aunque estuvieras en otra app). Ver _notifyOS.
           if (notificationsEnabled &&
               !dnd &&
-              !windowFocused &&
               mode != ChannelNotify.muted &&
               (isMention || mode == ChannelNotify.all)) {
-            final author = users[m.authorId]?.username ?? 'Alguien';
-            final chName = channels[m.channelId]?.name ?? 'canal';
-            var body = m.content.trim();
-            if (body.length > 140) body = '${body.substring(0, 140)}…';
-            NotificationService.instance.show(
-              title: '$author en #$chName',
-              body: body,
-              channelId: m.channelId,
-            );
+            unawaited(_notifyOS(m));
           }
         }
         break;

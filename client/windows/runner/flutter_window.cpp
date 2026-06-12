@@ -27,6 +27,29 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
+  // Canal 'chatpapol/window': Dart pide parpadear el botón de la barra de tareas
+  // cuando llega un mensaje notificable y la ventana no está al frente. El propio
+  // nativo verifica el foreground (a prueba de un windowFocused desincronizado en
+  // Dart) y solo parpadea si NO estamos al frente. FLASHW_TIMERNOFG deja de
+  // parpadear solo cuando el usuario trae la ventana al frente.
+  window_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(), "chatpapol/window",
+      &flutter::StandardMethodCodec::GetInstance());
+  window_channel_->SetMethodCallHandler(
+      [this](const auto& call, auto result) {
+        if (call.method_name() == "flashTaskbar") {
+          HWND hwnd = GetHandle();
+          if (hwnd && GetForegroundWindow() != hwnd) {
+            FLASHWINFO fi = {sizeof(FLASHWINFO), hwnd,
+                             FLASHW_TRAY | FLASHW_TIMERNOFG, 0, 0};
+            FlashWindowEx(&fi);
+          }
+          result->Success();
+        } else {
+          result->NotImplemented();
+        }
+      });
+
   // El runner muestra SIEMPRE la ventana en el primer frame (garantiza que
   // sea visible). window_manager solo le quita la barra del SO después, ya
   // mostrada. (No pasar titleBarStyle en WindowOptions: eso provocaba que la

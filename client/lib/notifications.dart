@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:local_notifier/local_notifier.dart';
 
 /// Notificaciones nativas del SO (toast Windows / libnotify Linux vía
@@ -11,6 +13,19 @@ class NotificationService {
   void Function(String channelId)? onOpenChannel;
 
   bool _ready = false;
+
+  // Canal nativo del runner de Windows (ver flutter_window.cpp).
+  static const _windowChannel = MethodChannel('chatpapol/window');
+
+  /// Parpadea el botón de la barra de tareas (Windows) hasta que el usuario
+  /// traiga la app al frente. El nativo verifica el foreground y no hace nada si
+  /// ya estamos al frente. No-op fuera de Windows.
+  Future<void> flashTaskbar() async {
+    if (!Platform.isWindows) return;
+    try {
+      await _windowChannel.invokeMethod('flashTaskbar');
+    } catch (_) {}
+  }
 
   Future<void> init() async {
     try {
