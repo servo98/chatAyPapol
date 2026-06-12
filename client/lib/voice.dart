@@ -9,6 +9,7 @@ import 'models.dart' as m;
 import 'store.dart';
 import 'sfx.dart';
 import 'ambience.dart';
+import 'webrtc_apm.dart';
 
 /// Un screenshare remoto visible: track de video + quién lo comparte.
 /// Se usa para el grid y para el modo pantalla completa.
@@ -86,6 +87,9 @@ class VoiceManager extends ChangeNotifier {
   bool noiseSuppression = true;
   bool echoCancellation = true;
   bool autoGainControl = true;
+  // RNNoise (IA, CPU): supresor de ruido extra del micro, encima del NS clásico.
+  // El APM es global del factory → se aplica una vez (no por track).
+  bool rnnoise = false;
   // Volumen de SALIDA (playout de tracks remotos). NO hay ganancia de captura:
   // ver setOutputVolume.
   double outputVolume = 1.0;
@@ -120,6 +124,7 @@ class VoiceManager extends ChangeNotifier {
     noiseSuppression = prefs.getBool('mic_noise_suppression') ?? true;
     echoCancellation = prefs.getBool('mic_echo_cancellation') ?? true;
     autoGainControl = prefs.getBool('mic_auto_gain') ?? true;
+    rnnoise = prefs.getBool('mic_rnnoise') ?? false;
     outputVolume = prefs.getDouble('voice_output_volume') ?? 1.0;
     try {
       final raw = prefs.getString('voice_user_volumes');
@@ -175,6 +180,16 @@ class VoiceManager extends ChangeNotifier {
     await prefs.setBool('mic_noise_suppression', noiseSuppression);
     await prefs.setBool('mic_echo_cancellation', echoCancellation);
     await prefs.setBool('mic_auto_gain', autoGainControl);
+    await prefs.setBool('mic_rnnoise', rnnoise);
+  }
+
+  /// Activa/desactiva RNNoise. El APM es global del factory → NO reinicia el
+  /// track (a diferencia de los flags clásicos). Persiste y aplica de inmediato.
+  Future<void> setRnnoise(bool v) async {
+    rnnoise = v;
+    await _saveMicPrefs();
+    await WebrtcApm.setRnnoise(v);
+    notifyListeners();
   }
 
   /// Cambia el dispositivo de entrada (null = predeterminado del sistema).
@@ -335,6 +350,9 @@ class VoiceManager extends ChangeNotifier {
         await r.localParticipant
             ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
       } catch (_) {/* sin permiso SPEAK: solo escucha */}
+      // Reaplicar RNNoise (el APM es global; el estado persistido se reactiva
+      // en cada sesión tras publicar el micro).
+      await WebrtcApm.setRnnoise(rnnoise);
       _startSelfSpeaking();
       store.gateway.send('VOICE_JOIN', {'channel_id': chId, 'mute': muted, 'deaf': deafened});
       // si el canal ya tenía un ambiente sonando, engánchate sincronizado

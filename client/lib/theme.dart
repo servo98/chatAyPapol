@@ -206,6 +206,43 @@ ThemeData buildTheme() {
                     : 0.0),
       ),
     ),
+    // Botón SECUNDARIO (acciones tipo "Cambiar avatar"): coherente con el
+    // primario pero en versión outline — mono, borde que se vuelve verde y
+    // florece con glow neón en hover (readme §3). Antes caían al default genérico.
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Pal.accentDim,
+        textStyle: const TextStyle(
+            fontFamily: Pal.fontMono,
+            fontFamilyFallback: Pal.monoFallback,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+      ).copyWith(
+        animationDuration: Pal.dur,
+        shadowColor: const WidgetStatePropertyAll(Pal.accent),
+        side: WidgetStateProperty.resolveWith((s) => BorderSide(
+            color: s.contains(WidgetState.disabled)
+                ? Pal.borderDefault
+                : s.contains(WidgetState.hovered)
+                    ? Pal.accent
+                    : Pal.borderStrong)),
+        foregroundColor: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.disabled)
+                ? Pal.faint
+                : s.contains(WidgetState.hovered)
+                    ? Pal.accent
+                    : Pal.accentDim),
+        backgroundColor: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.hovered)
+                ? Pal.accentDim.withValues(alpha: .12)
+                : Colors.transparent),
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+        elevation: WidgetStateProperty.resolveWith((s) =>
+            s.contains(WidgetState.hovered) ? 8.0 : 0.0),
+      ),
+    ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(foregroundColor: Pal.muted),
     ),
