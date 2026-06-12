@@ -10,6 +10,7 @@ import 'package:livekit_client/livekit_client.dart'
         VideoViewFit,
         LocalVideoTrack,
         RemoteVideoTrack;
+import '../ambience.dart';
 import '../models.dart' as m;
 import '../perms.dart';
 import '../store.dart';
@@ -388,6 +389,18 @@ class VoicePanel extends StatelessWidget {
                 if (store.canI(P.useSoundboard, channel.id))
                   _vctl(LucideIcons.music, 'Soundboard',
                       () => _soundboard(context)),
+                // TEMP: control mínimo funcional del ambiente de sala. La UX
+                // pulida (encadenar/diseño) la entrega Claude Design; reemplazar
+                // esta hoja cuando llegue el diseño. Ver _ambience().
+                if (store.canI(P.useSoundboard, channel.id))
+                  _vctl(
+                    LucideIcons.waves,
+                    store.ambienceIn(channel.id) != null
+                        ? 'Ambiente de sala (activo)'
+                        : 'Ambiente de sala',
+                    () => _ambience(context),
+                    active: store.ambienceIn(channel.id) != null,
+                  ),
                 const SizedBox(width: 4),
                 _hangBtn(voice.leave),
               ]
@@ -713,6 +726,118 @@ class VoicePanel extends StatelessWidget {
                       ),
                     )).toList(),
               ),
+      ),
+    );
+  }
+
+  // TEMP: hoja mínima para controlar el AMBIENTE de sala (cama de sonido
+  // compartida, sincronizada vía gateway — NO WebRTC). El motor y la sincronía
+  // ya están completos; reemplazar esta UI con el diseño de Claude Design.
+  void _ambience(BuildContext context) {
+    final amb = AmbienceService.instance;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Pal.bg1,
+      builder: (ctx) => ListenableBuilder(
+        listenable: Listenable.merge([store, amb]),
+        builder: (ctx, _) {
+          final cur = store.ambienceIn(channel.id);
+          final catalog = amb.catalog;
+          return Container(
+            padding: const EdgeInsets.all(16),
+            height: 330,
+            child: catalog.isEmpty
+                ? const Center(
+                    child: Text(
+                        'No hay ambientes.\nGenera el pack con scripts/gen_ambience.py.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Pal.muted)))
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(children: [
+                        const Text('AMBIENTE DE SALA',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: Pal.faint,
+                                letterSpacing: 1.3)),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                            child: Text('lo oye toda la sala',
+                                style:
+                                    TextStyle(fontSize: 11, color: Pal.comment))),
+                        if (cur != null)
+                          SmallIconBtn(
+                              cur.paused ? LucideIcons.play : LucideIcons.pause,
+                              cur.paused ? 'Reanudar' : 'Pausar',
+                              voice.toggleAmbiencePause),
+                        if (cur != null)
+                          SmallIconBtn(LucideIcons.square, 'Detener',
+                              voice.stopAmbience,
+                              color: Pal.red),
+                      ]),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: GridView.count(
+                          crossAxisCount: 4,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: 1.5,
+                          children: catalog.map((a) {
+                            final on = cur?.ambienceId == a.id;
+                            return InkWell(
+                              onTap: () => voice.setAmbience(a.id),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: on ? _washGreen : Pal.bg3,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                      color:
+                                          on ? Pal.accent : Pal.borderDefault),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(a.emoji ?? '♪',
+                                        style: const TextStyle(fontSize: 22)),
+                                    const SizedBox(height: 4),
+                                    Text(a.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color:
+                                                on ? Pal.accent : Pal.muted)),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(children: [
+                        const Icon(LucideIcons.volume2,
+                            size: 16, color: Pal.muted),
+                        Expanded(
+                          child: Slider(
+                            value: amb.volume,
+                            activeColor: Pal.accent,
+                            onChanged: (v) => amb.setVolume(v),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 44,
+                          child: Text('${(amb.volume * 100).round()}%',
+                              style: const TextStyle(
+                                  fontSize: 12, color: Pal.muted)),
+                        ),
+                      ]),
+                    ],
+                  ),
+          );
+        },
       ),
     );
   }

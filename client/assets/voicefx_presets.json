@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "presets": [
+    {
+      "id": "cueva",
+      "label": "Cueva",
+      "category": "room",
+      "chain": [
+        { "type": "reverb", "params": { "roomsize": 0.92, "damp": 0.25, "wet": 0.55 } },
+        { "type": "delay", "params": { "timeMs": 180.0, "feedback": 0.45, "mix": 0.30 } }
+      ]
+    },
+    {
+      "id": "iglesia",
+      "label": "Iglesia",
+      "category": "room",
+      "chain": [
+        { "type": "reverb", "params": { "roomsize": 0.85, "damp": 0.60, "wet": 0.45 } }
+      ]
+    },
+    {
+      "id": "sala",
+      "label": "Sala pequeña",
+      "category": "room",
+      "chain": [
+        { "type": "reverb", "params": { "roomsize": 0.25, "damp": 0.70, "wet": 0.22 } }
+      ]
+    },
+    {
+      "id": "eco",
+      "label": "Eco",
+      "category": "room",
+      "chain": [
+        { "type": "delay", "params": { "timeMs": 400.0, "feedback": 0.50, "mix": 0.45 } }
+      ]
+    },
+    {
+      "id": "radio",
+      "label": "Radio / Walkie",
+      "category": "room",
+      "chain": [
+        { "type": "biquad", "params": { "type": 1, "freq": 400.0, "q": 0.9 } },
+        { "type": "biquad", "params": { "type": 0, "freq": 3000.0, "q": 0.9 } },
+        { "type": "distortion", "params": { "drive": 4.0, "mix": 0.6 } },
+        { "type": "noise", "params": { "level": 0.03, "color": 0.2 } }
+      ]
+    },
+    {
+      "id": "telefono",
+      "label": "Teléfono",
+      "category": "room",
+      "chain": [
+        { "type": "biquad", "params": { "type": 1, "freq": 300.0, "q": 0.707 } },
+        { "type": "biquad", "params": { "type": 0, "freq": 3400.0, "q": 0.707 } }
+      ]
+    },
+    {
+      "id": "megafono",
+      "label": "Megáfono",
+      "category": "room",
+      "chain": [
+        { "type": "biquad", "params": { "type": 1, "freq": 500.0, "q": 0.8 } },
+        { "type": "biquad", "params": { "type": 0, "freq": 4000.0, "q": 0.8 } },
+        { "type": "distortion", "params": { "drive": 12.0, "mix": 0.85 } }
+      ]
+    },
+    {
+      "id": "robot",
+      "label": "Robot",
+      "category": "room",
+      "chain": [
+        { "type": "ringmod", "params": { "freq": 35.0, "mix": 0.8 } },
+        { "type": "delay", "params": { "timeMs": 50.0, "feedback": 0.40, "mix": 0.30 } }
+      ]
+    },
+    {
+      "id": "scifi",
+      "label": "Sci-Fi",
+      "category": "room",
+      "chain": [
+        { "type": "chorus", "params": { "rate": 0.6, "depth": 0.7, "mix": 0.6 } },
+        { "type": "ringmod", "params": { "freq": 200.0, "mix": 0.2 } },
+        { "type": "reverb", "params": { "roomsize": 0.5, "damp": 0.5, "wet": 0.25 } }
+      ]
+    },
+    {
+      "id": "troll",
+      "label": "Trol",
+      "category": "character",
+      "chain": [
+        { "type": "pitch", "params": { "semitones": -8.0, "formant": 0.78 } },
+        { "type": "distortion", "params": { "drive": 5.0, "mix": 0.35 } },
+        { "type": "reverb", "params": { "roomsize": 0.90, "damp": 0.30, "wet": 0.40 } }
+      ]
+    },
+    {
+      "id": "demonio",
+      "label": "Demonio",
+      "category": "character",
+      "chain": [
+        { "type": "pitch", "params": { "semitones": -6.0, "formant": 0.80 } },
+        { "type": "distortion", "params": { "drive": 9.0, "mix": 0.50 } },
+        { "type": "reverb", "params": { "roomsize": 0.80, "damp": 0.40, "wet": 0.35 } }
+      ]
+    },
+    {
+      "id": "viejo",
+      "label": "Anciano",
+      "category": "character",
+      "chain": [
+        { "type": "pitch", "params": { "semitones": -1.5, "formant": 0.92 } },
+        { "type": "tremolo", "params": { "rate": 6.5, "depth": 0.35 } },
+        { "type": "biquad", "params": { "type": 0, "freq": 4000.0, "q": 0.707 } }
+      ]
+    },
+    {
+      "id": "ardilla",
+      "label": "Ardilla",
+      "category": "character",
+      "chain": [
+        { "type": "pitch", "params": { "semitones": 10.0, "formant": 1.30 } }
+      ]
+    },
+    {
+      "id": "nino",
+      "label": "Niño",
+      "category": "character",
+      "chain": [
+        { "type": "pitch", "params": { "semitones": 4.0, "formant": 1.20 } }
+      ]
+    },
+    {
+      "id": "hombre_a_mujer",
+      "label": "Hombre → Mujer",
+      "category": "gender",
+      "chain": [
+        { "type": "pitch", "params": { "semitones": 4.0, "formant": 1.20 } }
+      ]
+    },
+    {
+      "id": "mujer_a_hombre",
+      "label": "Mujer → Hombre",
+      "category": "gender",
+      "chain": [
+        { "type": "pitch", "params": { "semitones": -5.0, "formant": 0.85 } }
+      ]
+    }
+  ]
+}

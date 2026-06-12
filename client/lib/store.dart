@@ -37,6 +37,8 @@ class AppStore extends ChangeNotifier {
   var commands = <BotCommand>[];
   final online = <String>{};
   final voiceStates = <String, VoiceState>{};
+  // Ambiente actual por canal de voz (cama de sonido compartida). channelId -> estado.
+  final ambienceStates = <String, AmbienceState>{};
   String everyoneRoleId = 'everyone';
 
   String? selectedChannelId;
@@ -63,6 +65,12 @@ class AppStore extends ChangeNotifier {
 
   /// El VoiceManager se cuelga aquí para reproducir soundboard y reaccionar a eventos.
   void Function(Sound sound, String channelId)? onSoundPlay;
+
+  /// El VoiceManager se cuelga aquí para reproducir/sincronizar el ambiente del
+  /// canal en el que estoy. [state] null = el ambiente de ese canal se apagó.
+  void Function(String channelId, AmbienceState? state)? onAmbienceChange;
+
+  AmbienceState? ambienceIn(String channelId) => ambienceStates[channelId];
 
   Channel? get selectedChannel => channels[selectedChannelId];
   bool get loggedIn => me != null;
@@ -500,6 +508,16 @@ class AppStore extends ChangeNotifier {
         final snd = Sound.fromJson(d['sound']);
         onSoundPlay?.call(snd, d['channel_id']);
         break;
+      case 'AMBIENCE_STATE':
+        final cid = d['channel_id'] as String;
+        final aid = d['ambience_id'] as String?;
+        if (aid == null) {
+          ambienceStates.remove(cid);
+        } else {
+          ambienceStates[cid] = AmbienceState.fromJson(d);
+        }
+        onAmbienceChange?.call(cid, ambienceStates[cid]);
+        break;
       case 'STICKER_CREATE':
         stickers = [...stickers, Sticker.fromJson(d)]..sort((a, b) => a.name.compareTo(b.name));
         break;
@@ -551,6 +569,16 @@ class AppStore extends ChangeNotifier {
       ..clear()
       ..addEntries((d['voice_states'] as List)
           .map((v) => MapEntry(v['user_id'] as String, VoiceState.fromJson(v))));
+    // Ambientes activos por canal (para sincronizar al (re)conectar). Avisamos al
+    // VoiceManager por cada uno: él aplica solo el del canal en el que esté.
+    ambienceStates.clear();
+    for (final a in (d['ambience_states'] as List? ?? const [])) {
+      final s = AmbienceState.fromJson(a);
+      ambienceStates[s.channelId] = s;
+    }
+    for (final s in ambienceStates.values) {
+      onAmbienceChange?.call(s.channelId, s);
+    }
 
     // selección inicial: primer canal de texto visible
     if (selectedChannelId == null || channels[selectedChannelId] == null) {

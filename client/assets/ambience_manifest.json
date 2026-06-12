@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "ambiences": {
+    "rain": { "name": "Lluvia", "file": "ambience/rain.wav", "emoji": "🌧️", "category": "naturaleza" },
+    "ocean": { "name": "Mar", "file": "ambience/ocean.wav", "emoji": "🌊", "category": "naturaleza" },
+    "wind": { "name": "Viento", "file": "ambience/wind.wav", "emoji": "🍃", "category": "naturaleza" },
+    "fire": { "name": "Fogata", "file": "ambience/fire.wav", "emoji": "🔥", "category": "naturaleza" },
+    "cave": { "name": "Cueva", "file": "ambience/cave.wav", "emoji": "🕳️", "category": "lugares" },
+    "scifi": { "name": "Sci-Fi", "file": "ambience/scifi.wav", "emoji": "🛸", "category": "lugares" }
+  }
+}

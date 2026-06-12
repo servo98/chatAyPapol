@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart' as m;
 import 'store.dart';
 import 'sfx.dart';
+import 'ambience.dart';
 
 /// Un screenshare remoto visible: track de video + quién lo comparte.
 /// Se usa para el grid y para el modo pantalla completa.
@@ -59,6 +60,7 @@ class VoiceManager extends ChangeNotifier {
   final AppStore store;
   VoiceManager(this.store) {
     store.onSoundPlay = _playSound;
+    store.onAmbienceChange = _onAmbienceChange;
     _loadPrefs();
   }
 
@@ -335,6 +337,8 @@ class VoiceManager extends ChangeNotifier {
       } catch (_) {/* sin permiso SPEAK: solo escucha */}
       _startSelfSpeaking();
       store.gateway.send('VOICE_JOIN', {'channel_id': chId, 'mute': muted, 'deaf': deafened});
+      // si el canal ya tenía un ambiente sonando, engánchate sincronizado
+      _applyCurrentAmbience();
     } finally {
       connecting = false;
       notifyListeners();
@@ -390,6 +394,7 @@ class VoiceManager extends ChangeNotifier {
     sharing = false;
     _micOptionsPending = false;
     speaking.clear();
+    AmbienceService.instance.stop(); // al salir del canal, calla su ambiente
     notifyListeners();
   }
 
@@ -451,6 +456,9 @@ class VoiceManager extends ChangeNotifier {
       }
     }
     store.gateway.send('VOICE_STATE', {'deaf': deafened});
+    // ensordecer = no oír NADA, tampoco el ambiente; al desensordecer reengancha
+    // sincronizado.
+    _applyCurrentAmbience();
     notifyListeners();
   }
 
@@ -543,6 +551,48 @@ class VoiceManager extends ChangeNotifier {
   void _playSound(m.Sound sound, String chId) {
     if (deafened || channelId != chId) return;
     _player.play(UrlSource(store.api.fileUrl(sound.url)));
+  }
+
+  // ───────── ambiente de sala (cama compartida, sin WebRTC) ─────────
+
+  /// Aplica al reproductor local el ambiente del canal en el que estoy. Lo llama
+  /// el store cuando llega un AMBIENCE_STATE de mi canal, y join/leave/deafen.
+  void _onAmbienceChange(String chId, m.AmbienceState? state) {
+    if (chId != channelId) return; // solo me importa mi canal actual
+    AmbienceService.instance.apply(state, active: !deafened);
+  }
+
+  void _applyCurrentAmbience() {
+    final cid = channelId;
+    if (cid == null) {
+      AmbienceService.instance.stop();
+      return;
+    }
+    AmbienceService.instance.apply(store.ambienceIn(cid), active: !deafened);
+  }
+
+  /// Activa/cambia el ambiente de la sala (lo oye TODO el canal). Requiere estar
+  /// en el canal; el server valida permiso (USE_SOUNDBOARD).
+  Future<void> setAmbience(String ambienceId) async {
+    final cid = channelId;
+    if (cid == null) return;
+    store.gateway.send('AMBIENCE_SET', {'channel_id': cid, 'ambience_id': ambienceId});
+  }
+
+  /// Apaga el ambiente de la sala para todos.
+  Future<void> stopAmbience() async {
+    final cid = channelId;
+    if (cid == null) return;
+    store.gateway.send('AMBIENCE_STOP', {'channel_id': cid});
+  }
+
+  /// Pausa/reanuda el ambiente para todos (sincronizado).
+  Future<void> toggleAmbiencePause() async {
+    final cid = channelId;
+    if (cid == null) return;
+    final st = store.ambienceIn(cid);
+    if (st == null) return;
+    store.gateway.send('AMBIENCE_PAUSE', {'channel_id': cid, 'paused': !st.paused});
   }
 
   /// Tracks de video (screenshare) visibles en la sala.

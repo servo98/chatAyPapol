@@ -24,6 +24,8 @@ dependencies:
   url_launcher: ^6.3.0
   audioplayers: ^6.1.0
   shared_preferences: ^2.3.0
+  # FFI hacia la lib nativa de efectos de voz (client/native/voicefx)
+  ffi: ^2.1.0
   path_provider: ^2.1.0
   crypto: ^3.0.0
   # ventana sin marco del OS: barra de título y botones propios
@@ -52,4 +54,10 @@ dependency_overrides:
 
 flutter:
   uses-material-design: true
+  assets:
+    # Ambientes de sala (beds loopables; se reproducen en sincronía vía gateway,
+    # NO por WebRTC). Generables con scripts/gen_ambience.py o sustituibles por un
+    # pack royalty-free con los mismos nombres. Ver lib/ambience.dart.
+    - assets/ambience/
+    - assets/ambience_manifest.json
 

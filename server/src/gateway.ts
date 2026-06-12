@@ -10,6 +10,26 @@ const sockets = new Map<string, Set<Sock>>(); // userId -> connections
 export type VoiceState = { channel_id: string; mute: boolean; deaf: boolean; streaming: boolean };
 export const voiceStates = new Map<string, VoiceState>();
 
+// AMBIENTE de sala: cama de sonido compartida por canal de voz. NO va por WebRTC
+// (cada cliente reproduce un clip BUNDLEADO localmente); el server solo coordina
+// qué suena y desde cuándo, para que todos arranquen sincronizados (started_at en
+// ms del server) y los que entran tarde caigan en el punto correcto.
+//   channel_id (voz) -> { ambience_id, started_at(ms server), paused }
+//   paused_at: ms del server en que se pausó (para que late joiners caigan en la
+//   posición congelada correcta). Ausente mientras suena.
+export type AmbienceState = { ambience_id: string; started_at: number; paused: boolean; paused_at?: number };
+export const roomAmbience = new Map<string, AmbienceState>();
+// Lista blanca de ids válidos. DEBE coincidir con client/assets/ambience_manifest.json.
+const AMBIENCE_IDS = new Set(["rain", "ocean", "wind", "fire", "cave", "scifi"]);
+
+/** ¿Queda alguien en el canal de voz? Si no, se apaga su ambiente. */
+function cleanupAmbience(channelId: string) {
+  if (!roomAmbience.has(channelId)) return;
+  for (const v of voiceStates.values()) if (v.channel_id === channelId) return;
+  roomAmbience.delete(channelId);
+  broadcast("AMBIENCE_STATE", { channel_id: channelId, ambience_id: null }, channelId);
+}
+
 export function onlineUserIds(): string[] {
   return [...sockets.keys()];
 }
@@ -50,6 +70,7 @@ function fullState(userId: string) {
     stickers, sounds, commands,
     online: onlineUserIds(),
     voice_states: [...voiceStates.entries()].map(([uid, v]) => ({ user_id: uid, ...v })),
+    ambience_states: [...roomAmbience.entries()].map(([cid, a]) => ({ channel_id: cid, ...a })),
     everyone_role_id: EVERYONE_ID,
   };
 }
@@ -61,6 +82,7 @@ function leaveVoice(userId: string) {
   if (!vs) return;
   voiceStates.delete(userId);
   broadcast("VOICE_STATE", { user_id: userId, channel_id: null });
+  cleanupAmbience(vs.channel_id); // si el canal quedó vacío, apaga su ambiente
 }
 
 // Sincroniza voiceStates (en memoria) con quién está REALMENTE en el SFU. Cubre el
@@ -92,8 +114,10 @@ export async function reconcileVoice() {
   // Bajas: en voiceStates pero ya no en el SFU.
   for (const uid of [...voiceStates.keys()]) {
     if (!live.has(uid)) {
+      const ch = voiceStates.get(uid)!.channel_id;
       voiceStates.delete(uid);
       broadcast("VOICE_STATE", { user_id: uid, channel_id: null });
+      cleanupAmbience(ch);
     }
   }
 }
@@ -151,6 +175,46 @@ export const websocket = {
       case "VOICE_LEAVE":
         leaveVoice(userId);
         break;
+      // ---- ambiente de sala (cama de sonido compartida, sin WebRTC) ----
+      // Quien lo controla debe estar EN el canal de voz y tener USE_SOUNDBOARD
+      // (misma puerta que el soundboard: el dueño la gobierna por rol/canal).
+      case "AMBIENCE_SET": {
+        const chId = d.channel_id as string;
+        const ambId = d.ambience_id as string;
+        if (voiceStates.get(userId)?.channel_id !== chId) return;
+        if (!AMBIENCE_IDS.has(ambId) || !can(userId, P.USE_SOUNDBOARD, chId)) return;
+        const st: AmbienceState = { ambience_id: ambId, started_at: Date.now(), paused: false };
+        roomAmbience.set(chId, st);
+        broadcast("AMBIENCE_STATE", { channel_id: chId, ...st, by_user: userId }, chId);
+        break;
+      }
+      case "AMBIENCE_STOP": {
+        const chId = d.channel_id as string;
+        if (voiceStates.get(userId)?.channel_id !== chId) return;
+        if (!can(userId, P.USE_SOUNDBOARD, chId)) return;
+        roomAmbience.delete(chId);
+        broadcast("AMBIENCE_STATE", { channel_id: chId, ambience_id: null, by_user: userId }, chId);
+        break;
+      }
+      case "AMBIENCE_PAUSE": {
+        const chId = d.channel_id as string;
+        const st = roomAmbience.get(chId);
+        if (!st || voiceStates.get(userId)?.channel_id !== chId) return;
+        if (!can(userId, P.USE_SOUNDBOARD, chId)) return;
+        const wantPaused = !!d.paused;
+        if (wantPaused && !st.paused) {
+          st.paused = true;
+          st.paused_at = Date.now();
+        } else if (!wantPaused && st.paused) {
+          // reanuda: corre started_at hacia adelante la duración de la pausa
+          // para que la posición continúe donde quedó (no salta).
+          st.started_at += Date.now() - (st.paused_at ?? Date.now());
+          st.paused = false;
+          delete st.paused_at;
+        }
+        broadcast("AMBIENCE_STATE", { channel_id: chId, ...st, by_user: userId }, chId);
+        break;
+      }
     }
   },
 
