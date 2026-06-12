@@ -281,10 +281,11 @@ class _SidebarState extends State<Sidebar> {
             ),
           ),
         ),
-        // usuarios conectados al canal de voz
+        // usuarios conectados al canal de voz (con aire para no pegarse al canal)
+        if (voiceUsers.isNotEmpty) const SizedBox(height: 3),
         for (final vs in voiceUsers)
           Padding(
-            padding: const EdgeInsets.only(left: 34, right: 12, top: 1, bottom: 1),
+            padding: const EdgeInsets.only(left: 34, right: 12, top: 3, bottom: 3),
             child: Row(
               children: [
                 Avatar(store.users[vs.userId], store, size: 20),

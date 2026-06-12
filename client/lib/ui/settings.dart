@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
@@ -175,16 +177,74 @@ Widget _title(String t) => Padding(
       child: Text(t, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
     );
 
+// Decodifica, escala el lado mayor a ≤256px y reencoda JPEG q85. Corre en un
+// isolate (compute) para no congelar la UI. No guardamos la imagen raw: el avatar
+// queda en ~10-25KB → ahorra espacio y nunca topa el límite de 2MB del server.
+// Si no se puede decodificar, devuelve el original (que el server validará).
+Uint8List _resizeAvatarBytes(Uint8List input) {
+  final decoded = img.decodeImage(input);
+  if (decoded == null) return input;
+  final maxSide =
+      decoded.width > decoded.height ? decoded.width : decoded.height;
+  final scaled = maxSide > 256
+      ? img.copyResize(decoded,
+          width: decoded.width >= decoded.height ? 256 : null,
+          height: decoded.height > decoded.width ? 256 : null)
+      : decoded;
+  return Uint8List.fromList(img.encodeJpg(scaled, quality: 85));
+}
+
 // ───────────────────────── Mi cuenta ─────────────────────────
-class _AccountPanel extends StatelessWidget {
+class _AccountPanel extends StatefulWidget {
   final AppStore store;
   const _AccountPanel(this.store);
+  @override
+  State<_AccountPanel> createState() => _AccountPanelState();
+}
+
+class _AccountPanelState extends State<_AccountPanel> {
+  bool _uploadingAvatar = false;
+  AppStore get store => widget.store;
+
+  Future<void> _changeAvatar() async {
+    final r = await FilePicker.pickFiles(type: FileType.image, withData: true);
+    final f = r?.files.firstOrNull;
+    if (f?.bytes == null) return;
+    setState(() => _uploadingAvatar = true);
+    try {
+      final small = await compute(_resizeAvatarBytes, f!.bytes!);
+      await store.api.upload('/api/avatar', small, 'avatar.jpg');
+      // El server emite MEMBER_UPDATE → store.me se actualiza y el avatar cambia
+      // solo. Confirmamos con feedback al usuario.
+      if (mounted) showSuccess(context, 'Avatar actualizado');
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _uploadingAvatar = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _title('Mi cuenta'),
       Row(children: [
-        Avatar(store.me, store, size: 72),
+        Stack(alignment: Alignment.center, children: [
+          Avatar(store.me, store, size: 72),
+          if (_uploadingAvatar)
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                  color: Pal.bg0.withValues(alpha: .6),
+                  shape: BoxShape.circle),
+              child: const Center(
+                  child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2))),
+            ),
+        ]),
         const SizedBox(width: 16),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(store.me?.username ?? '',
@@ -192,21 +252,11 @@ class _AccountPanel extends StatelessWidget {
           const SizedBox(height: 8),
           Row(children: [
             OutlinedButton(
-              onPressed: () async {
-                final r = await FilePicker.pickFiles(
-                    type: FileType.image, withData: true);
-                final f = r?.files.firstOrNull;
-                if (f?.bytes == null) return;
-                try {
-                  await store.api.upload('/api/avatar', f!.bytes!, f.name);
-                  // El server emite MEMBER_UPDATE → store.me se actualiza y el
-                  // avatar cambia solo. Confirmamos con feedback al usuario.
-                  if (context.mounted) showSuccess(context, 'Avatar actualizado');
-                } catch (e) {
-                  if (context.mounted) showError(context, e);
-                }
-              },
-              child: const Text('Cambiar avatar', style: TextStyle(fontSize: 12.5)),
+              onPressed: _uploadingAvatar ? null : _changeAvatar,
+              child: _uploadingAvatar
+                  ? const Text('Subiendo…', style: TextStyle(fontSize: 12.5))
+                  : const Text('Cambiar avatar',
+                      style: TextStyle(fontSize: 12.5)),
             ),
             const SizedBox(width: 8),
             OutlinedButton(
