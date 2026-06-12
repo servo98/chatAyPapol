@@ -448,6 +448,8 @@ class VoiceManager extends ChangeNotifier {
     _micOptionsPending = false;
     speaking.clear();
     AmbienceService.instance.stop(); // al salir del canal, calla su ambiente
+    // apaga el monitor "escucharme" al salir (si no, reaparecería al reentrar)
+    VoiceMonitor.instance.set(false);
     notifyListeners();
   }
 

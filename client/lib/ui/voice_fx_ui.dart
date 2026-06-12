@@ -19,6 +19,7 @@ import '../perms.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../voice.dart';
+import '../webrtc_apm.dart';
 import 'widgets.dart';
 
 // Washes locales (no viven en Pal): mismos que voice_panel.dart.
@@ -174,27 +175,60 @@ class _FxPopoverBodyState extends State<_FxPopoverBody> {
             ),
           ),
           const SizedBox(height: 10),
-          // monitor local (inerte hasta integrar el procesado de captura)
-          Tooltip(
-            message: 'Monitor local: disponible al integrar el procesado de captura',
+          // monitor local ("escucharme"): reproduce tu micro YA procesado en tus
+          // altavoces. Solo suena dentro de un canal de voz. Usa AURICULARES.
+          const _MonitorToggleRow(),
+        ],
+      ),
+    );
+  }
+}
+
+/// Toggle "escucharme" (monitor local): reproduce tu micro ya procesado en tus
+/// altavoces para probar los efectos. Solo suena mientras hay captura (dentro
+/// de un canal de voz). Avisa de usar auriculares (si no, eco).
+class _MonitorToggleRow extends StatelessWidget {
+  const _MonitorToggleRow();
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: VoiceMonitor.instance,
+      builder: (ctx, _) {
+        final on = VoiceMonitor.instance.on;
+        return Tooltip(
+          message: on
+              ? 'Te oyes a ti mismo con el efecto. Usa auriculares (evita eco).'
+              : 'Escúchate con el efecto aplicado (dentro de un canal de voz). '
+                  'Usa auriculares.',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => VoiceMonitor.instance.toggle(),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: Pal.bg0,
+                color: on ? _washGreen : Pal.bg0,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Pal.borderDefault),
+                border: Border.all(color: on ? Pal.accent : Pal.borderDefault),
               ),
-              child: Row(children: const [
-                Icon(LucideIcons.headphones, size: 15, color: Pal.muted),
-                SizedBox(width: 8),
-                Text('escucharme', style: TextStyle(fontSize: 12, color: Pal.muted)),
-                Spacer(),
-                Text('monitor local', style: TextStyle(fontSize: 10.5, color: Pal.comment)),
+              child: Row(children: [
+                Icon(LucideIcons.headphones,
+                    size: 15, color: on ? Pal.accent : Pal.muted),
+                const SizedBox(width: 8),
+                Text('escucharme',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: on ? Pal.text : Pal.muted,
+                        fontWeight: on ? FontWeight.w700 : FontWeight.w400)),
+                const Spacer(),
+                Text(on ? 'monitor ON · auriculares' : 'monitor local',
+                    style: TextStyle(
+                        fontSize: 10.5,
+                        color: on ? Pal.accent : Pal.comment)),
               ]),
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

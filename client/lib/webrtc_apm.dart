@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Puente al código nativo del fork de flutter_webrtc para el post-procesado de
@@ -22,4 +23,34 @@ class WebrtcApm {
       await _ch.invokeMethod('setVoiceFx', {'enabled': enabled, 'spec': spec});
     } catch (_) {/* build sin voicefx / plataforma sin soporte */}
   }
+
+  /// Monitor local ("escucharme"): reproduce el micro YA PROCESADO (RNNoise +
+  /// efectos) en los altavoces locales, para probar los efectos uno mismo. Solo
+  /// suena mientras hay captura activa (p.ej. dentro de un canal de voz) y solo
+  /// en Windows por ahora. Usar AURICULARES (si no, eco). No-op si no soportado.
+  static Future<void> setVoiceMonitor(bool enabled) async {
+    try {
+      await _ch.invokeMethod('setVoiceMonitor', {'enabled': enabled});
+    } catch (_) {/* build sin soporte de monitor */}
+  }
+}
+
+/// Estado observable del monitor local ("escucharme"). Singleton para que la UI
+/// lo refleje aunque el popover de efectos se cierre y reabra. Solo suena
+/// mientras hay captura de micro activa (p.ej. dentro de un canal de voz).
+class VoiceMonitor extends ChangeNotifier {
+  VoiceMonitor._();
+  static final VoiceMonitor instance = VoiceMonitor._();
+
+  bool _on = false;
+  bool get on => _on;
+
+  Future<void> set(bool v) async {
+    if (_on == v) return;
+    _on = v;
+    notifyListeners();
+    await WebrtcApm.setVoiceMonitor(v);
+  }
+
+  Future<void> toggle() => set(!_on);
 }

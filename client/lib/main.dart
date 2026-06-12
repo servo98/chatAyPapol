@@ -277,6 +277,12 @@ Future<void> _diagVoiceFx() async {
     await Future.delayed(const Duration(seconds: 2));
     await log('  sobrevivió al procesado');
 
+    await log('4b: monitor ON/OFF (escucharme) ...');
+    await WebrtcApm.setVoiceMonitor(true);
+    await Future.delayed(const Duration(seconds: 1));
+    await WebrtcApm.setVoiceMonitor(false);
+    await log('  monitor on/off OK (no crasheó)');
+
     await log('5: apagar (setRnnoise/setVoiceFx false) ...');
     await WebrtcApm.setVoiceFx(false, '');
     await WebrtcApm.setRnnoise(false);
