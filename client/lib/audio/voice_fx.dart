@@ -538,6 +538,38 @@ class VoiceFxEngine extends ChangeNotifier {
     return frame;
   }
 
+  /// Serialización COMPACTA de la cadena para el procesador nativo del fork
+  /// flutter_webrtc (capture post-processing). Formato:
+  ///   "wet;gain;type,bypass,pid=val&pid=val|type,bypass,..."
+  /// donde type = VoiceFxType.index y pid = id de param de la ABI. La parsea
+  /// rnnoise_processor.cc (ParseSpec). El `enabled` viaja aparte (setVoiceFx).
+  String nativeChainSpec() {
+    final sb = StringBuffer()
+      ..write(_wetMix.toStringAsFixed(4))
+      ..write(';')
+      ..write(_outGain.toStringAsFixed(4))
+      ..write(';');
+    for (var i = 0; i < _nodes.length; i++) {
+      if (i > 0) sb.write('|');
+      final n = _nodes[i];
+      sb
+        ..write(n.type.index)
+        ..write(',')
+        ..write(n.bypass ? 1 : 0)
+        ..write(',');
+      var first = true;
+      n.params.forEach((id, v) {
+        if (!first) sb.write('&');
+        first = false;
+        sb
+          ..write(id)
+          ..write('=')
+          ..write(v.toStringAsFixed(4));
+      });
+    }
+    return sb.toString();
+  }
+
   // -- internas -----------------------------------------------------------------
 
   /// Reconstruye la cadena nativa completa desde el espejo Dart

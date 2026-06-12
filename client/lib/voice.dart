@@ -9,6 +9,7 @@ import 'models.dart' as m;
 import 'store.dart';
 import 'sfx.dart';
 import 'ambience.dart';
+import 'audio/voice_fx.dart';
 import 'webrtc_apm.dart';
 
 /// Un screenshare remoto visible: track de video + quién lo comparte.
@@ -62,7 +63,23 @@ class VoiceManager extends ChangeNotifier {
   VoiceManager(this.store) {
     store.onSoundPlay = _playSound;
     store.onAmbienceChange = _onAmbienceChange;
+    // Empuja la cadena de efectos al procesador nativo cada vez que cambia.
+    VoiceFxEngine.instance.addListener(_onVoiceFxChanged);
     _loadPrefs();
+  }
+
+  // Debounce del push de la cadena de efectos al nativo (coalesce drags).
+  Timer? _fxPushTimer;
+  void _onVoiceFxChanged() {
+    _fxPushTimer?.cancel();
+    _fxPushTimer = Timer(const Duration(milliseconds: 150), _pushVoiceFx);
+  }
+
+  /// Envía el estado actual de los efectos (enabled + cadena) al post-procesador
+  /// nativo del fork flutter_webrtc. No-op si el build no lo soporta.
+  Future<void> _pushVoiceFx() async {
+    final e = VoiceFxEngine.instance;
+    await WebrtcApm.setVoiceFx(e.enabled, e.nativeChainSpec());
   }
 
   Room? room;
@@ -353,6 +370,8 @@ class VoiceManager extends ChangeNotifier {
       // Reaplicar RNNoise (el APM es global; el estado persistido se reactiva
       // en cada sesión tras publicar el micro).
       await WebrtcApm.setRnnoise(rnnoise);
+      // Reaplicar la cadena de efectos al nuevo track publicado (APM global).
+      await _pushVoiceFx();
       _startSelfSpeaking();
       store.gateway.send('VOICE_JOIN', {'channel_id': chId, 'mute': muted, 'deaf': deafened});
       // si el canal ya tenía un ambiente sonando, engánchate sincronizado
@@ -663,6 +682,8 @@ class VoiceManager extends ChangeNotifier {
   @override
   void dispose() {
     leave();
+    _fxPushTimer?.cancel();
+    VoiceFxEngine.instance.removeListener(_onVoiceFxChanged);
     _player.dispose();
     super.dispose();
   }

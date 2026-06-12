@@ -13,4 +13,13 @@ class WebrtcApm {
       await _ch.invokeMethod('setCapturePostProcessing', {'enabled': enabled});
     } catch (_) {/* build viejo / plataforma sin soporte */}
   }
+
+  /// Aplica/actualiza la cadena de efectos de voz (voicefx) en el mismo capture
+  /// post-processing. [spec] es la serialización compacta de VoiceFxEngine
+  /// ("wet;gain;type,bypass,pid=val&...|..."). No-op si el nativo no lo soporta.
+  static Future<void> setVoiceFx(bool enabled, String spec) async {
+    try {
+      await _ch.invokeMethod('setVoiceFx', {'enabled': enabled, 'spec': spec});
+    } catch (_) {/* build sin voicefx / plataforma sin soporte */}
+  }
 }
