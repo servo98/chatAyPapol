@@ -372,13 +372,13 @@ class VoiceManager extends ChangeNotifier {
         await r.localParticipant
             ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
       } catch (_) {/* sin permiso SPEAK: solo escucha */}
-      // Post-procesado nativo del micro (RNNoise + efectos de voz). Tocar
-      // SetCapturePostProcessing del fork de WebRTC CRASHEA el proceso en
-      // Windows (desajuste de ABI con el libwebrtc prebuilt), incluso pasando
-      // null para "desactivar". En un proceso recién arrancado el APM ya está
-      // en su estado por defecto (sin post-procesado), así que NO hay nada que
-      // reaplicar salvo que el usuario tenga RNNoise o los FX encendidos: solo
-      // entonces llamamos al nativo. Esto destraba entrar a voz por defecto.
+      // Post-procesado nativo del micro (RNNoise + efectos de voz). Reaplicamos
+      // el estado persistido SOLO si hay algo encendido. Es optimización (no
+      // instalar un post-procesador que igual haría no-op) y red de seguridad:
+      // el fork tenía un bug por el que SetCapturePostProcessing(null) crasheaba
+      // en Windows (libwebrtc m144) — ya arreglado en el fork (nunca se pasa
+      // null), pero saltar la llamada cuando todo está apagado también protege
+      // builds contra forks viejos.
       if (rnnoise) {
         debugPrint('[voice] aplicando RNNoise=$rnnoise');
         await WebrtcApm.setRnnoise(rnnoise);

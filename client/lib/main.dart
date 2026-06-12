@@ -14,6 +14,7 @@ import 'ambience.dart';
 import 'audio/voice_fx.dart';
 import 'updater.dart';
 import 'version.dart';
+import 'webrtc_apm.dart';
 import 'store.dart';
 import 'theme.dart';
 import 'ui/bootstrap_runner.dart';
@@ -249,6 +250,47 @@ Future<void> _diagUpdate() async {
   }
 }
 
+// [chatpapol diag] Ejercita la ruta nativa de RNNoise + voicefx SIN UI: crea un
+// track de audio (inicializa el factory → APM), activa RNNoise y luego los
+// efectos, registrando cada paso. Si crashea, la última línea de diag-voicefx.txt
+// (Dart) + native.log (C++) dicen dónde. Headless: se puede correr sin GUI.
+Future<void> _diagVoiceFx() async {
+  final out =
+      File(r'C:\Users\ferna\Downloads\chatpapol-toolchain\diag-voicefx.txt');
+  Future<void> log(String s) async =>
+      out.writeAsStringSync('$s\n', mode: FileMode.append);
+  out.writeAsStringSync('=== diag-voicefx v$appVersion ===\n');
+  try {
+    await log('1: crear LocalAudioTrack (init factory + APM) ...');
+    final t = await lk.LocalAudioTrack.create();
+    await log('  track OK');
+
+    await log('2: WebrtcApm.setRnnoise(true) ...');
+    await WebrtcApm.setRnnoise(true);
+    await log('  setRnnoise volvió (NO crasheó)');
+
+    await log('3: WebrtcApm.setVoiceFx(true, spec) ...');
+    await WebrtcApm.setVoiceFx(true, '1.0;1.0;0,0,');
+    await log('  setVoiceFx volvió (NO crasheó)');
+
+    await log('4: dejar correr 2s (procesado en hilo de audio) ...');
+    await Future.delayed(const Duration(seconds: 2));
+    await log('  sobrevivió al procesado');
+
+    await log('5: apagar (setRnnoise/setVoiceFx false) ...');
+    await WebrtcApm.setVoiceFx(false, '');
+    await WebrtcApm.setRnnoise(false);
+    await log('  apagado OK');
+
+    await t.stop();
+    await t.dispose();
+    await log('=== diag-voicefx FIN ok (NO crasheó) ===');
+  } catch (e, st) {
+    await log('EXCEPCIÓN: $e\n$st');
+  }
+  exit(0);
+}
+
 /// Punto de entrada: TODO corre dentro de un runZonedGuarded para que ningún
 /// error asíncrono se pierda — el CrashLog lo captura, lo persiste a disco y
 /// levanta el banner copiable. La inicialización del binding va DENTRO de la
@@ -275,6 +317,10 @@ Future<void> _main(List<String> args) async {
   }
   if (args.contains('--diag-update')) {
     await _diagUpdate();
+    return;
+  }
+  if (args.contains('--diag-voicefx')) {
+    await _diagVoiceFx();
     return;
   }
   if (_desktop) {
