@@ -45,10 +45,13 @@ dev_dependencies:
 # main oficial (incluye el loopback WASAPI de Windows, PR #2060, mergeado el
 # 2026-06-02 y aún sin release). Quitar cuando salga la release oficial.
 dependency_overrides:
+  # [chatpapol] fork propio con RNNoise (capture post-processing) sobre el commit
+  # 3931f2 de flutter-webrtc (loopback WASAPI). Rama chatpapol-rnnoise, pineado al
+  # SHA. Para iterar en local: cambiar a `path: ../../flutter-webrtc-fork`.
   flutter_webrtc:
     git:
-      url: https://github.com/flutter-webrtc/flutter-webrtc.git
-      ref: 3931f2f351079cdc2053e3b128a62438455cfc42
+      url: https://github.com/servo98/flutter-webrtc.git
+      ref: 51160c9a412d3c9c549f46fe41d7a0dc7b1d9100
 
 flutter:
   uses-material-design: true

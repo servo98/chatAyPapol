@@ -677,6 +677,19 @@ class _VoicePanelState extends State<_VoicePanel> {
             onChanged: (v) =>
                 _applyMicChange(() => voice.setAutoGainControl(v)),
           ),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            activeTrackColor: Pal.accent,
+            value: voice.rnnoise,
+            title: const Text('RNNoise (IA)', style: TextStyle(fontSize: 13.5)),
+            subtitle: const Text(
+                'Supresor de ruido neuronal (CPU). Mejor que el clásico para '
+                'ventilador/teclado. No requiere GPU.',
+                style: TextStyle(fontSize: 11, color: Pal.faint)),
+            // No usa _applyMicChange: el APM es global, no hay que reiniciar track.
+            onChanged: (v) => voice.setRnnoise(v),
+          ),
           const SizedBox(height: 12),
           const Text('VOLUMEN DE SALIDA', style: _label),
           Row(children: [
