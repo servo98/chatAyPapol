@@ -17,7 +17,7 @@ export const voiceStates = new Map<string, VoiceState>();
 //   channel_id (voz) -> { ambience_id, started_at(ms server), paused }
 //   paused_at: ms del server en que se pausó (para que late joiners caigan en la
 //   posición congelada correcta). Ausente mientras suena.
-export type AmbienceState = { ambience_id: string; started_at: number; paused: boolean; paused_at?: number };
+export type AmbienceState = { ambience_id: string; started_at: number; paused: boolean; loop: boolean; paused_at?: number; by_user?: string };
 export const roomAmbience = new Map<string, AmbienceState>();
 // Lista blanca de ids válidos. DEBE coincidir con client/assets/ambience_manifest.json.
 const AMBIENCE_IDS = new Set(["rain", "ocean", "wind", "fire", "cave", "scifi"]);
@@ -176,22 +176,28 @@ export const websocket = {
         leaveVoice(userId);
         break;
       // ---- ambiente de sala (cama de sonido compartida, sin WebRTC) ----
-      // Quien lo controla debe estar EN el canal de voz y tener USE_SOUNDBOARD
-      // (misma puerta que el soundboard: el dueño la gobierna por rol/canal).
+      // Quien lo controla debe estar EN el canal de voz y tener CONTROL_AMBIENCE
+      // (permiso dedicado: el dueño lo concede a admins / rol "DJ" por rol/canal).
       case "AMBIENCE_SET": {
         const chId = d.channel_id as string;
         const ambId = d.ambience_id as string;
         if (voiceStates.get(userId)?.channel_id !== chId) return;
-        if (!AMBIENCE_IDS.has(ambId) || !can(userId, P.USE_SOUNDBOARD, chId)) return;
-        const st: AmbienceState = { ambience_id: ambId, started_at: Date.now(), paused: false };
+        if (!AMBIENCE_IDS.has(ambId) || !can(userId, P.CONTROL_AMBIENCE, chId)) return;
+        const st: AmbienceState = {
+          ambience_id: ambId,
+          started_at: Date.now(),
+          paused: false,
+          loop: d.loop !== false, // loop por defecto (cama de fondo)
+          by_user: userId,
+        };
         roomAmbience.set(chId, st);
-        broadcast("AMBIENCE_STATE", { channel_id: chId, ...st, by_user: userId }, chId);
+        broadcast("AMBIENCE_STATE", { channel_id: chId, ...st }, chId);
         break;
       }
       case "AMBIENCE_STOP": {
         const chId = d.channel_id as string;
         if (voiceStates.get(userId)?.channel_id !== chId) return;
-        if (!can(userId, P.USE_SOUNDBOARD, chId)) return;
+        if (!can(userId, P.CONTROL_AMBIENCE, chId)) return;
         roomAmbience.delete(chId);
         broadcast("AMBIENCE_STATE", { channel_id: chId, ambience_id: null, by_user: userId }, chId);
         break;
@@ -200,7 +206,7 @@ export const websocket = {
         const chId = d.channel_id as string;
         const st = roomAmbience.get(chId);
         if (!st || voiceStates.get(userId)?.channel_id !== chId) return;
-        if (!can(userId, P.USE_SOUNDBOARD, chId)) return;
+        if (!can(userId, P.CONTROL_AMBIENCE, chId)) return;
         const wantPaused = !!d.paused;
         if (wantPaused && !st.paused) {
           st.paused = true;
@@ -212,7 +218,16 @@ export const websocket = {
           st.paused = false;
           delete st.paused_at;
         }
-        broadcast("AMBIENCE_STATE", { channel_id: chId, ...st, by_user: userId }, chId);
+        broadcast("AMBIENCE_STATE", { channel_id: chId, ...st }, chId);
+        break;
+      }
+      case "AMBIENCE_LOOP": {
+        const chId = d.channel_id as string;
+        const st = roomAmbience.get(chId);
+        if (!st || voiceStates.get(userId)?.channel_id !== chId) return;
+        if (!can(userId, P.CONTROL_AMBIENCE, chId)) return;
+        st.loop = !!d.loop;
+        broadcast("AMBIENCE_STATE", { channel_id: chId, ...st }, chId);
         break;
       }
     }

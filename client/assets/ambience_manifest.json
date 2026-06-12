@@ -5,7 +5,7 @@
     "ocean": { "name": "Mar", "file": "ambience/ocean.wav", "emoji": "🌊", "category": "naturaleza" },
     "wind": { "name": "Viento", "file": "ambience/wind.wav", "emoji": "🍃", "category": "naturaleza" },
     "fire": { "name": "Fogata", "file": "ambience/fire.wav", "emoji": "🔥", "category": "naturaleza" },
-    "cave": { "name": "Cueva", "file": "ambience/cave.wav", "emoji": "🕳️", "category": "lugares" },
-    "scifi": { "name": "Sci-Fi", "file": "ambience/scifi.wav", "emoji": "🛸", "category": "lugares" }
+    "cave": { "name": "Goteo de cueva", "file": "ambience/cave.wav", "emoji": "🕳️", "category": "lugares" },
+    "scifi": { "name": "Zumbido sci-fi", "file": "ambience/scifi.wav", "emoji": "🛸", "category": "lugares" }
   }
 }

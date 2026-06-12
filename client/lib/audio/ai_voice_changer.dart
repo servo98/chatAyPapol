@@ -342,6 +342,40 @@ class AiVoiceChanger extends ChangeNotifier {
     super.dispose();
   }
 
+  // --- Simulación / etiquetas (para el selector "simula otro backend") --------
+
+  /// Capacidad CANÓNICA de un backend dado (latencias/recomendación honestas,
+  /// mismas que usa la detección). No toca el estado real: la UI la usa para
+  /// previsualizar "¿y si tuviera este otro backend?".
+  static AiCapability capabilityFor(AiBackend b) {
+    switch (b) {
+      case AiBackend.cuda:
+        return const AiCapability(
+            backend: AiBackend.cuda, expectedLatencyMs: 120, isRecommended: true);
+      case AiBackend.directml:
+        return const AiCapability(
+            backend: AiBackend.directml, expectedLatencyMs: 200, isRecommended: true);
+      case AiBackend.rocm:
+        return const AiCapability(
+            backend: AiBackend.rocm, expectedLatencyMs: 250, isRecommended: false);
+      case AiBackend.cpu:
+        return const AiCapability(
+            backend: AiBackend.cpu, expectedLatencyMs: 300, isRecommended: false);
+      case AiBackend.none:
+        return const AiCapability(
+            backend: AiBackend.none, expectedLatencyMs: 0, isRecommended: false);
+    }
+  }
+
+  /// Nombre legible del backend (como en el diseño).
+  static String backendLabel(AiBackend b) => switch (b) {
+        AiBackend.none => 'Ninguno',
+        AiBackend.cpu => 'CPU',
+        AiBackend.cuda => 'NVIDIA CUDA',
+        AiBackend.directml => 'DirectML (AMD)',
+        AiBackend.rocm => 'ROCm (AMD)',
+      };
+
   // --- Detección de hardware ---------------------------------------------------
 
   Future<AiCapability> _detectCapability() async {

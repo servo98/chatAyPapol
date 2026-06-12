@@ -10,6 +10,7 @@ import 'installer.dart';
 import 'notifications.dart';
 import 'sfx.dart';
 import 'ambience.dart';
+import 'audio/voice_fx.dart';
 import 'updater.dart';
 import 'version.dart';
 import 'store.dart';
@@ -310,6 +311,7 @@ Future<void> main(List<String> args) async {
 
   await SfxService.instance.init();
   await AmbienceService.instance.init();
+  await VoiceFxEngine.instance.init();
   await NotificationService.instance.init();
   final store = AppStore();
   final voice = VoiceManager(store);

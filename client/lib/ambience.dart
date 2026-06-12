@@ -35,6 +35,7 @@ class AmbienceService extends ChangeNotifier {
   String? _curId;
   int _curStartedAt = 0;
   bool _curPaused = false;
+  bool _curLoop = true;
   bool _playing = false;
   int _gen = 0; // token anti-carrera entre apply() concurrentes
 
@@ -106,7 +107,14 @@ class AmbienceService extends ChangeNotifier {
         _curId == state.ambienceId &&
         _curStartedAt == state.startedAt;
     if (sameClip) {
-      // mismo clip y mismo origen: solo puede haber cambiado el pausado.
+      // mismo clip y mismo origen: solo puede haber cambiado el pausado o el loop.
+      if (_curLoop != state.loop) {
+        _curLoop = state.loop;
+        try {
+          await _player
+              .setReleaseMode(state.loop ? ReleaseMode.loop : ReleaseMode.release);
+        } catch (_) {}
+      }
       if (_curPaused != state.paused) {
         _curPaused = state.paused;
         try {
@@ -120,7 +128,8 @@ class AmbienceService extends ChangeNotifier {
     // (re)carga: nuevo ambiente o nuevo origen de loop (incluye el resume, que
     // el server marca avanzando started_at).
     try {
-      await _player.setReleaseMode(ReleaseMode.loop);
+      await _player
+          .setReleaseMode(state.loop ? ReleaseMode.loop : ReleaseMode.release);
       await _player.setSource(AssetSource(d.file));
       if (gen != _gen) return; // otra llamada nos adelantó
       final dur = (await _player.getDuration()) ?? const Duration(seconds: 10);
@@ -138,6 +147,7 @@ class AmbienceService extends ChangeNotifier {
       _curId = state.ambienceId;
       _curStartedAt = state.startedAt;
       _curPaused = state.paused;
+      _curLoop = state.loop;
       _playing = true;
       notifyListeners();
     } catch (e) {

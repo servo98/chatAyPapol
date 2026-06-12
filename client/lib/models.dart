@@ -149,11 +149,15 @@ class AmbienceState {
   final String ambienceId;
   final int startedAt; // ms del reloj del server (origen del loop)
   final bool paused;
+  final bool loop; // si la cama se repite (cama de fondo => normalmente true)
   final int? pausedAt; // ms del server al pausar (posición congelada)
+  final String? byUser; // quién activó el ambiente (para "activado por …")
   AmbienceState.fromJson(Map<String, dynamic> j)
       : channelId = j['channel_id'],
         ambienceId = j['ambience_id'],
         startedAt = j['started_at'] ?? 0,
         paused = j['paused'] ?? false,
-        pausedAt = j['paused_at'];
+        loop = j['loop'] ?? true,
+        pausedAt = j['paused_at'],
+        byUser = j['by_user'];
 }

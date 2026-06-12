@@ -18,6 +18,7 @@ import '../voice.dart';
 import 'bootstrap_runner.dart';
 import 'notifs_panel.dart';
 import 'sound_lab.dart';
+import 'voice_fx_ui.dart';
 import 'widgets.dart';
 
 void openSettings(BuildContext context, AppStore store, VoiceManager voice) {
@@ -48,6 +49,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final tabs = <(String, String, IconData)>[
       ('cuenta', 'Mi cuenta', LucideIcons.user),
       ('voz', 'Voz y micrófono', LucideIcons.mic),
+      ('fx', 'Efectos de voz', LucideIcons.sparkles),
+      ('aivoice', 'Cambiador de voz IA', LucideIcons.cpu),
       ('notifs', 'Notificaciones', LucideIcons.bell),
       if (store.canI(P.manageRoles)) ('roles', 'Roles', LucideIcons.venetianMask),
       if (store.canI(P.createInvites)) ('invites', 'Invitaciones', LucideIcons.mail),
@@ -158,6 +161,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _panel() => switch (tab) {
         'cuenta' => _AccountPanel(store),
         'voz' => _VoicePanel(widget.voice),
+        'fx' => const VoiceFxSettings(),
+        'aivoice' => const AiVoiceSettings(),
         'notifs' => NotificationsPanel(store),
         'roles' => _RolesPanel(store),
         'invites' => _InvitesPanel(store),

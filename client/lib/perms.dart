@@ -20,9 +20,10 @@ abstract final class P {
   static const useSoundboard = 1 << 17;
   static const muteMembers = 1 << 18;
   static const moveMembers = 1 << 19;
+  static const controlAmbience = 1 << 20;
 }
 
-const allPerms = (1 << 20) - 1;
+const allPerms = (1 << 21) - 1;
 
 /// Etiquetas en español para los editores de roles/permisos.
 const permLabels = <int, (String, String)>{
@@ -46,4 +47,5 @@ const permLabels = <int, (String, String)>{
   P.useSoundboard: ('Usar soundboard', ''),
   P.muteMembers: ('Silenciar miembros', ''),
   P.moveMembers: ('Mover miembros', ''),
+  P.controlAmbience: ('Controlar ambiente de sala', 'Activar/cambiar la cama de sonido compartida en voz'),
 };

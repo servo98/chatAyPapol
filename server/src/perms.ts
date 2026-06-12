@@ -21,6 +21,7 @@ export const P = {
   USE_SOUNDBOARD:    1 << 17,
   MUTE_MEMBERS:      1 << 18,
   MOVE_MEMBERS:      1 << 19,
+  CONTROL_AMBIENCE:  1 << 20, // activar/cambiar la cama de ambiente de la sala
 } as const;
 
 export const ALL_PERMS = Object.values(P).reduce((a, b) => a | b, 0);

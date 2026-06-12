@@ -11,12 +11,14 @@ import 'package:livekit_client/livekit_client.dart'
         LocalVideoTrack,
         RemoteVideoTrack;
 import '../ambience.dart';
+import '../audio/voice_fx.dart';
 import '../models.dart' as m;
 import '../perms.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../voice.dart';
 import 'screenshare_fullscreen.dart';
+import 'voice_fx_ui.dart';
 import 'widgets.dart';
 
 // Tokens del design system que no viven en Pal (color-mix / washes).
@@ -38,7 +40,7 @@ class VoicePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: voice,
+      listenable: Listenable.merge([voice, store, VoiceFxEngine.instance]),
       builder: (ctx, _) {
         final users = store.voiceUsersIn(channel.id);
         final videos = joinedHere ? voice.videoTracks : const <VideoTrack>[];
@@ -88,6 +90,57 @@ class VoicePanel extends StatelessWidget {
             const TextSpan(text: ' conectados · baja latencia'),
           ]),
               style: const TextStyle(fontSize: 13, color: Pal.faint)),
+          if (joinedHere) ...[
+            const SizedBox(width: 14),
+            Flexible(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: _statusChips()),
+              ),
+            ),
+          ],
+        ]),
+      );
+
+  // Chips de estado del header: "hablas como X" (efecto activo) y "ambiente: Y".
+  List<Widget> _statusChips() {
+    final chips = <Widget>[];
+    final fx = activeFxLabel();
+    if (fx != null) {
+      chips.add(_chip(LucideIcons.sparkles, 'hablas como $fx', Pal.accent,
+          () => VoiceFxEngine.instance.setEnabled(false)));
+    }
+    final amb = store.ambienceIn(channel.id);
+    if (amb != null) {
+      final name = AmbienceService.instance.def(amb.ambienceId)?.name ?? amb.ambienceId;
+      final canControl = store.canI(P.controlAmbience, channel.id);
+      chips.add(_chip(LucideIcons.radioTower, 'ambiente: $name', Pal.link,
+          canControl ? voice.stopAmbience : null));
+    }
+    return chips;
+  }
+
+  Widget _chip(IconData icon, String label, Color color, VoidCallback? onClose) => Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: EdgeInsets.fromLTRB(9, 5, onClose != null ? 4 : 9, 5),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: 0.5)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(fontSize: 11.5, color: color, fontWeight: FontWeight.w600)),
+          if (onClose != null)
+            InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: onClose,
+              child: Padding(
+                padding: const EdgeInsets.all(3),
+                child: Icon(LucideIcons.x, size: 12, color: color),
+              ),
+            ),
         ]),
       );
 
@@ -389,18 +442,24 @@ class VoicePanel extends StatelessWidget {
                 if (store.canI(P.useSoundboard, channel.id))
                   _vctl(LucideIcons.music, 'Soundboard',
                       () => _soundboard(context)),
-                // TEMP: control mínimo funcional del ambiente de sala. La UX
-                // pulida (encadenar/diseño) la entrega Claude Design; reemplazar
-                // esta hoja cuando llegue el diseño. Ver _ambience().
-                if (store.canI(P.useSoundboard, channel.id))
-                  _vctl(
-                    LucideIcons.waves,
-                    store.ambienceIn(channel.id) != null
-                        ? 'Ambiente de sala (activo)'
-                        : 'Ambiente de sala',
-                    () => _ambience(context),
-                    active: store.ambienceIn(channel.id) != null,
-                  ),
+                // efectos de voz: transforman MI voz (la sala me oye así)
+                _vctl(
+                  LucideIcons.sparkles,
+                  VoiceFxEngine.instance.enabled
+                      ? 'Efectos de voz (activos)'
+                      : 'Efectos de voz',
+                  () => showVoiceFxPopover(context),
+                  active: VoiceFxEngine.instance.enabled,
+                ),
+                // ambiente de sala: lo oye TODA la sala (no es mi voz)
+                _vctl(
+                  LucideIcons.radioTower,
+                  store.ambienceIn(channel.id) != null
+                      ? 'Ambiente de sala (activo)'
+                      : 'Ambiente de sala',
+                  () => showAmbiencePopover(context, voice, store, channel.id),
+                  active: store.ambienceIn(channel.id) != null,
+                ),
                 const SizedBox(width: 4),
                 _hangBtn(voice.leave),
               ]
@@ -730,117 +789,6 @@ class VoicePanel extends StatelessWidget {
     );
   }
 
-  // TEMP: hoja mínima para controlar el AMBIENTE de sala (cama de sonido
-  // compartida, sincronizada vía gateway — NO WebRTC). El motor y la sincronía
-  // ya están completos; reemplazar esta UI con el diseño de Claude Design.
-  void _ambience(BuildContext context) {
-    final amb = AmbienceService.instance;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Pal.bg1,
-      builder: (ctx) => ListenableBuilder(
-        listenable: Listenable.merge([store, amb]),
-        builder: (ctx, _) {
-          final cur = store.ambienceIn(channel.id);
-          final catalog = amb.catalog;
-          return Container(
-            padding: const EdgeInsets.all(16),
-            height: 330,
-            child: catalog.isEmpty
-                ? const Center(
-                    child: Text(
-                        'No hay ambientes.\nGenera el pack con scripts/gen_ambience.py.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Pal.muted)))
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(children: [
-                        const Text('AMBIENTE DE SALA',
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: Pal.faint,
-                                letterSpacing: 1.3)),
-                        const SizedBox(width: 8),
-                        const Expanded(
-                            child: Text('lo oye toda la sala',
-                                style:
-                                    TextStyle(fontSize: 11, color: Pal.comment))),
-                        if (cur != null)
-                          SmallIconBtn(
-                              cur.paused ? LucideIcons.play : LucideIcons.pause,
-                              cur.paused ? 'Reanudar' : 'Pausar',
-                              voice.toggleAmbiencePause),
-                        if (cur != null)
-                          SmallIconBtn(LucideIcons.square, 'Detener',
-                              voice.stopAmbience,
-                              color: Pal.red),
-                      ]),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: GridView.count(
-                          crossAxisCount: 4,
-                          mainAxisSpacing: 10,
-                          crossAxisSpacing: 10,
-                          childAspectRatio: 1.5,
-                          children: catalog.map((a) {
-                            final on = cur?.ambienceId == a.id;
-                            return InkWell(
-                              onTap: () => voice.setAmbience(a.id),
-                              borderRadius: BorderRadius.circular(8),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: on ? _washGreen : Pal.bg3,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                      color:
-                                          on ? Pal.accent : Pal.borderDefault),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(a.emoji ?? '♪',
-                                        style: const TextStyle(fontSize: 22)),
-                                    const SizedBox(height: 4),
-                                    Text(a.name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                            fontSize: 11,
-                                            color:
-                                                on ? Pal.accent : Pal.muted)),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(children: [
-                        const Icon(LucideIcons.volume2,
-                            size: 16, color: Pal.muted),
-                        Expanded(
-                          child: Slider(
-                            value: amb.volume,
-                            activeColor: Pal.accent,
-                            onChanged: (v) => amb.setVolume(v),
-                          ),
-                        ),
-                        SizedBox(
-                          width: 44,
-                          child: Text('${(amb.volume * 100).round()}%',
-                              style: const TextStyle(
-                                  fontSize: 12, color: Pal.muted)),
-                        ),
-                      ]),
-                    ],
-                  ),
-          );
-        },
-      ),
-    );
-  }
 }
 
 /// Frame de pantalla compartida (.share): video + barra de info que aparece

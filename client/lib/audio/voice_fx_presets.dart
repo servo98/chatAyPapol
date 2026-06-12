@@ -258,7 +258,7 @@ const List<Map<String, dynamic>> _kBuiltinPresetMaps = [
   // ── Personajes ──
   {
     'id': 'troll',
-    'label': 'Trol',
+    'label': 'Troll',
     'category': 'character',
     'chain': [
       <String, dynamic>{

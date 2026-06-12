@@ -590,11 +590,19 @@ class VoiceManager extends ChangeNotifier {
   }
 
   /// Activa/cambia el ambiente de la sala (lo oye TODO el canal). Requiere estar
-  /// en el canal; el server valida permiso (USE_SOUNDBOARD).
-  Future<void> setAmbience(String ambienceId) async {
+  /// en el canal; el server valida permiso (CONTROL_AMBIENCE).
+  Future<void> setAmbience(String ambienceId, {bool loop = true}) async {
     final cid = channelId;
     if (cid == null) return;
-    store.gateway.send('AMBIENCE_SET', {'channel_id': cid, 'ambience_id': ambienceId});
+    store.gateway.send('AMBIENCE_SET',
+        {'channel_id': cid, 'ambience_id': ambienceId, 'loop': loop});
+  }
+
+  /// Activa/desactiva el loop del ambiente actual para toda la sala.
+  Future<void> setAmbienceLoop(bool loop) async {
+    final cid = channelId;
+    if (cid == null) return;
+    store.gateway.send('AMBIENCE_LOOP', {'channel_id': cid, 'loop': loop});
   }
 
   /// Apaga el ambiente de la sala para todos.

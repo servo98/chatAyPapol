@@ -85,7 +85,7 @@
     },
     {
       "id": "troll",
-      "label": "Trol",
+      "label": "Troll",
       "category": "character",
       "chain": [
         { "type": "pitch", "params": { "semitones": -8.0, "formant": 0.78 } },
