@@ -419,7 +419,11 @@ class AppStore extends ChangeNotifier {
         break;
       case 'MEMBER_JOIN':
       case 'MEMBER_UPDATE':
-        users[d['id']] = User.fromJson(d);
+        final mu = User.fromJson(d);
+        users[mu.id] = mu;
+        // Si soy yo, actualizar también `me` (Settings, etc. leen store.me):
+        // sin esto, cambiar mi avatar/nombre no se reflejaba en la UI.
+        if (mu.id == me?.id) me = mu;
         break;
       case 'MEMBER_REMOVE':
         users.remove(d['user_id']);

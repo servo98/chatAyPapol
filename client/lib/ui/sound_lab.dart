@@ -27,6 +27,11 @@ const Map<UiSound, String> _labels = {
   UiSound.selfUndeafen: 'des-ensordecerme',
   UiSound.connected: 'conectado',
   UiSound.disconnected: 'desconectado',
+  UiSound.error: 'error / algo salió mal',
+  UiSound.success: 'acción satisfactoria',
+  UiSound.modalOpen: 'abrir modal',
+  UiSound.modalClose: 'cerrar modal',
+  UiSound.confirm: 'confirmación aceptada',
 };
 
 class SoundLabPanel extends StatefulWidget {

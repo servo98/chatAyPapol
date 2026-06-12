@@ -124,19 +124,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 8, right: 8),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(LucideIcons.x, color: Pal.muted),
-                    ),
+                // Banda propia para la X (con borde inferior): la separa
+                // claramente del header del panel para que no choque con el
+                // botón de acción ni con los textos de abajo.
+                Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(top: 6, right: 8, bottom: 6),
+                  decoration: const BoxDecoration(
+                      border: Border(
+                          bottom: BorderSide(color: Pal.borderDefault))),
+                  child: IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(LucideIcons.x, color: Pal.muted),
+                    tooltip: 'Cerrar',
                   ),
                 ),
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                    padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
                     child: _panel(),
                   ),
                 ),
@@ -194,6 +199,9 @@ class _AccountPanel extends StatelessWidget {
                 if (f?.bytes == null) return;
                 try {
                   await store.api.upload('/api/avatar', f!.bytes!, f.name);
+                  // El server emite MEMBER_UPDATE → store.me se actualiza y el
+                  // avatar cambia solo. Confirmamos con feedback al usuario.
+                  if (context.mounted) showSuccess(context, 'Avatar actualizado');
                 } catch (e) {
                   if (context.mounted) showError(context, e);
                 }

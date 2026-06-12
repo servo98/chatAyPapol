@@ -17,6 +17,13 @@ enum UiSound {
   selfUndeafen,
   connected,
   disconnected,
+  // Feedback de UI (el Sound Lab los muestra automáticamente; idea de sonidos:
+  // alertas/notificaciones de los packs). Mudos hasta que el dueño los asigne.
+  error, // algo salió mal / error inesperado
+  success, // acción satisfactoria (guardado, avatar cambiado, etc.)
+  modalOpen, // se abre un modal/diálogo
+  modalClose, // se cierra un modal/diálogo
+  confirm, // confirmación aceptada (botón Confirmar)
 }
 
 /// Servicio de efectos de sonido de UI (independiente del audio de voz/LiveKit).

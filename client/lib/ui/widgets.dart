@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models.dart';
+import '../sfx.dart';
 import '../store.dart';
 import '../theme.dart';
 
@@ -118,12 +119,24 @@ bool sameDay(int a, int b) {
 }
 
 void showError(BuildContext context, Object e) {
+  SfxService.instance.play(UiSound.error);
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
     content: Text(e.toString(), style: const TextStyle(color: Pal.red)),
   ));
 }
 
+/// Feedback positivo: snackbar verde + sonido de éxito. Para acciones que antes
+/// no daban señal (p.ej. "Avatar actualizado").
+void showSuccess(BuildContext context, String msg) {
+  SfxService.instance.play(UiSound.success);
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    content: Text(msg, style: const TextStyle(color: Pal.green)),
+    duration: const Duration(seconds: 2),
+  ));
+}
+
 Future<bool> confirm(BuildContext context, String title, String body) async {
+  SfxService.instance.play(UiSound.modalOpen);
   final r = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -139,13 +152,15 @@ Future<bool> confirm(BuildContext context, String title, String body) async {
       ],
     ),
   );
+  SfxService.instance.play((r ?? false) ? UiSound.confirm : UiSound.modalClose);
   return r ?? false;
 }
 
 Future<String?> promptText(BuildContext context, String title,
-    {String hint = '', String initial = '', String action = 'Crear'}) {
+    {String hint = '', String initial = '', String action = 'Crear'}) async {
+  SfxService.instance.play(UiSound.modalOpen);
   final ctrl = TextEditingController(text: initial);
-  return showDialog<String>(
+  final r = await showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(title, style: const TextStyle(fontSize: 17)),
@@ -167,4 +182,6 @@ Future<String?> promptText(BuildContext context, String title,
       ],
     ),
   );
+  SfxService.instance.play(UiSound.modalClose);
+  return r;
 }
