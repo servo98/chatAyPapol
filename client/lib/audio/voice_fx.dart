@@ -443,6 +443,10 @@ class VoiceFxEngine extends ChangeNotifier {
       }
     }
     _activePresetId = null;
+    // Añadir un efecto = querer oírlo: enciende el master (mismo criterio que
+    // aplicar un preset). Si no, la cadena manual quedaba inerte con FX en OFF
+    // y parecía "no aplicarse".
+    _enabled = true;
     _afterMutation();
     return _nodes.length - 1;
   }
