@@ -271,7 +271,8 @@ const List<Map<String, dynamic>> _kBuiltinPresetMaps = [
       },
       <String, dynamic>{
         'type': 'reverb',
-        'params': {'roomsize': 0.90, 'damp': 0.30, 'wet': 0.40},
+        // sala más chica y poco wet: da cuerpo sin eco de catedral
+        'params': {'roomsize': 0.55, 'damp': 0.50, 'wet': 0.18},
       },
     ],
   },
@@ -290,7 +291,8 @@ const List<Map<String, dynamic>> _kBuiltinPresetMaps = [
       },
       <String, dynamic>{
         'type': 'reverb',
-        'params': {'roomsize': 0.80, 'damp': 0.40, 'wet': 0.35},
+        // reverb sutil: profundidad sin ahogar la voz en eco
+        'params': {'roomsize': 0.55, 'damp': 0.50, 'wet': 0.15},
       },
     ],
   },
