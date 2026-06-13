@@ -67,7 +67,7 @@ List<Widget> _renderLines(String text, AppStore store, TextStyle base) {
       out.add(Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.only(left: 12),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
             border: Border(left: BorderSide(color: Pal.faint, width: 3))),
         child: SelectableText.rich(TextSpan(
             children: _inline(line.length > 1 ? line.substring(2) : '', store,

@@ -71,7 +71,7 @@ class _SidebarState extends State<Sidebar> {
                 builder: (ctx) => AlertDialog(
                   title: const Text('Invitación creada', style: TextStyle(fontSize: 17)),
                   content: SelectableText(r['code'],
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 24, fontWeight: FontWeight.w700, color: Pal.accent)),
                   actions: [
                     TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Listo'))
@@ -110,17 +110,17 @@ class _SidebarState extends State<Sidebar> {
       child: Container(
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: Pal.borderSubtle)),
         ),
         child: Row(
           children: [
-            const Text('❯',
+            Text('❯',
                 style: TextStyle(
                     color: Pal.accent, fontSize: 18, fontWeight: FontWeight.w700,
                     height: 1)),
             const SizedBox(width: 9),
-            const Expanded(
+            Expanded(
               child: Text.rich(
                 TextSpan(
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
@@ -133,8 +133,8 @@ class _SidebarState extends State<Sidebar> {
             ),
             Icon(LucideIcons.chevronDown, color: Pal.muted, size: 18),
             if (!store.wsConnected)
-              const Padding(
-                padding: EdgeInsets.only(left: 6),
+              Padding(
+                padding: const EdgeInsets.only(left: 6),
                 child: Icon(LucideIcons.wifiOff, color: Pal.yellow, size: 15),
               ),
           ],
@@ -157,7 +157,7 @@ class _SidebarState extends State<Sidebar> {
               const SizedBox(width: 2),
               Expanded(
                 child: Text(cat.name.toUpperCase(),
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 11, fontWeight: FontWeight.w700,
                         color: Pal.faint, letterSpacing: 1.2)),
               ),
@@ -201,7 +201,7 @@ class _SidebarState extends State<Sidebar> {
               borderRadius: BorderRadius.circular(5),
               // barra de acento verde con glow en el canal activo
               border: selected
-                  ? const Border(
+                  ? Border(
                       left: BorderSide(color: Pal.accent, width: 3))
                   : null,
               boxShadow: selected ? Pal.glowGreenSm : null,
@@ -263,7 +263,7 @@ class _SidebarState extends State<Sidebar> {
                       Container(
                           width: 8,
                           height: 8,
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                               color: Pal.text, shape: BoxShape.circle)),
                     if (hover && store.canI(P.manageRoles))
                       SmallIconBtn(LucideIcons.settings, 'Permisos del canal',
@@ -300,10 +300,10 @@ class _SidebarState extends State<Sidebar> {
                               : Pal.muted)),
                 ),
                 if (vs.streaming)
-                  const Icon(LucideIcons.screenShare, size: 13, color: Pal.green),
-                if (vs.mute) const Icon(LucideIcons.micOff, size: 13, color: Pal.faint),
+                  Icon(LucideIcons.screenShare, size: 13, color: Pal.green),
+                if (vs.mute) Icon(LucideIcons.micOff, size: 13, color: Pal.faint),
                 if (vs.deaf)
-                  const Icon(LucideIcons.volumeX, size: 13, color: Pal.faint),
+                  Icon(LucideIcons.volumeX, size: 13, color: Pal.faint),
               ],
             ),
           ),
@@ -317,21 +317,21 @@ class _SidebarState extends State<Sidebar> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Pal.bg0.withValues(alpha: .6),
-        border: const Border(top: BorderSide(color: Pal.borderSubtle)),
+        border: Border(top: BorderSide(color: Pal.borderSubtle)),
       ),
       child: Row(
         children: [
-          const Icon(LucideIcons.activity, color: Pal.green, size: 18),
+          Icon(LucideIcons.activity, color: Pal.green, size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Voz conectada',
+                Text('Voz conectada',
                     style: TextStyle(
                         color: Pal.green, fontSize: 12, fontWeight: FontWeight.w700)),
                 Text(ch?.name ?? '',
-                    style: const TextStyle(color: Pal.muted, fontSize: 11),
+                    style: TextStyle(color: Pal.muted, fontSize: 11),
                     overflow: TextOverflow.ellipsis),
               ],
             ),

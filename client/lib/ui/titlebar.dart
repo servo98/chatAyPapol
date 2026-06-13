@@ -52,8 +52,8 @@ class _TitleBarState extends State<TitleBar> with WindowListener {
               behavior: HitTestBehavior.translucent,
               onDoubleTap: _toggleMax,
               child: DragToMoveArea(
-                child: Row(children: const [
-                  SizedBox(width: 12),
+                child: Row(children: [
+                  const SizedBox(width: 12),
                   Text('❯',
                       style: TextStyle(
                           fontSize: 14,
@@ -95,10 +95,10 @@ class _WinBtn extends StatelessWidget {
   final IconData icon;
   final String tip;
   final VoidCallback onTap;
-  final Color hoverColor;
+  final Color? hoverColor;
   final double iconSize;
   const _WinBtn(this.icon, this.tip, this.onTap,
-      {this.hoverColor = Pal.bg4, this.iconSize = 16});
+      {this.hoverColor, this.iconSize = 16});
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +110,7 @@ class _WinBtn extends StatelessWidget {
       button: true,
       child: InkWell(
         onTap: onTap,
-        hoverColor: hoverColor,
+        hoverColor: hoverColor ?? Pal.bg4,
         child: SizedBox(
           width: 46,
           height: double.infinity,

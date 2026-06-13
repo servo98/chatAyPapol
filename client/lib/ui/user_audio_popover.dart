@@ -181,9 +181,9 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
           color: Pal.bg0,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: Pal.borderStrong),
-          boxShadow: const [
-            BoxShadow(color: Color(0xCC000000), blurRadius: 40, offset: Offset(0, 18), spreadRadius: -14),
-            BoxShadow(color: Color(0x1439FF14), blurRadius: 26, spreadRadius: -10),
+          boxShadow: [
+            const BoxShadow(color: Color(0xCC000000), blurRadius: 40, offset: Offset(0, 18), spreadRadius: -14),
+            BoxShadow(color: Pal.accent.withValues(alpha: 0.078), blurRadius: 26, spreadRadius: -10),
           ],
         ),
         child: ClipRRect(
@@ -223,14 +223,14 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
           Container(
             width: 28,
             height: 28,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Pal.accentDim,
             ),
             alignment: Alignment.center,
             child: Text(
               initials,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: Pal.greenInk,
@@ -244,7 +244,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
               displayName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13.5,
                 fontWeight: FontWeight.w700,
                 color: Pal.text,
@@ -265,9 +265,9 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
           height: 21,
           padding: const EdgeInsets.symmetric(horizontal: 9),
           decoration: BoxDecoration(
-            color: const Color(0x1239FF14),
+            color: Pal.accent.withValues(alpha: 0.071),
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: const Color(0x4239FF14)),
+            border: Border.all(color: Pal.accent.withValues(alpha: 0.259)),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Container(
@@ -280,7 +280,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
               ),
             ),
             const SizedBox(width: 6),
-            const Text(
+            Text(
               '// sólo tú oyes estos ajustes',
               style: TextStyle(fontSize: 10.5, color: Pal.accentDim, letterSpacing: 0.01),
             ),
@@ -305,7 +305,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         // Label + valor
         Row(children: [
-          const Text('VOLUMEN',
+          Text('VOLUMEN',
               style: TextStyle(
                   fontSize: 10,
                   letterSpacing: 0.16,
@@ -346,7 +346,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
         ]),
         const SizedBox(height: 5),
         // Escala 0% / 100% / 200%
-        const Row(
+        Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text('0%', style: TextStyle(fontSize: 9, color: Pal.comment)),
@@ -368,7 +368,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('ECUALIZADOR',
+        Text('ECUALIZADOR',
             style: TextStyle(fontSize: 10, letterSpacing: 0.16, color: Pal.faint)),
         const SizedBox(height: 9),
         // Curva EQ SVG
@@ -416,7 +416,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('PRESETS',
+        Text('PRESETS',
             style: TextStyle(fontSize: 10, letterSpacing: 0.16, color: Pal.faint)),
         const SizedBox(height: 9),
         Wrap(spacing: 6, runSpacing: 6, children: [
@@ -461,9 +461,9 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
             decoration: BoxDecoration(
               color: Pal.accentDim,
               borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: const Color(0xFF2CE60F)),
+              border: Border.all(color: Pal.accentDim),
             ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: const [
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
               Icon(LucideIcons.check, size: 14, color: Pal.greenInk),
               SizedBox(width: 7),
               Text('listo',
@@ -480,7 +480,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
   }
 
   Widget _buildDivider() =>
-      const Divider(height: 1, thickness: 1, color: Pal.borderSubtle);
+      Divider(height: 1, thickness: 1, color: Pal.borderSubtle);
 }
 
 // ─── _VolTrack — slider horizontal custom ─────────────────────────────────────
@@ -512,7 +512,9 @@ class _VolTrack extends StatelessWidget {
         thumbColor: muted ? Pal.red : Pal.accent,
         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
         overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-        overlayColor: Color(muted ? 0x2FFF4D4D : 0x2F39FF14),
+        overlayColor: muted
+            ? const Color(0x2FFF4D4D)
+            : Pal.accent.withValues(alpha: 0.184),
         trackShape: const _VolTrackShape(),
       ),
       child: Slider(
@@ -574,7 +576,7 @@ class _EqCurveWidget extends StatelessWidget {
           child: Container(height: 1, color: const Color(0x8C4D5F56)),
         ),
         // Label "0 dB"
-        const Positioned(
+        Positioned(
           right: 5,
           top: 15,
           child: Text('0 dB',
@@ -644,14 +646,14 @@ class _EqCurvePainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: const [Color(0x4239FF14), Color(0x0039FF14)],
+        colors: [Pal.accent.withValues(alpha: 0.259), Pal.accent.withValues(alpha: 0.0)],
       ).createShader(areaRect)
       ..style = PaintingStyle.fill;
     canvas.drawPath(areaPath, areaPaint);
 
     // Línea de la curva con glow
     final glowPaint = Paint()
-      ..color = const Color(0x6039FF14)
+      ..color = Pal.accent.withValues(alpha: 0.376)
       ..strokeWidth = 3.5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
@@ -710,7 +712,7 @@ class _EqBand extends StatelessWidget {
                 thumbColor: Pal.accent,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                overlayColor: const Color(0x2F39FF14),
+                overlayColor: Pal.accent.withValues(alpha: 0.184),
                 trackShape: _CenteredTrackShape(),
               ),
               child: Slider(
@@ -727,7 +729,7 @@ class _EqBand extends StatelessWidget {
         const SizedBox(height: 7),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 9,
             letterSpacing: 0.08,
             color: Pal.faint,
@@ -857,7 +859,7 @@ class _PresetChipState extends State<_PresetChip> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (widget.active) ...[
-                const Icon(LucideIcons.check, size: 12, color: Pal.greenInk),
+                Icon(LucideIcons.check, size: 12, color: Pal.greenInk),
                 const SizedBox(width: 6),
               ],
               Text(

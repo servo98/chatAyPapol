@@ -23,7 +23,7 @@ import '../webrtc_apm.dart';
 import 'widgets.dart';
 
 // Washes locales (no viven en Pal): mismos que voice_panel.dart.
-const _washGreen = Color(0x1A39FF14);
+Color get _washGreen => Pal.accent.withValues(alpha: 0.10); // sigue el acento
 const _washCyan = Color(0x1A22D3EE);
 
 // Categorías de preset (espejo de voice_fx_presets) → pestañas del diseño.
@@ -121,7 +121,7 @@ Future<void> _showFloating(BuildContext context, Widget child,
 Widget _sectionLabel(String t) => Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(t.toUpperCase(),
-          style: const TextStyle(
+          style: TextStyle(
               fontSize: 10.5, color: Pal.faint, letterSpacing: 1.3, fontWeight: FontWeight.w700)),
     );
 
@@ -158,14 +158,14 @@ class _FxPopoverBodyState extends State<_FxPopoverBody> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: const [
+          Row(children: [
             Icon(LucideIcons.sparkles, size: 16, color: Pal.accent),
-            SizedBox(width: 8),
+            const SizedBox(width: 8),
             Text('mis efectos de voz',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Pal.text)),
           ]),
           const SizedBox(height: 2),
-          const Text('la sala me oye transformado · volver a mi voz al instante',
+          Text('la sala me oye transformado · volver a mi voz al instante',
               style: TextStyle(fontSize: 11, color: Pal.comment)),
           const SizedBox(height: 14),
           // master toggle
@@ -261,7 +261,7 @@ class _MasterToggleRow extends StatelessWidget {
                     color: on ? Pal.accent : Pal.text)),
             const SizedBox(height: 2),
             Text(on ? 'la sala te oye transformado' : 'cuando está OFF hablas con tu voz normal',
-                style: const TextStyle(fontSize: 11, color: Pal.faint)),
+                style: TextStyle(fontSize: 11, color: Pal.faint)),
           ]),
         ),
         Switch(
@@ -366,7 +366,7 @@ class _PresetCard extends StatelessWidget {
             Row(children: [
               Icon(_presetIcon(preset.id), size: 16, color: selected ? Pal.accent : Pal.muted),
               const Spacer(),
-              if (selected) const Icon(LucideIcons.circleCheck, size: 15, color: Pal.accent),
+              if (selected) Icon(LucideIcons.circleCheck, size: 15, color: Pal.accent),
             ]),
             const Spacer(),
             Text(preset.labelEs,
@@ -380,7 +380,7 @@ class _PresetCard extends StatelessWidget {
             Text(_presetDesc[preset.id] ?? '',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 10.5, color: Pal.faint)),
+                style: TextStyle(fontSize: 10.5, color: Pal.faint)),
           ],
         ),
       ),
@@ -431,21 +431,21 @@ class _AmbiencePopoverBody extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: const [
+          Row(children: [
             Icon(LucideIcons.radioTower, size: 16, color: Pal.link),
-            SizedBox(width: 8),
+            const SizedBox(width: 8),
             Text('ambiente de sala',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Pal.text)),
           ]),
           const SizedBox(height: 2),
-          const Text('lo oye TODA la sala · no es tu voz',
+          Text('lo oye TODA la sala · no es tu voz',
               style: TextStyle(fontSize: 11, color: Pal.comment)),
           const SizedBox(height: 14),
           if (cur != null) _AmbienceNowPlaying(voice: voice, store: store, amb: amb, cur: cur, canControl: canControl),
           if (cur != null) const SizedBox(height: 12),
           if (catalog.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
               child: Center(
                   child: Text('No hay ambientes.\nGenera el pack con scripts/gen_ambience.py.',
                       textAlign: TextAlign.center, style: TextStyle(color: Pal.muted))),
@@ -485,14 +485,14 @@ class _AmbiencePopoverBody extends StatelessWidget {
               border: Border.all(color: Pal.borderSubtle),
             ),
             child: Row(children: [
-              const Icon(LucideIcons.shield, size: 13, color: Pal.faint),
+              Icon(LucideIcons.shield, size: 13, color: Pal.faint),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   canControl
                       ? 'tú puedes controlar el ambiente · lo oye toda la sala'
                       : 'solo quien tenga el permiso "Controlar ambiente" cambia el ambiente',
-                  style: const TextStyle(fontSize: 11, color: Pal.comment),
+                  style: TextStyle(fontSize: 11, color: Pal.comment),
                 ),
               ),
             ]),
@@ -533,11 +533,11 @@ class _AmbienceNowPlaying extends StatelessWidget {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(def?.name ?? cur.ambienceId as String,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Pal.link)),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Pal.link)),
             Text(
                 (cur.paused as bool ? 'en pausa' : 'sonando para la sala') +
                     (byName != null ? ' · activado por $byName' : ''),
-                style: const TextStyle(fontSize: 10.5, color: Pal.faint)),
+                style: TextStyle(fontSize: 10.5, color: Pal.faint)),
           ]),
         ),
         if (canControl) ...[
@@ -592,7 +592,7 @@ class _AmbienceCard extends StatelessWidget {
                             fontSize: 12.5,
                             fontWeight: FontWeight.w700,
                             color: selected ? Pal.link : Pal.text)),
-                    const Text('bucle', style: TextStyle(fontSize: 10, color: Pal.faint)),
+                    Text('bucle', style: TextStyle(fontSize: 10, color: Pal.faint)),
                   ]),
             ),
             Icon(
@@ -618,7 +618,7 @@ class _AmbienceFooterControls extends StatelessWidget {
   Widget build(BuildContext context) {
     final loopOn = (cur?.loop as bool?) ?? true;
     return Row(children: [
-      const Icon(LucideIcons.volume2, size: 16, color: Pal.muted),
+      Icon(LucideIcons.volume2, size: 16, color: Pal.muted),
       Expanded(
         child: Slider(
           value: amb.volume,
@@ -629,7 +629,7 @@ class _AmbienceFooterControls extends StatelessWidget {
       SizedBox(
           width: 38,
           child: Text('${(amb.volume * 100).round()}%',
-              style: const TextStyle(fontSize: 11, color: Pal.muted))),
+              style: TextStyle(fontSize: 11, color: Pal.muted))),
       const SizedBox(width: 8),
       // loop toggle (estado de sala) — solo si controlas y hay algo sonando
       Opacity(
@@ -640,7 +640,7 @@ class _AmbienceFooterControls extends StatelessWidget {
             activeTrackColor: Pal.link,
             onChanged: (canControl && cur != null) ? (v) => voice.setAmbienceLoop(v) : null,
           ),
-          const Text('loop', style: TextStyle(fontSize: 11, color: Pal.muted)),
+          Text('loop', style: TextStyle(fontSize: 11, color: Pal.muted)),
         ]),
       ),
     ]);
@@ -669,13 +669,13 @@ class _VoiceFxSettingsState extends State<VoiceFxSettings> {
         return ListView(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           children: [
-            const Text('// EFECTOS DE VOZ',
+            Text('// EFECTOS DE VOZ',
                 style: TextStyle(fontSize: 12, color: Pal.accent, letterSpacing: 1.2)),
             const SizedBox(height: 6),
-            const Text('efectos de mi voz',
+            Text('efectos de mi voz',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Pal.text)),
             const SizedBox(height: 8),
-            const Text(
+            Text(
                 'transforma tu micrófono en vivo. la sala te oye con el efecto. OFF y vuelves a '
                 'tu voz normal al instante — sin reconectar.',
                 style: TextStyle(fontSize: 13, color: Pal.muted, height: 1.4)),
@@ -696,21 +696,21 @@ class _VoiceFxSettingsState extends State<VoiceFxSettings> {
             const SizedBox(height: 16),
             _MasterToggleRow(engine: e),
             const SizedBox(height: 18),
-            const Text('presets de un toque',
+            Text('presets de un toque',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Pal.text)),
             const SizedBox(height: 10),
             _CategoryTabs(current: _cat, onChanged: (c) => setState(() => _cat = c)),
             const SizedBox(height: 12),
             _PresetGrid(engine: e, presets: presets, columns: 3),
             const SizedBox(height: 20),
-            Row(children: const [
+            Row(children: [
               Text('editor de cadena',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Pal.text)),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Text('— modo avanzado', style: TextStyle(fontSize: 12, color: Pal.faint)),
             ]),
             const SizedBox(height: 4),
-            const Text('# el orden importa: la señal pasa de arriba a abajo, del mic a la sala.',
+            Text('# el orden importa: la señal pasa de arriba a abajo, del mic a la sala.',
                 style: TextStyle(fontSize: 11, color: Pal.comment)),
             const SizedBox(height: 12),
             _ChainEditor(
@@ -738,7 +738,7 @@ class _InfoCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Pal.bg0,
         borderRadius: BorderRadius.circular(8),
-        border: const Border(left: BorderSide(color: Pal.accent, width: 2)),
+        border: Border(left: BorderSide(color: Pal.accent, width: 2)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -746,11 +746,11 @@ class _InfoCard extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(title,
-                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Pal.text)),
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Pal.text)),
           ),
         ]),
         const SizedBox(height: 6),
-        Text(body, style: const TextStyle(fontSize: 11, color: Pal.faint, height: 1.35)),
+        Text(body, style: TextStyle(fontSize: 11, color: Pal.faint, height: 1.35)),
       ]),
     );
   }
@@ -772,17 +772,17 @@ class _ChainEditor extends StatelessWidget {
       ),
       padding: const EdgeInsets.all(10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: const [
+        Row(children: [
           Icon(LucideIcons.mic, size: 13, color: Pal.muted),
-          SizedBox(width: 6),
+          const SizedBox(width: 6),
           Text('MIC', style: TextStyle(fontSize: 11, color: Pal.muted, letterSpacing: 1)),
-          Spacer(),
+          const Spacer(),
           Text('SALA →', style: TextStyle(fontSize: 11, color: Pal.accent, letterSpacing: 1)),
         ]),
         const SizedBox(height: 8),
         if (nodes.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
             child: Text('cadena vacía — añade un efecto abajo o aplica un preset',
                 textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Pal.comment)),
           ),
@@ -835,12 +835,12 @@ class _ChainNodeRow extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(children: [
-            const Icon(LucideIcons.gripVertical, size: 14, color: Pal.comment),
+            Icon(LucideIcons.gripVertical, size: 14, color: Pal.comment),
             const SizedBox(width: 6),
             SizedBox(
                 width: 16,
                 child: Text('${index + 1}',
-                    style: const TextStyle(fontSize: 11, color: Pal.faint))),
+                    style: TextStyle(fontSize: 11, color: Pal.faint))),
             Icon(_fxTypeIcon(node.type), size: 14, color: dim ? Pal.comment : Pal.accent),
             const SizedBox(width: 8),
             Expanded(
@@ -853,7 +853,7 @@ class _ChainNodeRow extends StatelessWidget {
                       color: dim ? Pal.faint : Pal.text)),
             ),
             Text(_fmtParam(firstParam, firstVal),
-                style: const TextStyle(fontSize: 11, color: Pal.muted)),
+                style: TextStyle(fontSize: 11, color: Pal.muted)),
             const SizedBox(width: 6),
             _miniBtn(LucideIcons.arrowUp, 'Subir',
                 index == 0 ? null : () => engine.reorder(index, index - 1)),
@@ -870,7 +870,7 @@ class _ChainNodeRow extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
             child: Column(children: [
-              const Divider(height: 1, color: Pal.borderSubtle),
+              Divider(height: 1, color: Pal.borderSubtle),
               const SizedBox(height: 6),
               for (final p in node.type.params)
                 _ParamSlider(
@@ -911,7 +911,7 @@ class _ParamSlider extends StatelessWidget {
         child: Text(param.labelEs,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11.5, color: Pal.muted)),
+            style: TextStyle(fontSize: 11.5, color: Pal.muted)),
       ),
       Expanded(
         child: Slider(
@@ -927,7 +927,7 @@ class _ParamSlider extends StatelessWidget {
         width: 56,
         child: Text(_fmtParam(param, value),
             textAlign: TextAlign.right,
-            style: const TextStyle(fontSize: 11, color: Pal.muted)),
+            style: TextStyle(fontSize: 11, color: Pal.muted)),
       ),
     ]);
   }
@@ -956,7 +956,7 @@ class _EffectPalette extends StatelessWidget {
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 Icon(_fxTypeIcon(t), size: 13, color: Pal.muted),
                 const SizedBox(width: 6),
-                Text(t.labelEs, style: const TextStyle(fontSize: 11.5, color: Pal.text)),
+                Text(t.labelEs, style: TextStyle(fontSize: 11.5, color: Pal.text)),
               ]),
             ),
           ),

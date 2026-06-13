@@ -14,13 +14,13 @@ import '../voice.dart';
 class VolumeSlider extends StatelessWidget {
   final double value;
   final ValueChanged<double> onChanged;
-  final Color color;
+  final Color? color;
   final double width;
   const VolumeSlider({
     super.key,
     required this.value,
     required this.onChanged,
-    this.color = Pal.accent,
+    this.color,
     this.width = 200,
   });
 
@@ -35,7 +35,7 @@ class VolumeSlider extends StatelessWidget {
           value: value.clamp(0.0, 2.0),
           max: 2.0,
           divisions: 40,
-          activeColor: color,
+          activeColor: color ?? Pal.accent,
           label: '${(value * 100).round()}%',
           onChanged: onChanged,
         ),
@@ -43,7 +43,7 @@ class VolumeSlider extends StatelessWidget {
       SizedBox(
         width: 44,
         child: Text('${(value * 100).round()}%',
-            style: const TextStyle(fontSize: 12, color: Pal.muted)),
+            style: TextStyle(fontSize: 12, color: Pal.muted)),
       ),
     ]);
   }
@@ -143,7 +143,7 @@ class _ScreenShareFullscreenState extends State<ScreenShareFullscreen> {
                       ),
                     ),
                     child: Row(children: [
-                      const Icon(LucideIcons.monitor,
+                      Icon(LucideIcons.monitor,
                           size: 18, color: Pal.green),
                       const SizedBox(width: 8),
                       Expanded(

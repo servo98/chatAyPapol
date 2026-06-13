@@ -73,14 +73,14 @@ class _ChannelPermsEditorState extends State<_ChannelPermsEditor> {
         Padding(
           padding: const EdgeInsets.all(16),
           child: Row(children: [
-            const Icon(LucideIcons.lock, color: Pal.accent, size: 20),
+            Icon(LucideIcons.lock, color: Pal.accent, size: 20),
             const SizedBox(width: 8),
             Text('Permisos de #${widget.channel.name}',
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             const Spacer(),
             IconButton(
                 onPressed: () => Navigator.pop(context),
-                icon: const Icon(LucideIcons.x, color: Pal.muted)),
+                icon: Icon(LucideIcons.x, color: Pal.muted)),
           ]),
         ),
         Expanded(
@@ -117,7 +117,7 @@ class _ChannelPermsEditorState extends State<_ChannelPermsEditor> {
                                         : Pal.text)),
                           ),
                           if (hasOw)
-                            const Icon(LucideIcons.circle, size: 6, color: Pal.accent),
+                            Icon(LucideIcons.circle, size: 6, color: Pal.accent),
                         ]),
                       ),
                     );
@@ -148,7 +148,7 @@ class _ChannelPermsEditorState extends State<_ChannelPermsEditor> {
                               Text(label, style: const TextStyle(fontSize: 13)),
                               if (desc.isNotEmpty)
                                 Text(desc,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         fontSize: 11, color: Pal.faint)),
                             ],
                           ),

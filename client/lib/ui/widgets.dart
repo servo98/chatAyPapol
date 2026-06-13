@@ -121,7 +121,7 @@ bool sameDay(int a, int b) {
 void showError(BuildContext context, Object e) {
   SfxService.instance.play(UiSound.error);
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(e.toString(), style: const TextStyle(color: Pal.red)),
+    content: Text(e.toString(), style: TextStyle(color: Pal.red)),
   ));
 }
 
@@ -130,7 +130,7 @@ void showError(BuildContext context, Object e) {
 void showSuccess(BuildContext context, String msg) {
   SfxService.instance.play(UiSound.success);
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(msg, style: const TextStyle(color: Pal.green)),
+    content: Text(msg, style: TextStyle(color: Pal.green)),
     duration: const Duration(seconds: 2),
   ));
 }
@@ -141,7 +141,7 @@ Future<bool> confirm(BuildContext context, String title, String body) async {
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(title, style: const TextStyle(fontSize: 17)),
-      content: Text(body, style: const TextStyle(color: Pal.muted)),
+      content: Text(body, style: TextStyle(color: Pal.muted)),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
         ElevatedButton(

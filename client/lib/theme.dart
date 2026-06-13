@@ -1,43 +1,228 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-/// Paleta aypapol — terminal/CLI: verde-negro profundo + verde neón "papol".
-/// Tokens calcados de project/tokens/colors.css del design system.
-/// Sin assets de color: 0 KB extra.
+/// Una paleta concreta (resuelta en runtime): combina un juego de SUPERFICIES
+/// (oscuro o claro) con un ACENTO. El usuario elige acento + modo claro/oscuro
+/// en Ajustes → Apariencia; ver [ThemeController]. Tokens calcados de
+/// project/tokens/colors.css del design system.
+class Palette {
+  final bool isLight;
+  // Fondos: en pasos cortos. bg0=más profundo (barras/popups), bg2=página.
+  final Color bg0, bg1, bg2, bg3, bg4, inset;
+  // Acento (EL color de marca) + variantes.
+  final Color accent, accentDim, greenInk, green;
+  // Texto.
+  final Color text, muted, faint, comment;
+  // Bordes hairline.
+  final Color borderSubtle, borderDefault, borderStrong;
+  // Secundarios.
+  final Color link, magenta, yellow, red;
+  // Rejilla de fondo (tinte del acento, muy tenue).
+  final Color gridLine;
+  const Palette({
+    required this.isLight,
+    required this.bg0,
+    required this.bg1,
+    required this.bg2,
+    required this.bg3,
+    required this.bg4,
+    required this.inset,
+    required this.accent,
+    required this.accentDim,
+    required this.greenInk,
+    required this.green,
+    required this.text,
+    required this.muted,
+    required this.faint,
+    required this.comment,
+    required this.borderSubtle,
+    required this.borderDefault,
+    required this.borderStrong,
+    required this.link,
+    required this.magenta,
+    required this.yellow,
+    required this.red,
+    required this.gridLine,
+  });
+}
+
+/// Un acento seleccionable: triples (acento, acento atenuado, color SOBRE el
+/// acento) para modo oscuro y para modo claro (los neón puros son ilegibles
+/// sobre blanco, así que el modo claro usa una variante más oscura).
+class AccentDef {
+  final String id, name;
+  final Color dAccent, dDim, dOn; // oscuro
+  final Color lAccent, lDim, lOn; // claro
+  const AccentDef(this.id, this.name, this.dAccent, this.dDim, this.dOn,
+      this.lAccent, this.lDim, this.lOn);
+}
+
+/// Catálogo de acentos (basado en colors.css del design system).
+const kAccents = <AccentDef>[
+  AccentDef('green', 'Papol', // verde neón — el original
+      Color(0xFF39FF14), Color(0xFF2CE60F), Color(0xFF04140A),
+      Color(0xFF15A012), Color(0xFF0C7A0A), Color(0xFFFFFFFF)),
+  AccentDef('cyan', 'Cyan', //
+      Color(0xFF22D3EE), Color(0xFF0FA9C4), Color(0xFF03171B),
+      Color(0xFF0E8AA3), Color(0xFF0A6377), Color(0xFFFFFFFF)),
+  AccentDef('amber', 'Ámbar', //
+      Color(0xFFFFB627), Color(0xFFC98708), Color(0xFF1A1200),
+      Color(0xFFB07400), Color(0xFF8A5B00), Color(0xFFFFFFFF)),
+  AccentDef('magenta', 'Magenta', //
+      Color(0xFFFF2E9A), Color(0xFFC41673), Color(0xFF1A0410),
+      Color(0xFFC41673), Color(0xFF9C1059), Color(0xFFFFFFFF)),
+  AccentDef('violet', 'Violeta', // p-chat #7c8cff
+      Color(0xFF7C8CFF), Color(0xFF5566E0), Color(0xFF080B26),
+      Color(0xFF4F5FD6), Color(0xFF3A48B0), Color(0xFFFFFFFF)),
+];
+
+/// Construye la paleta efectiva a partir de un acento + modo.
+Palette buildPalette(String accentId, bool light) {
+  final a = kAccents.firstWhere((x) => x.id == accentId,
+      orElse: () => kAccents.first);
+  final accent = light ? a.lAccent : a.dAccent;
+  final accentDim = light ? a.lDim : a.dDim;
+  final onAccent = light ? a.lOn : a.dOn;
+  if (light) {
+    return Palette(
+      isLight: true,
+      bg0: const Color(0xFFFFFFFF),
+      bg1: const Color(0xFFECEFEA),
+      bg2: const Color(0xFFF5F7F4),
+      bg3: const Color(0xFFE6EAE4),
+      bg4: const Color(0xFFDBE0D8),
+      inset: const Color(0xFFFFFFFF),
+      accent: accent,
+      accentDim: accentDim,
+      greenInk: onAccent,
+      green: const Color(0xFF15A012),
+      text: const Color(0xFF0A0D0C),
+      muted: const Color(0xFF42514A),
+      faint: const Color(0xFF66786E),
+      comment: const Color(0xFF8A9A90),
+      borderSubtle: const Color(0xFFE3E7E1),
+      borderDefault: const Color(0xFFD2D8D0),
+      borderStrong: const Color(0xFFB9C1B6),
+      link: const Color(0xFF0FA9C4),
+      magenta: const Color(0xFFC41673),
+      yellow: const Color(0xFFC98708),
+      red: const Color(0xFFD23030),
+      gridLine: const Color(0x0A000000),
+    );
+  }
+  return Palette(
+    isLight: false,
+    bg0: const Color(0xFF06080A),
+    bg1: const Color(0xFF0C1110),
+    bg2: const Color(0xFF0A0D0C),
+    bg3: const Color(0xFF0F1413),
+    bg4: const Color(0xFF131918),
+    inset: const Color(0xFF070A09),
+    accent: accent,
+    accentDim: accentDim,
+    greenInk: onAccent,
+    green: const Color(0xFF39FF14),
+    text: const Color(0xFFE9F5EC),
+    muted: const Color(0xFF97A89E),
+    faint: const Color(0xFF66786E),
+    comment: const Color(0xFF4D5F56),
+    borderSubtle: const Color(0xFF161D1A),
+    borderDefault: const Color(0xFF1F2824),
+    borderStrong: const Color(0xFF2A352F),
+    link: const Color(0xFF22D3EE),
+    magenta: const Color(0xFFFF2E9A),
+    yellow: const Color(0xFFFFB627),
+    red: const Color(0xFFFF4D4D),
+    gridLine: accent.withValues(alpha: 0.043),
+  );
+}
+
+/// Estado global del tema: acento + modo claro/oscuro, persistido en local
+/// (SharedPreferences, igual que mic/EQ en voice.dart). Notifica para repintar
+/// en vivo — main.dart envuelve el MaterialApp en un ListenableBuilder de este.
+class ThemeController extends ChangeNotifier {
+  ThemeController._();
+  static final ThemeController instance = ThemeController._();
+
+  static const _kAccent = 'theme_accent';
+  static const _kLight = 'theme_light';
+
+  String _accentId = 'green';
+  bool _light = false;
+  Palette _palette = buildPalette('green', false);
+
+  Palette get palette => _palette;
+  String get accentId => _accentId;
+  bool get light => _light;
+
+  Future<void> load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _accentId = prefs.getString(_kAccent) ?? 'green';
+      _light = prefs.getBool(_kLight) ?? false;
+      _palette = buildPalette(_accentId, _light);
+    } catch (_) {/* sin prefs: queda el default papol oscuro */}
+  }
+
+  Future<void> setAccent(String id) async {
+    if (_accentId == id) return;
+    _accentId = id;
+    _apply();
+  }
+
+  Future<void> setLight(bool v) async {
+    if (_light == v) return;
+    _light = v;
+    _apply();
+  }
+
+  void _apply() {
+    _palette = buildPalette(_accentId, _light);
+    notifyListeners();
+    () async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_kAccent, _accentId);
+        await prefs.setBool(_kLight, _light);
+      } catch (_) {}
+    }();
+  }
+}
+
+/// Fachada de tokens. Los colores son GETTERS que leen la paleta activa de
+/// [ThemeController] → cambian en vivo al cambiar de tema. Lo no-cromático
+/// (fuentes, duraciones, rejilla) sigue siendo `const`.
 abstract final class Pal {
-  // Fondos: casi-negro con tinte verde, suben en pasos cortos.
-  static const bg0 = Color(0xFF06080A); // --void: barras, pozos, popups
-  static const bg1 = Color(0xFF0C1110); // --ink-850: sidebar / members
-  static const bg2 = Color(0xFF0A0D0C); // --ink-900: chat / página
-  static const bg3 = Color(0xFF0F1413); // --ink-800: card / input / hover
-  static const bg4 = Color(0xFF131918); // --ink-750: raised / seleccionado
-  static const inset = Color(0xFF070A09); // --ink-inset: inputs, terminales
+  static Palette get _p => ThemeController.instance.palette;
+  static bool get isLight => _p.isLight;
 
-  // Verde papol — EL acento.
-  static const accent = Color(0xFF39FF14); // --green-neon
-  static const accentDim = Color(0xFF2CE60F); // --green-500: rellenos / texto
-  static const greenInk = Color(0xFF04140A); // texto/icono SOBRE verde
-  static const green = Color(0xFF39FF14); // presencia en línea / conectado
+  static Color get bg0 => _p.bg0;
+  static Color get bg1 => _p.bg1;
+  static Color get bg2 => _p.bg2;
+  static Color get bg3 => _p.bg3;
+  static Color get bg4 => _p.bg4;
+  static Color get inset => _p.inset;
 
-  // Texto: off-whites con tinte verde → gris de comentario CLI.
-  static const text = Color(0xFFE9F5EC); // --fg-bright: titulares
-  static const muted = Color(0xFF97A89E); // --fg-2: secundario / labels
-  static const faint = Color(0xFF66786E); // --fg-3: metadata / dim
-  static const comment = Color(0xFF4D5F56); // --fg-comment: placeholders
+  static Color get accent => _p.accent;
+  static Color get accentDim => _p.accentDim;
+  static Color get greenInk => _p.greenInk;
+  static Color get green => _p.green;
 
-  // Bordes hairline (grises con tinte verde). El borde ES el contenedor.
-  static const borderSubtle = Color(0xFF161D1A); // --line-900
-  static const borderDefault = Color(0xFF1F2824); // --line-800
-  static const borderStrong = Color(0xFF2A352F); // --line-700
+  static Color get text => _p.text;
+  static Color get muted => _p.muted;
+  static Color get faint => _p.faint;
+  static Color get comment => _p.comment;
 
-  // Secundarios, con moderación.
-  static const link = Color(0xFF22D3EE); // --cyan: links / info
-  static const magenta = Color(0xFFFF2E9A); // proyecto Música / énfasis raro
-  static const yellow = Color(0xFFFFB627); // --amber: avisos
-  static const red = Color(0xFFFF4D4D); // --red: error / offline
+  static Color get borderSubtle => _p.borderSubtle;
+  static Color get borderDefault => _p.borderDefault;
+  static Color get borderStrong => _p.borderStrong;
 
-  /// JetBrains Mono si está instalada en el sistema; si no, cae al mono nativo
-  /// (Consolas en Windows, DejaVu en Linux, Menlo en macOS). El sistema entero
-  /// se inclina al mono — ver readme §3.
+  static Color get link => _p.link;
+  static Color get magenta => _p.magenta;
+  static Color get yellow => _p.yellow;
+  static Color get red => _p.red;
+
+  /// JetBrains Mono si está instalada; si no, cae al mono nativo. Ver readme §3.
   static const fontMono = 'JetBrains Mono';
   static const monoFallback = <String>[
     'JetBrainsMono Nerd Font',
@@ -48,14 +233,24 @@ abstract final class Pal {
     'monospace',
   ];
 
-  // Glow neón — el estado de interacción firma (focus / hover).
-  static List<BoxShadow> glowGreen = const [
-    BoxShadow(color: Color(0x8C39FF14), blurRadius: 0, spreadRadius: 1),
-    BoxShadow(color: Color(0x7339FF14), blurRadius: 18, spreadRadius: -2),
-  ];
-  static List<BoxShadow> glowGreenSm = const [
-    BoxShadow(color: Color(0x8C39FF14), blurRadius: 12, spreadRadius: -2),
-  ];
+  // Glow del acento — el estado de interacción firma (focus / hover). Deriva del
+  // acento activo (antes era verde fijo).
+  static List<BoxShadow> get glowGreen => [
+        BoxShadow(
+            color: _p.accent.withValues(alpha: .55),
+            blurRadius: 0,
+            spreadRadius: 1),
+        BoxShadow(
+            color: _p.accent.withValues(alpha: .45),
+            blurRadius: 18,
+            spreadRadius: -2),
+      ];
+  static List<BoxShadow> get glowGreenSm => [
+        BoxShadow(
+            color: _p.accent.withValues(alpha: .55),
+            blurRadius: 12,
+            spreadRadius: -2),
+      ];
 
   // Movimiento (readme §3): sobrio, easing con salida rápida.
   static const ease = Cubic(0.2, 0.8, 0.2, 1.0);
@@ -63,8 +258,8 @@ abstract final class Pal {
   static const dur = Duration(milliseconds: 180);
   static const durSlow = Duration(milliseconds: 320);
 
-  // Textura de fondo: rejilla verde muy tenue a 28px (readme §10 — bg-grid).
-  static const gridLine = Color(0x0B39FF14); // rgba(57,255,20,0.043)
+  // Textura de fondo: rejilla muy tenue a 28px (readme §10 — bg-grid).
+  static Color get gridLine => _p.gridLine;
   static const gridSize = 28.0;
 }
 
@@ -138,14 +333,22 @@ class PapolCanvas extends StatelessWidget {
   }
 }
 
-ThemeData buildTheme() {
-  const scheme = ColorScheme.dark(
-    primary: Pal.accent,
-    secondary: Pal.accent,
-    surface: Pal.bg2,
-    onSurface: Pal.text,
-    error: Pal.red,
-  );
+ThemeData buildTheme(Palette p) {
+  final scheme = p.isLight
+      ? ColorScheme.light(
+          primary: p.accent,
+          secondary: p.accent,
+          surface: p.bg2,
+          onSurface: p.text,
+          error: p.red,
+        )
+      : ColorScheme.dark(
+          primary: p.accent,
+          secondary: p.accent,
+          surface: p.bg2,
+          onSurface: p.text,
+          error: p.red,
+        );
   final base = ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
@@ -153,51 +356,51 @@ ThemeData buildTheme() {
     fontFamilyFallback: Pal.monoFallback,
   );
   return base.copyWith(
-    scaffoldBackgroundColor: Pal.bg2,
-    canvasColor: Pal.bg1,
-    dividerColor: Pal.borderSubtle,
-    textTheme: base.textTheme.apply(bodyColor: Pal.text, displayColor: Pal.text),
+    scaffoldBackgroundColor: p.bg2,
+    canvasColor: p.bg1,
+    dividerColor: p.borderSubtle,
+    textTheme: base.textTheme.apply(bodyColor: p.text, displayColor: p.text),
     tooltipTheme: TooltipThemeData(
       decoration: BoxDecoration(
-        color: Pal.bg0,
+        color: p.bg0,
         borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: Pal.borderDefault),
+        border: Border.all(color: p.borderDefault),
       ),
-      textStyle: const TextStyle(color: Pal.text, fontSize: 12),
+      textStyle: TextStyle(color: p.text, fontSize: 12),
       waitDuration: const Duration(milliseconds: 400),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: Pal.inset,
-      hintStyle: const TextStyle(color: Pal.comment),
+      fillColor: p.inset,
+      hintStyle: TextStyle(color: p.comment),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(5),
-        borderSide: const BorderSide(color: Pal.borderDefault),
+        borderSide: BorderSide(color: p.borderDefault),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(5),
-        borderSide: const BorderSide(color: Pal.borderDefault),
+        borderSide: BorderSide(color: p.borderDefault),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(5),
-        borderSide: const BorderSide(color: Pal.accent),
+        borderSide: BorderSide(color: p.accent),
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: Pal.accentDim,
-        foregroundColor: Pal.greenInk,
+        backgroundColor: p.accentDim,
+        foregroundColor: p.greenInk,
         elevation: 0,
         textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
       ).copyWith(
-        // glow neón en hover: sombra verde que florece (readme §3 — hover).
-        shadowColor: const WidgetStatePropertyAll(Pal.accent),
+        // glow del acento en hover: sombra que florece (readme §3 — hover).
+        shadowColor: WidgetStatePropertyAll(p.accent),
         animationDuration: Pal.dur,
         backgroundColor: WidgetStateProperty.resolveWith((s) =>
-            s.contains(WidgetState.hovered) ? Pal.accent : Pal.accentDim),
+            s.contains(WidgetState.hovered) ? p.accent : p.accentDim),
         elevation: WidgetStateProperty.resolveWith((s) =>
             s.contains(WidgetState.pressed)
                 ? 2.0
@@ -207,11 +410,11 @@ ThemeData buildTheme() {
       ),
     ),
     // Botón SECUNDARIO (acciones tipo "Cambiar avatar"): coherente con el
-    // primario pero en versión outline — mono, borde que se vuelve verde y
-    // florece con glow neón en hover (readme §3). Antes caían al default genérico.
+    // primario pero en versión outline — mono, borde que se vuelve acento y
+    // florece con glow en hover (readme §3). Antes caían al default genérico.
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: Pal.accentDim,
+        foregroundColor: p.accentDim,
         textStyle: const TextStyle(
             fontFamily: Pal.fontMono,
             fontFamilyFallback: Pal.monoFallback,
@@ -221,22 +424,22 @@ ThemeData buildTheme() {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
       ).copyWith(
         animationDuration: Pal.dur,
-        shadowColor: const WidgetStatePropertyAll(Pal.accent),
+        shadowColor: WidgetStatePropertyAll(p.accent),
         side: WidgetStateProperty.resolveWith((s) => BorderSide(
             color: s.contains(WidgetState.disabled)
-                ? Pal.borderDefault
+                ? p.borderDefault
                 : s.contains(WidgetState.hovered)
-                    ? Pal.accent
-                    : Pal.borderStrong)),
+                    ? p.accent
+                    : p.borderStrong)),
         foregroundColor: WidgetStateProperty.resolveWith((s) =>
             s.contains(WidgetState.disabled)
-                ? Pal.faint
+                ? p.faint
                 : s.contains(WidgetState.hovered)
-                    ? Pal.accent
-                    : Pal.accentDim),
+                    ? p.accent
+                    : p.accentDim),
         backgroundColor: WidgetStateProperty.resolveWith((s) =>
             s.contains(WidgetState.hovered)
-                ? Pal.accentDim.withValues(alpha: .12)
+                ? p.accentDim.withValues(alpha: .12)
                 : Colors.transparent),
         overlayColor: const WidgetStatePropertyAll(Colors.transparent),
         elevation: WidgetStateProperty.resolveWith((s) =>
@@ -244,33 +447,33 @@ ThemeData buildTheme() {
       ),
     ),
     textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(foregroundColor: Pal.muted),
+      style: TextButton.styleFrom(foregroundColor: p.muted),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: Pal.bg1,
+      backgroundColor: p.bg1,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Pal.borderDefault),
+        side: BorderSide(color: p.borderDefault),
       ),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: Pal.bg0,
+      color: p.bg0,
       surfaceTintColor: Colors.transparent,
-      textStyle: const TextStyle(color: Pal.text, fontSize: 13),
+      textStyle: TextStyle(color: p.text, fontSize: 13),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Pal.borderDefault),
+        side: BorderSide(color: p.borderDefault),
       ),
     ),
     scrollbarTheme: ScrollbarThemeData(
-      thumbColor: const WidgetStatePropertyAll(Pal.borderStrong),
+      thumbColor: WidgetStatePropertyAll(p.borderStrong),
       thickness: const WidgetStatePropertyAll(8),
       radius: const Radius.circular(999),
     ),
-    snackBarTheme: const SnackBarThemeData(
-      backgroundColor: Pal.bg0,
-      contentTextStyle: TextStyle(color: Pal.text),
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: p.bg0,
+      contentTextStyle: TextStyle(color: p.text),
       behavior: SnackBarBehavior.floating,
     ),
   );

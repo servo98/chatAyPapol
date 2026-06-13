@@ -108,12 +108,12 @@ class _CrashBannerState extends State<_CrashBanner> {
           children: [
             Row(
               children: [
-                const Icon(LucideIcons.triangleAlert, color: Pal.red, size: 16),
+                Icon(LucideIcons.triangleAlert, color: Pal.red, size: 16),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Pal.text,
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -130,7 +130,7 @@ class _CrashBannerState extends State<_CrashBanner> {
                   // usan widgets que requieran Overlay.
                   iconSize: 16,
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(LucideIcons.x, color: Pal.muted),
+                  icon: Icon(LucideIcons.x, color: Pal.muted),
                   onPressed: widget.onClose,
                 ),
               ],
@@ -142,7 +142,7 @@ class _CrashBannerState extends State<_CrashBanner> {
                   r.message,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Pal.muted,
                     fontSize: 12,
                     fontFamily: Pal.fontMono,
@@ -164,7 +164,7 @@ class _CrashBannerState extends State<_CrashBanner> {
                 child: SingleChildScrollView(
                   child: Text(
                     detail,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Pal.faint,
                       fontSize: 11.5,
                       height: 1.4,
@@ -198,7 +198,7 @@ class _CrashBannerState extends State<_CrashBanner> {
                         textAlign: TextAlign.right,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Pal.comment,
                           fontSize: 10.5,
                           fontFamily: Pal.fontMono,

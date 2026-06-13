@@ -99,21 +99,21 @@ class _ShellState extends State<Shell> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         child: Row(children: [
-          const Icon(LucideIcons.download, size: 16, color: Pal.greenInk),
+          Icon(LucideIcons.download, size: 16, color: Pal.greenInk),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
                 '❯ ChatPapol v${update!.version} disponible '
                 '${update!.notes.isNotEmpty ? '— ${update!.notes}' : ''}',
                 maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     color: Pal.greenInk)),
           ),
           TextButton(
             onPressed: () => startUpdate(context, widget.store.api, update!),
-            child: const Text('actualizar ahora',
+            child: Text('actualizar ahora',
                 style: TextStyle(
                     color: Pal.greenInk, fontWeight: FontWeight.w700,
                     fontSize: 13)),

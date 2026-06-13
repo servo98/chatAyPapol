@@ -29,10 +29,14 @@ class _ChatViewState extends State<ChatView> {
   final pendingUploads = <Map<String, dynamic>>[];
   bool sending = false;
 
-  // Canal del último build + si ya hicimos el scroll inicial al fondo (al abrir
-  // o cambiar de canal el chat debe arrancar en el ÚLTIMO mensaje, no arriba).
+  // Canal del último build + posición de scroll recordada POR canal: al volver a
+  // un canal recuperamos dónde estabas (no siempre arriba). La 1ª vez vamos al
+  // último mensaje; si llegan mensajes nuevos y ya estabas al fondo, te seguimos.
   String? _lastChannelId;
-  bool _didInitialScroll = false;
+  final _scrollOffsets = <String, double>{}; // channelId → offset px
+  bool _restorePending = false; // reposicionar el canal recién abierto
+  bool _atBottom = true; // el usuario está pegado al fondo (para autoscroll)
+  int _lastMsgCount = 0; // nº de mensajes del último build (detecta nuevos)
 
   // ── autocompletado de @menciones ──
   bool _mentionOpen = false; // hay overlay de menciones abierto
@@ -46,8 +50,12 @@ class _ChatViewState extends State<ChatView> {
   void initState() {
     super.initState();
     scroll.addListener(() {
-      if (scroll.position.pixels <= 60 && channel != null) {
-        store.loadMessages(channel!.id, older: true);
+      if (!scroll.hasClients) return;
+      final ch = channel;
+      if (ch != null) _scrollOffsets[ch.id] = scroll.position.pixels;
+      _atBottom = scroll.position.pixels >= scroll.position.maxScrollExtent - 80;
+      if (scroll.position.pixels <= 60 && ch != null) {
+        store.loadMessages(ch.id, older: true);
       }
     });
   }
@@ -184,23 +192,39 @@ class _ChatViewState extends State<ChatView> {
   Widget build(BuildContext context) {
     final ch = channel;
     if (ch == null) {
-      return const Center(
+      return Center(
           child: Text('❯ elige un canal para empezar',
               style: TextStyle(color: Pal.muted)));
     }
     final msgs = store.messages[ch.id] ?? [];
-    // Al abrir o cambiar de canal, arranca en el último mensaje (no arriba). Como
-    // los mensajes cargan async, se hace en el primer build con la lista ya
-    // poblada para ese canal (jumpTo tras el frame).
+    // Posición de scroll por canal. Al cambiar de canal restauramos el offset
+    // recordado (o vamos al fondo la 1ª vez); como los mensajes cargan async, el
+    // reposicionado espera al primer build con la lista ya poblada. Si llegan
+    // mensajes NUEVOS y ya estabas pegado al fondo, te seguimos al fondo.
     if (ch.id != _lastChannelId) {
       _lastChannelId = ch.id;
-      _didInitialScroll = false;
+      _restorePending = true;
+      _lastMsgCount = msgs.length;
     }
-    if (!_didInitialScroll && msgs.isNotEmpty) {
-      _didInitialScroll = true;
+    if (_restorePending && msgs.isNotEmpty) {
+      _restorePending = false;
+      _lastMsgCount = msgs.length;
+      final saved = _scrollOffsets[ch.id];
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (scroll.hasClients) scroll.jumpTo(scroll.position.maxScrollExtent);
+        if (!scroll.hasClients) return;
+        final max = scroll.position.maxScrollExtent;
+        scroll.jumpTo(saved == null ? max : saved.clamp(0.0, max));
       });
+    } else if (msgs.length != _lastMsgCount) {
+      final grew = msgs.length > _lastMsgCount;
+      _lastMsgCount = msgs.length;
+      // Solo si creció por el FINAL (mensaje nuevo) y ya estabas al fondo; en
+      // paginación 'older' el usuario está arriba (_atBottom=false) → no molesta.
+      if (grew && _atBottom) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (scroll.hasClients) scroll.jumpTo(scroll.position.maxScrollExtent);
+        });
+      }
     }
     final canSend = store.canI(P.sendMessages, ch.id);
     final body = Column(
@@ -242,7 +266,7 @@ class _ChatViewState extends State<ChatView> {
                     border: Border.all(color: Pal.accent, width: 2),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Column(mainAxisSize: MainAxisSize.min, children: [
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
                     Icon(LucideIcons.upload, size: 40, color: Pal.accent),
                     SizedBox(height: 8),
                     Text('Suelta para adjuntar',
@@ -278,7 +302,7 @@ class _ChatViewState extends State<ChatView> {
       ),
       child: Row(
         children: [
-          const Text('#',
+          Text('#',
               style: TextStyle(
                   color: Pal.faint, fontSize: 20, fontWeight: FontWeight.w700,
                   height: 1)),
@@ -291,7 +315,7 @@ class _ChatViewState extends State<ChatView> {
             Expanded(
               child: Text(ch.topic!,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Pal.muted, fontSize: 13)),
+                  style: TextStyle(color: Pal.muted, fontSize: 13)),
             ),
           ] else
             const Spacer(),
@@ -312,14 +336,14 @@ class _ChatViewState extends State<ChatView> {
                 shape: BoxShape.circle,
                 border: Border.all(color: Pal.borderStrong)),
             alignment: Alignment.center,
-            child: const Text('#',
+            child: Text('#',
                 style: TextStyle(
                     fontSize: 30, fontWeight: FontWeight.w700, color: Pal.accent)),
           ),
           const SizedBox(height: 12),
           Text('bienvenido a #${ch.name}',
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-          const Text('este es el principio del canal — di algo ▮',
+          Text('este es el principio del canal — di algo ▮',
               style: TextStyle(color: Pal.muted, fontSize: 13)),
         ],
       ),
@@ -375,7 +399,7 @@ class _ChatViewState extends State<ChatView> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Text(fmtDate(ms),
-              style: const TextStyle(
+              style: TextStyle(
                   color: Pal.faint, fontSize: 11, fontWeight: FontWeight.w700)),
         ),
         const Expanded(child: Divider()),
@@ -396,7 +420,7 @@ class _ChatViewState extends State<ChatView> {
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(text,
-            style: const TextStyle(
+            style: TextStyle(
                 color: Pal.muted, fontSize: 12, fontStyle: FontStyle.italic)),
       ),
     );
@@ -410,7 +434,7 @@ class _ChatViewState extends State<ChatView> {
           color: Pal.bg3,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: Pal.borderDefault)),
-      child: const Text('! no tienes permiso para escribir en este canal',
+      child: Text('! no tienes permiso para escribir en este canal',
           style: TextStyle(color: Pal.muted, fontSize: 13)),
     );
   }
@@ -447,7 +471,7 @@ class _ChatViewState extends State<ChatView> {
                     child: SmallIconBtn(
                         LucideIcons.plusCircle, 'Adjuntar archivo', _attach, size: 22),
                   ),
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(left: 10, right: 2, bottom: 12),
                   child: Text('❯',
                       style: TextStyle(
@@ -573,13 +597,13 @@ class _ChatViewState extends State<ChatView> {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Row(children: [
                   Text('/${m.$1}',
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: Pal.accent, fontWeight: FontWeight.w700, fontSize: 13)),
                   const SizedBox(width: 10),
                   Flexible(
                       child: Text(m.$2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Pal.muted, fontSize: 12))),
+                          style: TextStyle(color: Pal.muted, fontSize: 12))),
                 ]),
               ),
             )).toList(),
@@ -628,7 +652,7 @@ class _ChatViewState extends State<ChatView> {
                     Container(
                         width: 6,
                         height: 6,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                             color: Pal.green, shape: BoxShape.circle)),
                   ],
                 ]),
@@ -654,7 +678,7 @@ class _ChatViewState extends State<ChatView> {
       child: Row(children: [
         Icon(isEdit ? LucideIcons.pencil : LucideIcons.reply, size: 14, color: Pal.muted),
         const SizedBox(width: 8),
-        Expanded(child: Text(name, style: const TextStyle(color: Pal.muted, fontSize: 12))),
+        Expanded(child: Text(name, style: TextStyle(color: Pal.muted, fontSize: 12))),
         SmallIconBtn(LucideIcons.x, 'Cancelar', () => setState(() {
               replyingTo = null;
               editing = null;
@@ -687,7 +711,7 @@ class _ChatViewState extends State<ChatView> {
         padding: const EdgeInsets.all(16),
         height: 320,
         child: store.stickers.isEmpty
-            ? const Center(
+            ? Center(
                 child: Text('No hay stickers todavía.\nSúbelos en Ajustes → Stickers.',
                     textAlign: TextAlign.center, style: TextStyle(color: Pal.muted)))
             : GridView.count(
@@ -758,7 +782,7 @@ class _MessageTile extends StatelessWidget {
                           ? Padding(
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(fmtTime(m.createdAt),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       color: Pal.faint, fontSize: 11)))
                           : null)
                       : Avatar(author, store, size: 38),
@@ -787,7 +811,7 @@ class _MessageTile extends StatelessWidget {
                               decoration: BoxDecoration(
                                   color: Pal.accent,
                                   borderRadius: BorderRadius.circular(3)),
-                              child: const Text('BOT',
+                              child: Text('BOT',
                                   style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w800,
@@ -797,12 +821,12 @@ class _MessageTile extends StatelessWidget {
                           const SizedBox(width: 8),
                           Text(fmtTime(m.createdAt),
                               style:
-                                  const TextStyle(color: Pal.faint, fontSize: 11)),
+                                  TextStyle(color: Pal.faint, fontSize: 11)),
                         ]),
                       if (m.content.isNotEmpty)
                         ...renderMarkdown(m.content, store),
                       if (m.editedAt != null)
-                        const Text('(editado)',
+                        Text('(editado)',
                             style: TextStyle(color: Pal.faint, fontSize: 11)),
                       if (m.stickerId != null) _sticker(),
                       ...m.attachments.map(_attachment),
@@ -842,16 +866,16 @@ class _MessageTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(children: [
-        const Icon(LucideIcons.cornerDownRight, size: 14, color: Pal.faint),
+        Icon(LucideIcons.cornerDownRight, size: 14, color: Pal.faint),
         Text('${author?.username ?? replied.webhookName ?? '?'}: ',
-            style: const TextStyle(
+            style: TextStyle(
                 color: Pal.accent, fontSize: 12, fontWeight: FontWeight.w700)),
         Flexible(
           child: Text(
               replied.content.isEmpty ? '[adjunto]' : replied.content,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Pal.muted, fontSize: 12)),
+              style: TextStyle(color: Pal.muted, fontSize: 12)),
         ),
       ]),
     );
@@ -891,12 +915,12 @@ class _MessageTile extends StatelessWidget {
           decoration: BoxDecoration(
               color: Pal.bg0, borderRadius: BorderRadius.circular(8)),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(LucideIcons.paperclip, size: 18, color: Pal.accent),
+            Icon(LucideIcons.paperclip, size: 18, color: Pal.accent),
             const SizedBox(width: 8),
-            Text(a.name, style: const TextStyle(color: Pal.link, fontSize: 13)),
+            Text(a.name, style: TextStyle(color: Pal.link, fontSize: 13)),
             const SizedBox(width: 8),
             Text('${(a.size / 1024).toStringAsFixed(0)} KB',
-                style: const TextStyle(color: Pal.faint, fontSize: 11)),
+                style: TextStyle(color: Pal.faint, fontSize: 11)),
           ]),
         ),
       ),
@@ -911,7 +935,7 @@ class _MessageTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: Pal.bg0,
         borderRadius: BorderRadius.circular(8),
-        border: const Border(left: BorderSide(color: Pal.accent, width: 4)),
+        border: Border(left: BorderSide(color: Pal.accent, width: 4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -924,14 +948,14 @@ class _MessageTile extends StatelessWidget {
                   : () => launchUrlString(e.url!,
                       mode: LaunchMode.externalApplication),
               child: Text(e.title!,
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: Pal.link, fontWeight: FontWeight.w700, fontSize: 14)),
             ),
           if (e.description != null)
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(e.description!,
-                  style: const TextStyle(color: Pal.muted, fontSize: 12)),
+                  style: TextStyle(color: Pal.muted, fontSize: 12)),
             ),
           if (e.image != null)
             Padding(
