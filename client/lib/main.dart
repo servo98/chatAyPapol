@@ -260,7 +260,11 @@ Future<void> _diagUpdate() async {
 // sala ni publicar nada por LiveKit. Si suena lleno/claro (no boxy) → la captura
 // 48k + escala + monitor funcionan. AURICULARES obligatorios (sin AEC). Solo
 // Windows tiene monitor (en Linux EmitMonitorLocked es no-op).
-Future<void> _diagMic48k() async {
+Future<void> _diagMic48k(List<String> args) async {
+  // banderas opcionales: `rnn` activa RNNoise, `fx` activa un efecto de voz
+  // (pitch grave) — para oír el 48k con procesado, aislado de LiveKit.
+  final withRnn = args.contains('rnn');
+  final withFx = args.contains('fx');
   final out =
       File(r'C:\Users\ferna\Downloads\chatpapol-toolchain\diag-mic48k.txt');
   Future<void> log(String s) async {
@@ -269,11 +273,20 @@ Future<void> _diagMic48k() async {
     print(s);
   }
 
-  out.writeAsStringSync('=== diag-mic48k v$appVersion ===\n');
+  out.writeAsStringSync('=== diag-mic48k v$appVersion (rnn=$withRnn fx=$withFx) ===\n');
   try {
     await log('PONTE LOS AURICULARES (sin AEC, si no habrá eco/acople).');
     await log('1: monitor "escucharme" ON ...');
     await WebrtcApm.setVoiceMonitor(true);
+
+    if (withRnn) {
+      await log('1b: RNNoise ON ...');
+      await WebrtcApm.setRnnoise(true);
+    }
+    if (withFx) {
+      await log('1c: efecto de voz ON (pitch grave) ...');
+      await WebrtcApm.setVoiceFx(true, '1.0;1.0;5,0,600=-7&601=0.8');
+    }
 
     await log('2: crear pista kCustom (sin APM/16k) ...');
     final trackId = await WebrtcApm.createCustomAudioTrack();
@@ -289,12 +302,15 @@ Future<void> _diagMic48k() async {
     await log('  capturador arrancado (48k mono fullband)');
 
     await log('');
-    await log('>>> HABLA AHORA: deberías oírte a TI MISMO a 48k durante 30s.');
-    await log('>>> Compara: ¿suena más LLENO/CLARO que el micro normal (boxy/16k)?');
+    await log('>>> HABLA AHORA: te oyes a TI MISMO a 48k durante 30s'
+        '${withRnn ? " + RNNoise" : ""}${withFx ? " + efecto" : ""}.');
+    await log('>>> ¿Limpio y a buen volumen, o roto/raro?');
     await Future.delayed(const Duration(seconds: 30));
 
-    await log('4: parar capturador + monitor OFF ...');
+    await log('4: parar capturador + monitor/rnn/fx OFF ...');
     await WebrtcApm.stopCustomMicCapture(trackId);
+    if (withFx) await WebrtcApm.setVoiceFx(false, '');
+    if (withRnn) await WebrtcApm.setRnnoise(false);
     await WebrtcApm.setVoiceMonitor(false);
     await log('=== diag-mic48k FIN ok ===');
   } catch (e, st) {
@@ -390,7 +406,7 @@ Future<void> _main(List<String> args) async {
     return;
   }
   if (args.contains('--diag-mic48k')) {
-    await _diagMic48k();
+    await _diagMic48k(args);
     return;
   }
   // Desinstalación (la invoca Windows con la UninstallString del registro):
