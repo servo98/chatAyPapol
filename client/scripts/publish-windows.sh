@@ -38,14 +38,17 @@ echo "▶ Publicando Windows v$VERSION"
 # 2) Sellar versión (igual que el CI). pub get + build con Flutter de WINDOWS
 #    (si se usó el Flutter de WSL, package_config.json queda con rutas Linux).
 echo "const appVersion = '$VERSION';" > lib/version.dart
-# .dart_tool puede venir contaminado por un `pub get` previo de Linux (rutas +
-# package_graph.json con otra resolución → "dependencies for 'logger' missing"
-# al construir). Bórralo y haz pub get DOS veces: el 1º reconcilia el lock con
-# la resolución de Windows, el 2º regenera package_graph.json coherente. Así el
-# publish es de UNA pasada (antes había que re-correrlo a mano).
+# Si el lock se generó con el Flutter de LINUX, el Flutter de Windows resuelve
+# distinto (p.ej. `logger`) y el 1er `pub get` CAMBIA el lock dejando un
+# package_graph.json incoherente → "dependencies for 'logger' missing". El fix
+# de UNA pasada: pub get (reconcilia el lock a la resolución de Windows), BORRA
+# .dart_tool (tira el graph corrupto) y pub get otra vez (regenera limpio con el
+# lock ya coherente). Cada pub get arranca de .dart_tool limpio.
 rm -rf "$CLIENT_DIR/.dart_tool"
-echo "▶ flutter pub get (x2, .dart_tool limpio) + build windows --release"
+echo "▶ flutter pub get (reconciliar lock) ..."
 cmd.exe /c "cd /d $WIN_CLIENT && $FLUTTER pub get"
+rm -rf "$CLIENT_DIR/.dart_tool"
+echo "▶ flutter pub get (limpio) + build windows --release"
 cmd.exe /c "cd /d $WIN_CLIENT && $FLUTTER pub get"
 cmd.exe /c "cd /d $WIN_CLIENT && $FLUTTER build windows --release"
 

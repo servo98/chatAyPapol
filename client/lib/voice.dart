@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
@@ -9,6 +10,7 @@ import 'models.dart' as m;
 import 'store.dart';
 import 'sfx.dart';
 import 'ambience.dart';
+import 'audio/user_eq.dart';
 import 'audio/voice_fx.dart';
 import 'webrtc_apm.dart';
 
@@ -120,6 +122,11 @@ class VoiceManager extends ChangeNotifier {
   // SEPARADO del volumen del micro. Persistido en local igual que userVolumes.
   final shareVolumes = <String, double>{};
 
+  // EQ POR USUARIO (identity → UserEqSettings). LOCAL: solo el dueño lo oye.
+  // Solo se persiste/aplica en Windows (la ruta custom de playout es waveOut,
+  // no implementada en Linux). En Linux userEqs queda vacío siempre.
+  final userEqs = <String, UserEqSettings>{};
+
   bool get connected => room != null && channelId != null;
 
   /// Opciones con las que se publica el micro SIEMPRE (join y re-publicaciones).
@@ -183,6 +190,20 @@ class VoiceManager extends ChangeNotifier {
             (k, v) => shareVolumes[k] = (v as num).toDouble().clamp(0.0, 2.0));
       }
     } catch (_) {}
+    // EQ por usuario: solo relevante en Windows (salida custom waveOut).
+    if (Platform.isWindows) {
+      try {
+        final raw = prefs.getString('voice_user_eq');
+        if (raw != null) {
+          (jsonDecode(raw) as Map<String, dynamic>).forEach((k, v) {
+            if (v is Map) {
+              final eq = UserEqSettings.fromJson(v);
+              if (!eq.isFlat) userEqs[k] = eq;
+            }
+          });
+        }
+      } catch (_) {}
+    }
     notifyListeners();
   }
 
@@ -214,6 +235,83 @@ class VoiceManager extends ChangeNotifier {
   }
 
   double shareVolume(String identity) => shareVolumes[identity] ?? 1.0;
+
+  // ───────── EQ POR USUARIO ─────────
+
+  UserEqSettings userEq(String identity) =>
+      userEqs[identity] ?? const UserEqSettings();
+
+  /// Aplica y persiste el EQ para [identity]. Si el EQ es plano (isFlat),
+  /// lo borra del mapa y quita el sink nativo (restaura playout WebRTC normal).
+  /// No-op en plataformas distintas de Windows.
+  Future<void> setUserEq(String identity, UserEqSettings eq) async {
+    if (!Platform.isWindows) return;
+    if (eq.isFlat) {
+      userEqs.remove(identity);
+    } else {
+      userEqs[identity] = eq;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'voice_user_eq',
+      jsonEncode(userEqs.map((k, v) => MapEntry(k, v.toJson()))),
+    );
+    await _applyEqForIdentity(identity);
+    notifyListeners();
+  }
+
+  /// Empuja el estado de EQ actual al nativo para todos los tracks de [identity]
+  /// con fuente de micrófono. Si el EQ es plano, quita el sink y restaura el
+  /// playout. Si es no-plano, instala/actualiza el sink.
+  ///
+  /// SEGURIDAD: Solo se llama desde Windows (check en setUserEq).
+  /// Si setUserEq no se llama nunca (EQ nunca activo), esta función nunca
+  /// se ejecuta y el playout de WebRTC queda intacto.
+  Future<void> _applyEqForIdentity(String identity) async {
+    if (!Platform.isWindows) return;
+    final r = room;
+    if (r == null) return;
+    final participant = r.remoteParticipants[identity];
+    if (participant == null) return;
+
+    final eq = userEq(identity);
+    final gain = (outputVolume * userVolume(identity)).clamp(0.0, 2.0);
+
+    for (final pub in participant.audioTrackPublications) {
+      // Solo la pista del MICRO (no el audio del screenshare).
+      if (pub.source != TrackSource.microphone) continue;
+      final t = pub.track;
+      if (t is! RemoteAudioTrack) continue;
+
+      final trackId = t.mediaStreamTrack.id;
+      if (eq.isFlat) {
+        // Plano → quitar sink y restaurar playout normal de WebRTC.
+        await WebrtcApm.clearUserEq(trackId, gain);
+      } else {
+        // No-plano → instalar/actualizar sink (nativo hace AddSink + SetVolume(0)
+        // la primera vez; en llamadas sucesivas solo actualiza los parámetros).
+        await WebrtcApm.setUserEq(trackId, eq.bass, eq.mid, eq.treble, gain);
+      }
+    }
+  }
+
+  /// Limpia todos los sinks de EQ activos al salir del canal.
+  Future<void> _clearAllEqSinks() async {
+    if (!Platform.isWindows) return;
+    final r = room;
+    if (r == null) return;
+    for (final identity in userEqs.keys.toList()) {
+      final participant = r.remoteParticipants[identity];
+      if (participant == null) continue;
+      final gain = (outputVolume * userVolume(identity)).clamp(0.0, 2.0);
+      for (final pub in participant.audioTrackPublications) {
+        if (pub.source != TrackSource.microphone) continue;
+        final t = pub.track;
+        if (t is! RemoteAudioTrack) continue;
+        await WebrtcApm.clearUserEq(t.mediaStreamTrack.id, gain);
+      }
+    }
+  }
 
   Future<void> _saveMicPrefs() async {
     final prefs = await SharedPreferences.getInstance();
@@ -466,15 +564,31 @@ class VoiceManager extends ChangeNotifier {
   /// Aplica el volumen de salida a UNA publicación de audio remota,
   /// distinguiendo la fuente: el audio del SCREENSHARE usa shareVolume(identity)
   /// y el MICRO usa userVolume(identity) — son dos sliders distintos.
+  ///
+  /// Si el track de micro tiene EQ activo (Windows), NO llama setVolume de
+  /// WebRTC (el track tiene SetVolume(0) puesto por el nativo). En su lugar
+  /// reenvía el gain al sink nativo para que el slider siga funcionando.
   void _applyOutputVolume(RemoteTrackPublication pub, String identity) {
     final t = pub.track;
     if (t is! RemoteAudioTrack) return;
     final perUser = pub.source == TrackSource.screenShareAudio
         ? shareVolume(identity)
         : userVolume(identity);
+    final gain = (outputVolume * perUser).clamp(0.0, 2.0);
+
+    // Track de micro con EQ activo en Windows: el volumen va al sink nativo,
+    // NO a WebRTC (que tiene SetVolume(0) desde que se instaló el sink).
+    if (Platform.isWindows &&
+        pub.source == TrackSource.microphone &&
+        !userEq(identity).isFlat) {
+      final eq = userEq(identity);
+      WebrtcApm.setUserEq(
+          t.mediaStreamTrack.id, eq.bass, eq.mid, eq.treble, gain);
+      return;
+    }
+
     try {
-      rtc.Helper.setVolume(
-          (outputVolume * perUser).clamp(0.0, 2.0), t.mediaStreamTrack);
+      rtc.Helper.setVolume(gain, t.mediaStreamTrack);
     } catch (_) {}
   }
 
@@ -552,9 +666,32 @@ class VoiceManager extends ChangeNotifier {
         ..on<RoomDisconnectedEvent>((_) => _cleanup())
         ..on<TrackSubscribedEvent>((e) {
           _applyOutputVolume(e.publication, e.participant.identity);
+          // Re-armar el sink de EQ si este participante tenía uno activo.
+          // Cubre el caso de reconexión/re-suscripción de track.
+          if (Platform.isWindows &&
+              e.publication.source == TrackSource.microphone &&
+              !userEq(e.participant.identity).isFlat) {
+            _applyEqForIdentity(e.participant.identity);
+          }
           notifyListeners();
         })
-        ..on<TrackUnsubscribedEvent>((_) => notifyListeners())
+        ..on<TrackUnsubscribedEvent>((e) {
+          // Si el track que se va tenía un sink de EQ, limpiarlo para no dejar
+          // sinks colgados apuntando a un track destruido.
+          if (Platform.isWindows &&
+              e.publication.source == TrackSource.microphone) {
+            final identity = e.participant.identity;
+            if (!userEq(identity).isFlat) {
+              final t = e.track;
+              if (t is RemoteAudioTrack) {
+                final gain =
+                    (outputVolume * userVolume(identity)).clamp(0.0, 2.0);
+                WebrtcApm.clearUserEq(t.mediaStreamTrack.id, gain);
+              }
+            }
+          }
+          notifyListeners();
+        })
         ..on<ParticipantConnectedEvent>((_) => notifyListeners())
         ..on<ParticipantDisconnectedEvent>((_) => notifyListeners());
       try {
@@ -608,6 +745,8 @@ class VoiceManager extends ChangeNotifier {
     SfxService.instance.play(UiSound.disconnected); // salí de voz
     store.gateway.send('VOICE_LEAVE', null);
     final r = room;
+    // Limpiar sinks de EQ ANTES de _cleanup (que pone room=null).
+    await _clearAllEqSinks();
     _cleanup();
     await r?.disconnect();
     await r?.dispose();

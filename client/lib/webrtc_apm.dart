@@ -66,6 +66,54 @@ class WebrtcApm {
       await _ch.invokeMethod('stopCustomMicCapture', {'trackId': trackId});
     } catch (_) {}
   }
+
+  // === [chatpapol per-user-eq] EQ individual por track remoto ===
+
+  /// Instala (o actualiza) el sink de EQ en [trackId].
+  /// El nativo hace AddSink + SetVolume(0) en esa pista la primera vez, y
+  /// solo actualiza los parámetros del biquad en llamadas sucesivas.
+  /// [gain] = outputVolume * userVolume, ya calculado en Dart.
+  ///
+  /// SEGURIDAD: Dart solo llama esto cuando el EQ NO es plano (isFlat == false).
+  /// Si el nativo no soporta el método (build sin el fork), el catch es silencioso
+  /// y la pista sigue sonando por el playout normal de WebRTC sin cambios.
+  ///
+  /// INCIERTO: si SetVolume(0) mata el PCM que ve AddSink en m144. Verificar
+  /// en el primer test (riesgo bloqueante #1 del blueprint).
+  static Future<void> setUserEq(
+    String? trackId,
+    double bassDb,
+    double midDb,
+    double trebleDb,
+    double gain,
+  ) async {
+    if (trackId == null || trackId.isEmpty) return; // sin pista → no-op
+    try {
+      await _ch.invokeMethod('setUserEq', {
+        'trackId': trackId,
+        'bassDb': bassDb,
+        'midDb': midDb,
+        'trebleDb': trebleDb,
+        'gain': gain,
+      });
+    } catch (_) {/* build sin soporte */}
+  }
+
+  /// Quita el sink de EQ de [trackId] y restaura el playout normal de WebRTC
+  /// con el volumen previo [restoreVolume] (= outputVolume * userVolume).
+  /// ORDEN nativo: RemoveSink → SetVolume(restoreVolume) → destruir sink.
+  static Future<void> clearUserEq(
+    String? trackId,
+    double restoreVolume,
+  ) async {
+    if (trackId == null || trackId.isEmpty) return; // sin pista → no-op
+    try {
+      await _ch.invokeMethod('clearUserEq', {
+        'trackId': trackId,
+        'restoreVolume': restoreVolume,
+      });
+    } catch (_) {/* build sin soporte */}
+  }
 }
 
 /// Estado observable del monitor local ("escucharme"). Singleton para que la UI

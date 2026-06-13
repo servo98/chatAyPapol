@@ -18,6 +18,7 @@ import '../store.dart';
 import '../theme.dart';
 import '../voice.dart';
 import 'screenshare_fullscreen.dart';
+import 'user_audio_popover.dart';
 import 'voice_fx_ui.dart';
 import 'widgets.dart';
 
@@ -328,8 +329,8 @@ class VoicePanel extends StatelessWidget {
     // click derecho (o mantener presionado): volumen individual, como Discord
     return Builder(
       builder: (ctx) => GestureDetector(
-        onSecondaryTap: () => _showUserVolume(ctx, v.userId, user?.username),
-        onLongPress: () => _showUserVolume(ctx, v.userId, user?.username),
+        onSecondaryTap: () => showUserAudioPopover(ctx, voice, v.userId, user?.username),
+        onLongPress: () => showUserAudioPopover(ctx, voice, v.userId, user?.username),
         child: tile,
       ),
     );
@@ -357,52 +358,9 @@ class VoicePanel extends StatelessWidget {
               ]),
       );
 
-  void _showUserVolume(BuildContext context, String userId, String? name) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Volumen de ${name ?? 'usuario'}',
-            style: const TextStyle(fontSize: 16)),
-        content: StatefulBuilder(
-          builder: (ctx, setSt) {
-            final v = voice.userVolume(userId);
-            return Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(v == 0 ? LucideIcons.volumeX : LucideIcons.volume2,
-                  size: 18, color: Pal.muted),
-              SizedBox(
-                width: 260,
-                child: Slider(
-                  value: v,
-                  max: 2.0,
-                  divisions: 40,
-                  activeColor: Pal.accent,
-                  label: '${(v * 100).round()}%',
-                  onChanged: (nv) {
-                    voice.setUserVolume(userId, nv);
-                    setSt(() {});
-                  },
-                ),
-              ),
-              SizedBox(
-                  width: 44,
-                  child: Text('${(v * 100).round()}%',
-                      style: const TextStyle(fontSize: 12, color: Pal.muted))),
-            ]);
-          },
-        ),
-        actions: [
-          TextButton(
-              onPressed: () {
-                voice.setUserVolume(userId, 1.0);
-                Navigator.pop(ctx);
-              },
-              child: const Text('Restablecer')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Listo')),
-        ],
-      ),
-    );
-  }
+  // _showUserVolume eliminado — reemplazado por showUserAudioPopover()
+  // (lib/ui/user_audio_popover.dart): volumen + EQ + presets en un popover
+  // compacto fiel al diseño voz-ajustes-popover.html del design system.
 
   // ----- controles (.vcontrols)
   Widget _controls(BuildContext context) {
