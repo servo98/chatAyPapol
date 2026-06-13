@@ -46,7 +46,11 @@ echo "const appVersion = '$VERSION';" > lib/version.dart
 # lock ya coherente). Cada pub get arranca de .dart_tool limpio.
 rm -rf "$CLIENT_DIR/.dart_tool"
 echo "▶ flutter pub get (reconciliar lock) ..."
-cmd.exe /c "cd /d $WIN_CLIENT && $FLUTTER pub get"
+# El 1er pub get puede CAMBIAR el lock (resolución Windows vs lock generado en
+# Linux) y dejar package_graph.json incoherente → sale NONZERO. Con set -e eso
+# abortaría el script ANTES del 2º. `|| true` lo tolera: ya cumplió su misión
+# (reconciliar el lock); el 2º (con .dart_tool limpio) regenera el graph bien.
+cmd.exe /c "cd /d $WIN_CLIENT && $FLUTTER pub get" || true
 rm -rf "$CLIENT_DIR/.dart_tool"
 echo "▶ flutter pub get (limpio) + build windows --release"
 cmd.exe /c "cd /d $WIN_CLIENT && $FLUTTER pub get"
