@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
+import 'crash_log.dart';
 import 'version.dart';
 
 /// Instalación y actualización propias (sin Inno), estilo Discord.
@@ -157,13 +158,20 @@ Set-ItemProperty -Path \$k -Name NoRepair -Type DWord -Value 1
         if (await f.exists()) await f.delete();
       } catch (_) {}
     }
-    // 3) carpeta de instalación: la borra un cmd desligado que espera ~3s a que
-    //    este proceso cierre (CWD fuera de la carpeta para no bloquearla).
+    // 3) carpeta de instalación: la borra un PowerShell OCULTO y desligado que
+    //    espera ~3s a que este proceso cierre (un exe en uso no se autoborra).
+    //    Antes usaba `cmd /c ping ...` como sleep, pero abría una ventana de
+    //    consola visible con el ping. -WindowStyle Hidden no muestra nada. CWD
+    //    fuera de la carpeta para no bloquearla.
     try {
       final dir = installDir;
       await Process.start(
-        'cmd.exe',
-        ['/c', 'ping -n 4 127.0.0.1 >nul & rmdir /s /q "$dir"'],
+        'powershell.exe',
+        [
+          '-NoProfile', '-WindowStyle', 'Hidden', '-Command',
+          "Start-Sleep -Seconds 3; "
+              "Remove-Item -LiteralPath '$dir' -Recurse -Force -ErrorAction SilentlyContinue"
+        ],
         mode: ProcessStartMode.detached,
         workingDirectory: Platform.environment['TEMP'] ?? 'C:\\',
       );
@@ -272,6 +280,9 @@ Set-ItemProperty -Path \$k -Name NoRepair -Type DWord -Value 1
       try {
         await newFiles.delete(recursive: true);
       } catch (_) {}
+      // Cierre INTENCIONAL por update: marca el log como limpio para que el
+      // detector de crashes NO muestre el banner de error al reabrir.
+      CrashLog.instance.markCleanShutdown();
       await Process.start(exe, const [],
           mode: ProcessStartMode.detached, workingDirectory: target);
       exit(0);

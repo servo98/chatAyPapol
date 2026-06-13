@@ -29,6 +29,11 @@ class _ChatViewState extends State<ChatView> {
   final pendingUploads = <Map<String, dynamic>>[];
   bool sending = false;
 
+  // Canal del último build + si ya hicimos el scroll inicial al fondo (al abrir
+  // o cambiar de canal el chat debe arrancar en el ÚLTIMO mensaje, no arriba).
+  String? _lastChannelId;
+  bool _didInitialScroll = false;
+
   // ── autocompletado de @menciones ──
   bool _mentionOpen = false; // hay overlay de menciones abierto
   int _mentionSel = 0; // índice resaltado en la lista
@@ -184,6 +189,19 @@ class _ChatViewState extends State<ChatView> {
               style: TextStyle(color: Pal.muted)));
     }
     final msgs = store.messages[ch.id] ?? [];
+    // Al abrir o cambiar de canal, arranca en el último mensaje (no arriba). Como
+    // los mensajes cargan async, se hace en el primer build con la lista ya
+    // poblada para ese canal (jumpTo tras el frame).
+    if (ch.id != _lastChannelId) {
+      _lastChannelId = ch.id;
+      _didInitialScroll = false;
+    }
+    if (!_didInitialScroll && msgs.isNotEmpty) {
+      _didInitialScroll = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (scroll.hasClients) scroll.jumpTo(scroll.position.maxScrollExtent);
+      });
+    }
     final canSend = store.canI(P.sendMessages, ch.id);
     final body = Column(
       children: [
