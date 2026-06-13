@@ -20,7 +20,7 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 
 /// Versión de ABI que estos bindings entienden (VOICEFX_ABI_VERSION).
-const int kVoicefxAbiVersion = 1;
+const int kVoicefxAbiVersion = 3;
 
 /// Máximo de nodos por cadena (VFX_MAX_NODES).
 const int kVfxMaxNodes = 16;

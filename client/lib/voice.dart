@@ -426,6 +426,7 @@ class VoiceManager extends ChangeNotifier {
       // predeterminado al crear la sala)
       await _applyOutputDevice();
       debugPrint('[voice] join OK');
+      SfxService.instance.play(UiSound.connected); // entré a voz
       _startSelfSpeaking();
       store.gateway.send('VOICE_JOIN', {'channel_id': chId, 'mute': muted, 'deaf': deafened});
       // si el canal ya tenía un ambiente sonando, engánchate sincronizado
@@ -438,6 +439,7 @@ class VoiceManager extends ChangeNotifier {
 
   Future<void> leave() async {
     if (room == null) return;
+    SfxService.instance.play(UiSound.disconnected); // salí de voz
     store.gateway.send('VOICE_LEAVE', null);
     final r = room;
     _cleanup();

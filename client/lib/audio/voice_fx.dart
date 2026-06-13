@@ -36,6 +36,10 @@ enum VoiceFxType {
   noise, //      6 — cama de ruido aditivo (siseo de radio)
   tremolo, //    7 — LFO de amplitud (voz de anciano)
   chorus, //     8 — chorus (sci-fi)
+  comp, //       9 — RESERVADO: compresor + noise gate (aún sin impl nativa)
+  bitcrush, //  10 — cuantización de bits + sample&hold (8-bit / digital)
+  vibrato, //   11 — delay corto modulado, sin dry (ondulación de PITCH)
+  flanger, //   12 — comb corto + LFO + feedback (jet / robot resonante)
 }
 
 /// Alias con el nombre que usa el contrato (§6). MISMO tipo que [VoiceFxType]:
@@ -54,6 +58,10 @@ extension VoiceFxTypeLabel on VoiceFxType {
         VoiceFxType.noise => 'Ruido',
         VoiceFxType.tremolo => 'Trémolo',
         VoiceFxType.chorus => 'Chorus',
+        VoiceFxType.comp => 'Compresor', // reservado (sin impl nativa)
+        VoiceFxType.bitcrush => 'Bitcrush',
+        VoiceFxType.vibrato => 'Vibrato',
+        VoiceFxType.flanger => 'Flanger',
       };
 
   /// Params que expone este efecto (metadatos para render genérico de sliders).
@@ -61,8 +69,9 @@ extension VoiceFxTypeLabel on VoiceFxType {
 }
 
 /// Modos de filtro para el param `type` de [VoiceFxType.biquad] (VfxBiquadType).
-/// Se pasan como float al nativo: 0=LP, 1=HP, 2=BP, 3=NOTCH.
-enum VoiceFxBiquadType { lowpass, highpass, bandpass, notch }
+/// Se pasan como float al nativo: 0=LP, 1=HP, 2=BP, 3=NOTCH, 4=PEAKING,
+/// 5=LOWSHELF, 6=HIGHSHELF. Los modos 4/5/6 (EQ) usan además `gainDb`.
+enum VoiceFxBiquadType { lowpass, highpass, bandpass, notch, peaking, lowshelf, highshelf }
 
 // ---------------------------------------------------------------------------
 // Ids de parámetro — copiados literales de voicefx.h (bloques de 100 por
@@ -77,6 +86,7 @@ const int kVfxPDelayMix = 202;
 const int kVfxPBiquadType = 300;
 const int kVfxPBiquadFreq = 301;
 const int kVfxPBiquadQ = 302;
+const int kVfxPBiquadGainDb = 303;
 const int kVfxPRingmodFreq = 400;
 const int kVfxPRingmodMix = 401;
 const int kVfxPDistDrive = 500;
@@ -90,6 +100,22 @@ const int kVfxPTremoloDepth = 801;
 const int kVfxPChorusRate = 900;
 const int kVfxPChorusDepth = 901;
 const int kVfxPChorusMix = 902;
+const int kVfxPCompGateThresh = 1000;
+const int kVfxPCompGateRel = 1001;
+const int kVfxPCompRatio = 1002;
+const int kVfxPCompThresh = 1003;
+const int kVfxPCompAttack = 1004;
+const int kVfxPCompRelease = 1005;
+const int kVfxPCompMakeup = 1006;
+const int kVfxPCrushBits = 1100;
+const int kVfxPCrushDownsample = 1101;
+const int kVfxPCrushMix = 1102;
+const int kVfxPVibratoRate = 1200;
+const int kVfxPVibratoDepthCents = 1201;
+const int kVfxPFlangerRate = 1300;
+const int kVfxPFlangerDepth = 1301;
+const int kVfxPFlangerFeedback = 1302;
+const int kVfxPFlangerMix = 1303;
 
 /// Metadatos de un parámetro: suficientes para que una UI futura pinte un
 /// slider genérico sin conocer el efecto (label es + rango + default + unidad).
@@ -134,9 +160,10 @@ const Map<VoiceFxType, List<VoiceFxParam>> kVoiceFxParamRegistry = {
     VoiceFxParam(kVfxPDelayMix, 'mix', 'Mezcla', min: 0.0, max: 1.0, defaultValue: 0.50),
   ],
   VoiceFxType.biquad: [
-    VoiceFxParam(kVfxPBiquadType, 'type', 'Tipo (LP/HP/BP/Notch)', min: 0.0, max: 3.0, defaultValue: 0.0),
+    VoiceFxParam(kVfxPBiquadType, 'type', 'Tipo (LP/HP/BP/Notch/Peak/Shelf)', min: 0.0, max: 6.0, defaultValue: 0.0),
     VoiceFxParam(kVfxPBiquadFreq, 'freq', 'Frecuencia', min: 20.0, max: 20000.0, defaultValue: 1000.0, unit: 'Hz'),
     VoiceFxParam(kVfxPBiquadQ, 'q', 'Resonancia', min: 0.1, max: 10.0, defaultValue: 0.707),
+    VoiceFxParam(kVfxPBiquadGainDb, 'gainDb', 'Ganancia (Peak/Shelf)', min: -15.0, max: 15.0, defaultValue: 0.0, unit: 'dB'),
   ],
   VoiceFxType.ringmod: [
     VoiceFxParam(kVfxPRingmodFreq, 'freq', 'Portadora', min: 1.0, max: 2000.0, defaultValue: 30.0, unit: 'Hz'),
@@ -162,6 +189,31 @@ const Map<VoiceFxType, List<VoiceFxParam>> kVoiceFxParamRegistry = {
     VoiceFxParam(kVfxPChorusRate, 'rate', 'Velocidad', min: 0.05, max: 5.0, defaultValue: 0.8, unit: 'Hz'),
     VoiceFxParam(kVfxPChorusDepth, 'depth', 'Profundidad', min: 0.0, max: 1.0, defaultValue: 0.4),
     VoiceFxParam(kVfxPChorusMix, 'mix', 'Mezcla', min: 0.0, max: 1.0, defaultValue: 0.5),
+  ],
+  // Reservado: sin params expuestos hasta que exista la impl nativa (type 9).
+  VoiceFxType.comp: [
+    VoiceFxParam(kVfxPCompGateThresh, 'gateThresh', 'Umbral gate', min: -80.0, max: 0.0, defaultValue: -45.0, unit: 'dB'),
+    VoiceFxParam(kVfxPCompGateRel, 'gateRel', 'Release gate', min: 10.0, max: 300.0, defaultValue: 120.0, unit: 'ms'),
+    VoiceFxParam(kVfxPCompRatio, 'ratio', 'Ratio', min: 1.0, max: 20.0, defaultValue: 3.0),
+    VoiceFxParam(kVfxPCompThresh, 'compThresh', 'Umbral comp', min: -40.0, max: 0.0, defaultValue: -18.0, unit: 'dB'),
+    VoiceFxParam(kVfxPCompAttack, 'attack', 'Attack', min: 1.0, max: 50.0, defaultValue: 10.0, unit: 'ms'),
+    VoiceFxParam(kVfxPCompRelease, 'release', 'Release', min: 20.0, max: 300.0, defaultValue: 100.0, unit: 'ms'),
+    VoiceFxParam(kVfxPCompMakeup, 'makeup', 'Makeup', min: 0.0, max: 24.0, defaultValue: 0.0, unit: 'dB'),
+  ],
+  VoiceFxType.bitcrush: [
+    VoiceFxParam(kVfxPCrushBits, 'bits', 'Bits', min: 1.0, max: 16.0, defaultValue: 8.0),
+    VoiceFxParam(kVfxPCrushDownsample, 'downsample', 'Decimación', min: 1.0, max: 32.0, defaultValue: 1.0),
+    VoiceFxParam(kVfxPCrushMix, 'mix', 'Mezcla', min: 0.0, max: 1.0, defaultValue: 1.0),
+  ],
+  VoiceFxType.vibrato: [
+    VoiceFxParam(kVfxPVibratoRate, 'rate', 'Velocidad', min: 0.1, max: 12.0, defaultValue: 5.5, unit: 'Hz'),
+    VoiceFxParam(kVfxPVibratoDepthCents, 'depthCents', 'Profundidad', min: 0.0, max: 50.0, defaultValue: 20.0, unit: 'ct'),
+  ],
+  VoiceFxType.flanger: [
+    VoiceFxParam(kVfxPFlangerRate, 'rate', 'Velocidad', min: 0.05, max: 2.0, defaultValue: 0.4, unit: 'Hz'),
+    VoiceFxParam(kVfxPFlangerDepth, 'depth', 'Profundidad', min: 0.0, max: 1.0, defaultValue: 0.6),
+    VoiceFxParam(kVfxPFlangerFeedback, 'feedback', 'Realimentación', min: 0.0, max: 0.9, defaultValue: 0.5),
+    VoiceFxParam(kVfxPFlangerMix, 'mix', 'Mezcla', min: 0.0, max: 1.0, defaultValue: 0.5),
   ],
 };
 

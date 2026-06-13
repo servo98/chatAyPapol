@@ -269,9 +269,20 @@ Future<void> _diagVoiceFx() async {
     await WebrtcApm.setRnnoise(true);
     await log('  setRnnoise volvió (NO crasheó)');
 
-    await log('3: WebrtcApm.setVoiceFx(true, spec) ...');
-    await WebrtcApm.setVoiceFx(true, '1.0;1.0;0,0,');
-    await log('  setVoiceFx volvió (NO crasheó)');
+    await log('3: WebrtcApm.setVoiceFx(true, spec con efectos NUEVOS) ...');
+    // Cadena rica que ejerce los nodos nuevos: comp(9) + pitch(5) +
+    // biquad PEAKING(2,type=4,gainDb) + distortion(4) ADAA + bitcrush(10) +
+    // vibrato(11) + flanger(12). Si alguno crashea, no llega a FIN ok.
+    await WebrtcApm.setVoiceFx(true,
+        '1.0;1.0;'
+        '9,0,1000=-45&1002=4&1006=3|'
+        '5,0,600=-5&601=0.85|'
+        '2,0,300=4&301=3000&303=4|'
+        '4,0,500=6&501=0.5|'
+        '10,0,1100=6&1101=2|'
+        '11,0,1200=5&1201=20|'
+        '12,0,1300=0.4&1302=0.5');
+    await log('  setVoiceFx (cadena nueva) volvió (NO crasheó)');
 
     await log('4: dejar correr 2s (procesado en hilo de audio) ...');
     await Future.delayed(const Duration(seconds: 2));

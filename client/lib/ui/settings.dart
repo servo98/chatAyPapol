@@ -9,6 +9,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import '../models.dart';
 import '../perms.dart';
+import '../sfx.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../updater.dart';
@@ -23,13 +24,14 @@ import 'voice_fx_ui.dart';
 import 'widgets.dart';
 
 void openSettings(BuildContext context, AppStore store, VoiceManager voice) {
+  SfxService.instance.play(UiSound.modalOpen);
   showDialog(
     context: context,
     builder: (_) => Dialog(
       insetPadding: const EdgeInsets.all(40),
       child: SettingsScreen(store: store, voice: voice),
     ),
-  );
+  ).then((_) => SfxService.instance.play(UiSound.modalClose));
 }
 
 class SettingsScreen extends StatefulWidget {
@@ -51,7 +53,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ('cuenta', 'Mi cuenta', LucideIcons.user),
       ('voz', 'Voz y micrófono', LucideIcons.mic),
       ('fx', 'Efectos de voz', LucideIcons.sparkles),
-      ('aivoice', 'Cambiador de voz IA', LucideIcons.cpu),
       ('notifs', 'Notificaciones', LucideIcons.bell),
       if (store.canI(P.manageRoles)) ('roles', 'Roles', LucideIcons.venetianMask),
       if (store.canI(P.createInvites)) ('invites', 'Invitaciones', LucideIcons.mail),
@@ -163,7 +164,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'cuenta' => _AccountPanel(store),
         'voz' => _VoicePanel(widget.voice),
         'fx' => const VoiceFxSettings(),
-        'aivoice' => const AiVoiceSettings(),
         'notifs' => NotificationsPanel(store),
         'roles' => _RolesPanel(store),
         'invites' => _InvitesPanel(store),

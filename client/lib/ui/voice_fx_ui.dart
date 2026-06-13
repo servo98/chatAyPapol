@@ -4,7 +4,7 @@
 // Tres superficies:
 //  - showVoiceFxPopover  → popover ✨ de la barra de voz (master + presets).
 //  - showAmbiencePopover → popover ((·)) del ambiente de sala (cama compartida).
-//  - VoiceFxSettings / AiVoiceSettings → pestañas de Ajustes (editor de cadena, IA).
+//  - VoiceFxSettings → pestaña de Ajustes (editor de cadena de efectos).
 //
 // NOTA: los EFECTOS DE VOZ controlan el motor (estado + persistencia), pero solo
 // transforman el audio en vivo cuando el hook de captura nativo llama a
@@ -13,8 +13,8 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../ambience.dart';
-import '../audio/ai_voice_changer.dart';
 import '../audio/voice_fx.dart';
+import '../sfx.dart';
 import '../perms.dart';
 import '../store.dart';
 import '../theme.dart';
@@ -85,6 +85,7 @@ String? activeFxLabel() {
 
 Future<void> _showFloating(BuildContext context, Widget child,
     {double width = 470, double maxHeight = 560}) {
+  SfxService.instance.play(UiSound.modalOpen);
   return showDialog(
     context: context,
     barrierColor: const Color(0x40000000),
@@ -111,7 +112,10 @@ Future<void> _showFloating(BuildContext context, Widget child,
         ),
       ),
     ),
-  );
+  ).then((v) {
+    SfxService.instance.play(UiSound.modalClose);
+    return v;
+  });
 }
 
 Widget _sectionLabel(String t) => Padding(
@@ -971,6 +975,10 @@ IconData _fxTypeIcon(VoiceFxType t) => switch (t) {
       VoiceFxType.noise => LucideIcons.radio,
       VoiceFxType.tremolo => LucideIcons.activity,
       VoiceFxType.chorus => LucideIcons.layers,
+      VoiceFxType.comp => LucideIcons.gauge,
+      VoiceFxType.bitcrush => LucideIcons.grid2x2,
+      VoiceFxType.vibrato => LucideIcons.audioWaveform,
+      VoiceFxType.flanger => LucideIcons.wind,
     };
 
 String _fmtParam(VoiceFxParam p, double v) {
@@ -986,315 +994,3 @@ String _fmtParam(VoiceFxParam p, double v) {
   if (p.min >= 0 && p.max <= 1.0) return '${(v * 100).round()}%';
   return v.toStringAsFixed(2);
 }
-
-// ═════════════════════════ Ajustes: cambiador de voz IA ══════════════════════
-
-class AiVoiceSettings extends StatefulWidget {
-  const AiVoiceSettings({super.key});
-  @override
-  State<AiVoiceSettings> createState() => _AiVoiceSettingsState();
-}
-
-class _AiVoiceSettingsState extends State<AiVoiceSettings> {
-  AiBackend _sim = AiBackend.cuda;
-
-  @override
-  void initState() {
-    super.initState();
-    AiVoiceChanger.instance.init();
-    _sim = AiVoiceChanger.instance.capability.backend;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ai = AiVoiceChanger.instance;
-    return ListenableBuilder(
-      listenable: ai,
-      builder: (ctx, _) {
-        final simCap = AiVoiceChanger.capabilityFor(_sim);
-        return ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          children: [
-            const Text('// CAMBIADOR DE VOZ IA',
-                style: TextStyle(fontSize: 12, color: Pal.accent, letterSpacing: 1.2)),
-            const SizedBox(height: 6),
-            const Text('cambiador de voz IA',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Pal.text)),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0x1FFFB627),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Pal.yellow.withValues(alpha: 0.5)),
-              ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: const [
-                Icon(LucideIcons.triangleAlert, size: 13, color: Pal.yellow),
-                SizedBox(width: 8),
-                Text('EXPERIMENTAL · PROCESO EXTERNO LOCAL',
-                    style: TextStyle(
-                        fontSize: 11, color: Pal.yellow, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
-              ]),
-            ),
-            const SizedBox(height: 14),
-            const Text(
-                'conversión de voz por IA (estilo RVC): hombre↔mujer realista o la voz de un '
-                'personaje. es pesado y de mayor latencia que los efectos normales — pensado para '
-                'equipos potentes.',
-                style: TextStyle(fontSize: 13, color: Pal.muted, height: 1.4)),
-            const SizedBox(height: 16),
-            const Text('tu equipo',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Pal.text)),
-            const SizedBox(height: 8),
-            _HardwareCard(cap: ai.capability),
-            const SizedBox(height: 14),
-            const Text('# simula otro backend para ver el estado honesto en cada caso:',
-                style: TextStyle(fontSize: 11, color: Pal.comment)),
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final b in AiBackend.values)
-                _backendChip(b, _sim == b, () => setState(() => _sim = b)),
-            ]),
-            const SizedBox(height: 12),
-            Row(children: [
-              Expanded(child: _statCard('BACKEND', AiVoiceChanger.backendLabel(simCap.backend),
-                  simCap.isRecommended ? Pal.accent : Pal.text)),
-              const SizedBox(width: 10),
-              Expanded(child: _statCard('LATENCIA ESTIMADA',
-                  simCap.backend == AiBackend.none ? '—' : '~${simCap.expectedLatencyMs} ms', Pal.text)),
-              const SizedBox(width: 10),
-              Expanded(child: _statCard('VEREDICTO', simCap.isRecommended ? 'recomendado' : 'no ideal',
-                  simCap.isRecommended ? Pal.accent : Pal.yellow)),
-            ]),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0x14FFB627),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Pal.yellow.withValues(alpha: 0.4)),
-              ),
-              child: Row(children: [
-                const Icon(LucideIcons.triangleAlert, size: 15, color: Pal.yellow),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                      'con IA, tu voz llegará ~${simCap.expectedLatencyMs}ms después. notarás desfase '
-                      'al hablar. desactívala para volver a baja latencia.',
-                      style: const TextStyle(fontSize: 12, color: Pal.muted, height: 1.35)),
-                ),
-              ]),
-            ),
-            const SizedBox(height: 18),
-            const Text('motor',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Pal.text)),
-            const SizedBox(height: 10),
-            _aiField(LucideIcons.folder, 'ruta del motor', ai.exePath,
-                'p. ej. ~/.papol/rvc/engine', (v) => ai.setExePath(v)),
-            const SizedBox(height: 8),
-            _aiField(LucideIcons.sparkles, 'modelo de voz', ai.modelPath, 'papol-fem-v2.pth',
-                (v) => ai.setModelPath(v)),
-            const SizedBox(height: 8),
-            _aiField(LucideIcons.mic, 'entrada virtual', ai.inputDevice, ai.virtualMicHint,
-                (v) => ai.setInputDevice(v)),
-            const SizedBox(height: 14),
-            Row(children: [
-              ElevatedButton.icon(
-                onPressed: ai.isRunning ? ai.stop : () => ai.start(),
-                icon: Icon(ai.isRunning ? LucideIcons.square : LucideIcons.play, size: 16),
-                label: Text(ai.isRunning ? 'detener motor' : 'iniciar motor'),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: ai.isRunning ? Pal.red : Pal.accentDim,
-                    foregroundColor: ai.isRunning ? Pal.text : Pal.greenInk),
-              ),
-              const SizedBox(width: 12),
-              Text(_statusLabel(ai.status),
-                  style: TextStyle(fontSize: 12, color: _statusColor(ai.status))),
-            ]),
-            const SizedBox(height: 12),
-            _LogPanel(lines: ai.log, status: ai.status),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-              decoration: BoxDecoration(
-                color: Pal.bg0,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Pal.borderSubtle),
-              ),
-              child: Text('Guía de instalación: client/docs/voice-fx-ai-setup.md\n${ai.routingSummary}',
-                  style: const TextStyle(fontSize: 11, color: Pal.comment, height: 1.4)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _backendChip(AiBackend b, bool on, VoidCallback onTap) => InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: on ? _washGreen : Pal.bg0,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: on ? Pal.accent : Pal.borderDefault),
-          ),
-          child: Text(AiVoiceChanger.backendLabel(b),
-              style: TextStyle(
-                  fontSize: 11.5,
-                  color: on ? Pal.accent : Pal.muted,
-                  fontWeight: on ? FontWeight.w700 : FontWeight.w500)),
-        ),
-      );
-
-  Widget _statCard(String label, String value, Color valueColor) => Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Pal.bg0,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Pal.borderSubtle),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label,
-              style: const TextStyle(fontSize: 10, color: Pal.faint, letterSpacing: 1)),
-          const SizedBox(height: 6),
-          Text(value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: valueColor)),
-        ]),
-      );
-
-  Widget _aiField(IconData icon, String label, String value, String hint,
-          ValueChanged<String> onChanged) =>
-      Row(children: [
-        SizedBox(
-          width: 130,
-          child: Row(children: [
-            Icon(icon, size: 14, color: Pal.muted),
-            const SizedBox(width: 8),
-            Expanded(
-                child: Text(label,
-                    style: const TextStyle(fontSize: 12, color: Pal.muted))),
-          ]),
-        ),
-        Expanded(
-          child: TextField(
-            controller: TextEditingController(text: value)
-              ..selection = TextSelection.collapsed(offset: value.length),
-            onSubmitted: onChanged,
-            style: const TextStyle(fontSize: 12, color: Pal.text),
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: hint,
-              hintStyle: const TextStyle(fontSize: 12, color: Pal.comment),
-            ),
-          ),
-        ),
-      ]);
-}
-
-class _HardwareCard extends StatelessWidget {
-  const _HardwareCard({required this.cap});
-  final AiCapability cap;
-  @override
-  Widget build(BuildContext context) {
-    final ok = cap.isRecommended;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Pal.bg0,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: ok ? Pal.accent.withValues(alpha: 0.5) : Pal.borderDefault),
-      ),
-      child: Row(children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: ok ? _washGreen : Pal.bg3,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(LucideIcons.cpu, size: 22, color: ok ? Pal.accent : Pal.muted),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Text('${AiVoiceChanger.backendLabel(cap.backend)} · ${ok ? 'listo' : 'limitado'}',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Pal.text)),
-              const SizedBox(width: 8),
-              if (ok)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                      color: _washGreen, borderRadius: BorderRadius.circular(10)),
-                  child: const Text('recomendado',
-                      style: TextStyle(fontSize: 10.5, color: Pal.accent, fontWeight: FontWeight.w700)),
-                ),
-            ]),
-            const SizedBox(height: 4),
-            Text(
-                ok
-                    ? '${AiVoiceChanger.backendLabel(cap.backend)} detectado — buena opción en este equipo.'
-                    : AiVoiceChanger.instance.unavailableReason,
-                style: const TextStyle(fontSize: 11.5, color: Pal.faint, height: 1.35)),
-          ]),
-        ),
-      ]),
-    );
-  }
-}
-
-class _LogPanel extends StatelessWidget {
-  const _LogPanel({required this.lines, required this.status});
-  final List<String> lines;
-  final AiVcStatus status;
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 130,
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Pal.inset,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Pal.borderSubtle),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Icon(LucideIcons.circle,
-              size: 8, color: status == AiVcStatus.running ? Pal.green : Pal.comment),
-          const SizedBox(width: 6),
-          const Text('log del motor',
-              style: TextStyle(fontSize: 11, color: Pal.faint, letterSpacing: 0.5)),
-        ]),
-        const SizedBox(height: 6),
-        Expanded(
-          child: lines.isEmpty
-              ? const Text('# motor detenido\n  pulsa «iniciar motor» para arrancar la conversión por IA',
-                  style: TextStyle(fontSize: 11, color: Pal.comment, height: 1.4))
-              : ListView.builder(
-                  reverse: true,
-                  itemCount: lines.length,
-                  itemBuilder: (c, i) => Text(lines[lines.length - 1 - i],
-                      style: const TextStyle(fontSize: 10.5, color: Pal.muted)),
-                ),
-        ),
-      ]),
-    );
-  }
-}
-
-String _statusLabel(AiVcStatus s) => switch (s) {
-      AiVcStatus.stopped => 'detenido',
-      AiVcStatus.starting => 'arrancando…',
-      AiVcStatus.running => 'corriendo',
-      AiVcStatus.error => 'error',
-    };
-
-Color _statusColor(AiVcStatus s) => switch (s) {
-      AiVcStatus.running => Pal.green,
-      AiVcStatus.error => Pal.red,
-      _ => Pal.muted,
-    };

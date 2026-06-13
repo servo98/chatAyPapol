@@ -1,7 +1,7 @@
 name: chatpapol
 description: Chat privado tipo Discord, ultraligero.
 publish_to: "none"
-version: 0.2.4+1
+version: 0.2.5+1
 
 environment:
   sdk: ^3.5.0
@@ -54,7 +54,7 @@ dependency_overrides:
   flutter_webrtc:
     git:
       url: https://github.com/servo98/flutter-webrtc.git
-      ref: dd1cbb968b60185f6d233277d2bb20d017a78ccb
+      ref: 1e0bca1e441c7f6b8e5d8e4ed2d2756ea0930f5e
 
 flutter:
   uses-material-design: true
@@ -64,4 +64,8 @@ flutter:
     # pack royalty-free con los mismos nombres. Ver lib/ambience.dart.
     - assets/ambience/
     - assets/ambience_manifest.json
+    # SFX de UI horneados (pack Cyberleaf ModernUISFX). Generados con
+    # scripts/gen_sfx.dart desde el manifest del Sound Lab.
+    - assets/sfx/
+    - assets/sfx_manifest.json
 

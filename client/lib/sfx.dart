@@ -59,13 +59,17 @@ class SfxService {
     if (_inited) return;
     _inited = true;
 
-    // SFX cortos: baja latencia, y al terminar libera el recurso (no loop).
+    // SFX cortos: al terminar libera el recurso (no loop).
+    // PlayerMode.mediaPlayer (NO lowLatency): en Windows el backend de baja
+    // latencia reporta "OK" pero NO saca audio (verificado en logs); mediaPlayer
+    // sí suena, con latencia de decenas de ms, irrelevante para sonidos de UI.
     try {
       await _player.setReleaseMode(ReleaseMode.stop);
-      await _player.setPlayerMode(PlayerMode.lowLatency);
+      await _player.setPlayerMode(PlayerMode.mediaPlayer);
+      await _player.setVolume(1.0);
       await _previewPlayer.setReleaseMode(ReleaseMode.stop);
-      await _previewPlayer.setPlayerMode(PlayerMode.lowLatency);
-    } catch (_) {/* algunas plataformas no soportan lowLatency: no es crítico */}
+      await _previewPlayer.setPlayerMode(PlayerMode.mediaPlayer);
+    } catch (_) {/* no crítico */}
 
     // (a) manifest horneado, si el build lo incluye.
     try {
@@ -90,11 +94,26 @@ class SfxService {
         });
       }
     } catch (_) {/* sin overrides: queda vacío */}
+    debugPrint('[sfx] init: baked=${_baked.length} overrides=${_overrides.length} '
+        '(ej. connected baked=${_baked['connected']} override=${_overrides['connected']})');
   }
+
+  /// Sonidos SOCIALES/entrantes: lo único que calla el ensordecer (deafen).
+  /// Tus propias acciones (mute/deafen, conectar/desconectar) y el feedback de
+  /// UI (modales, error, éxito, confirmar) suenan SIEMPRE, aunque estés sordo.
+  static const _socialSounds = {
+    UiSound.messageReceived,
+    UiSound.mention,
+    UiSound.voiceUserJoin,
+    UiSound.voiceUserLeave,
+  };
 
   /// Fire-and-forget: resuelve la fuente y reproduce sin await; traga errores.
   void play(UiSound s) {
-    if (muted) return;
+    if (muted && _socialSounds.contains(s)) {
+      debugPrint('[sfx] play(${s.name}) ignorado: sordo (social)');
+      return;
+    }
     final name = s.name;
     final abs = _overrides[name];
     final baked = _baked[name];
@@ -104,11 +123,15 @@ class SfxService {
     } else if (baked != null && baked.isNotEmpty) {
       source = AssetSource(baked);
     } else {
+      debugPrint('[sfx] play($name): SIN fuente (baked=$baked override=$abs)');
       return; // acción sin sonido asignado
     }
-    // sin await: no bloquea el hilo de UI ni propaga errores.
-    _player.stop().then((_) => _player.play(source!)).catchError((e, st) {
-      if (kDebugMode) debugPrint('sfx play($name) falló: $e');
+    debugPrint('[sfx] play($name) via ${abs != null ? "device:$abs" : "asset:$baked"}');
+    // LOG SIEMPRE (no solo en debug) para diagnosticar por qué no se oye en release.
+    _player.stop().then((_) => _player.play(source!)).then((_) {
+      debugPrint('[sfx] play($name) OK');
+    }).catchError((e, st) {
+      debugPrint('[sfx] play($name) FALLÓ: $e');
     });
   }
 

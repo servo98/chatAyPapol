@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "sounds": {
+    "messageReceived": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\AlertsAndNotifications\\GenericNotification10b.wav",
+    "mention": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\AlertsAndNotifications\\GenericNotification11.wav",
+    "voiceUserJoin": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\SlidesAndTransitions\\Maximize4.wav",
+    "voiceUserLeave": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\SlidesAndTransitions\\CloseOrDisable4.wav",
+    "selfMute": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\AlertsAndNotifications\\SciFiNotification2.wav",
+    "selfUnmute": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\AlertsAndNotifications\\SciFiNotification1.wav",
+    "selfDeafen": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\AlertsAndNotifications\\GenericNotification8.wav",
+    "selfUndeafen": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\AlertsAndNotifications\\GenericNotification9.wav",
+    "connected": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\AlertsAndNotifications\\Success7b.wav",
+    "disconnected": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\AlertsAndNotifications\\Error5.wav",
+    "error": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\AlertsAndNotifications\\Error4.wav",
+    "success": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\AlertsAndNotifications\\Success4.wav",
+    "modalOpen": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\SlidesAndTransitions\\Maximize4.wav",
+    "modalClose": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\SlidesAndTransitions\\CloseOrDisable4.wav",
+    "confirm": "C:\\Users\\ferna\\Documents\\code\\chatpapol\\client\\lib\\sounds\\pack2\\Cyberleaf-ModernUISFX\\AlertsAndNotifications\\Success12b.wav"
+  }
+}
