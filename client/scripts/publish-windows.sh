@@ -38,7 +38,14 @@ echo "▶ Publicando Windows v$VERSION"
 # 2) Sellar versión (igual que el CI). pub get + build con Flutter de WINDOWS
 #    (si se usó el Flutter de WSL, package_config.json queda con rutas Linux).
 echo "const appVersion = '$VERSION';" > lib/version.dart
-echo "▶ flutter pub get + build windows --release"
+# .dart_tool puede venir contaminado por un `pub get` previo de Linux (rutas +
+# package_graph.json con otra resolución → "dependencies for 'logger' missing"
+# al construir). Bórralo y haz pub get DOS veces: el 1º reconcilia el lock con
+# la resolución de Windows, el 2º regenera package_graph.json coherente. Así el
+# publish es de UNA pasada (antes había que re-correrlo a mano).
+rm -rf "$CLIENT_DIR/.dart_tool"
+echo "▶ flutter pub get (x2, .dart_tool limpio) + build windows --release"
+cmd.exe /c "cd /d $WIN_CLIENT && $FLUTTER pub get"
 cmd.exe /c "cd /d $WIN_CLIENT && $FLUTTER pub get"
 cmd.exe /c "cd /d $WIN_CLIENT && $FLUTTER build windows --release"
 
