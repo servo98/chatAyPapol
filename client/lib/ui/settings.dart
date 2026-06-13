@@ -753,6 +753,20 @@ class _VoicePanelState extends State<_VoicePanel> {
             // No usa _applyMicChange: el APM es global, no hay que reiniciar track.
             onChanged: (v) => voice.setRnnoise(v),
           ),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            activeTrackColor: Pal.accent,
+            value: voice.fullband48k,
+            title: const Text('Micro fullband 48 kHz',
+                style: TextStyle(fontSize: 13.5)),
+            subtitle: const Text(
+                'Calidad Discord o mejor: tu voz va a 48 kHz sin recorte a 16k. '
+                'NO cancela eco → usa AURICULARES (si no, los demás oirán eco). '
+                'Se aplica al reconectar al canal.',
+                style: TextStyle(fontSize: 11, color: Pal.faint)),
+            onChanged: (v) => voice.setFullband48k(v),
+          ),
           const SizedBox(height: 12),
           const Text('VOLUMEN DE SALIDA', style: _label),
           Row(children: [

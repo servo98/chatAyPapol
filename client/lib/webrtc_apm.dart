@@ -33,6 +33,39 @@ class WebrtcApm {
       await _ch.invokeMethod('setVoiceMonitor', {'enabled': enabled});
     } catch (_) {/* build sin soporte de monitor */}
   }
+
+  // === [chatpapol 48k] micro kCustom fullband (sin APM → sin downsample 16k) ===
+
+  /// Crea una pista de audio kCustom (Stage 1) a la que el capturador nativo
+  /// inyecta PCM a 48k. Devuelve el trackId (o null si el build no lo soporta).
+  static Future<String?> createCustomAudioTrack() async {
+    try {
+      final res = await _ch.invokeMethod('createCustomAudioTrack');
+      if (res is Map) {
+        final tracks = res['audioTracks'];
+        if (tracks is List && tracks.isNotEmpty) {
+          final t = tracks.first;
+          if (t is Map && t['id'] is String) return t['id'] as String;
+        }
+        if (res['id'] is String) return res['id'] as String;
+      }
+    } catch (_) {/* build viejo / sin soporte */}
+    return null;
+  }
+
+  /// Arranca el capturador de micro a 48k (Stage 2) ligado a [trackId].
+  /// [deviceId] vacío = micro por defecto. Sin AEC → AURICULARES.
+  static Future<void> startCustomMicCapture(String trackId,
+      {String deviceId = ''}) async {
+    await _ch.invokeMethod(
+        'startCustomMicCapture', {'trackId': trackId, 'deviceId': deviceId});
+  }
+
+  static Future<void> stopCustomMicCapture(String trackId) async {
+    try {
+      await _ch.invokeMethod('stopCustomMicCapture', {'trackId': trackId});
+    } catch (_) {}
+  }
 }
 
 /// Estado observable del monitor local ("escucharme"). Singleton para que la UI

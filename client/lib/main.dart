@@ -254,6 +254,55 @@ Future<void> _diagUpdate() async {
 // track de audio (inicializa el factory → APM), activa RNNoise y luego los
 // efectos, registrando cada paso. Si crashea, la última línea de diag-voicefx.txt
 // (Dart) + native.log (C++) dicen dónde. Headless: se puede correr sin GUI.
+// [chatpapol 48k] Test AISLADO de la ruta de micro fullband: crea la pista
+// kCustom (sin APM → sin downsample a 16k), arranca el capturador WASAPI a 48k y
+// enciende el monitor "escucharme". Te oyes a ti mismo a 48k SIN entrar a ninguna
+// sala ni publicar nada por LiveKit. Si suena lleno/claro (no boxy) → la captura
+// 48k + escala + monitor funcionan. AURICULARES obligatorios (sin AEC). Solo
+// Windows tiene monitor (en Linux EmitMonitorLocked es no-op).
+Future<void> _diagMic48k() async {
+  final out =
+      File(r'C:\Users\ferna\Downloads\chatpapol-toolchain\diag-mic48k.txt');
+  Future<void> log(String s) async {
+    out.writeAsStringSync('$s\n', mode: FileMode.append);
+    // ignore: avoid_print
+    print(s);
+  }
+
+  out.writeAsStringSync('=== diag-mic48k v$appVersion ===\n');
+  try {
+    await log('PONTE LOS AURICULARES (sin AEC, si no habrá eco/acople).');
+    await log('1: monitor "escucharme" ON ...');
+    await WebrtcApm.setVoiceMonitor(true);
+
+    await log('2: crear pista kCustom (sin APM/16k) ...');
+    final trackId = await WebrtcApm.createCustomAudioTrack();
+    if (trackId == null) {
+      await log('  ERROR: createCustomAudioTrack devolvió null (build sin soporte)');
+      await WebrtcApm.setVoiceMonitor(false);
+      exit(0);
+    }
+    await log('  trackId=$trackId');
+
+    await log('3: arrancar capturador de micro WASAPI 48k ...');
+    await WebrtcApm.startCustomMicCapture(trackId);
+    await log('  capturador arrancado (48k mono fullband)');
+
+    await log('');
+    await log('>>> HABLA AHORA: deberías oírte a TI MISMO a 48k durante 30s.');
+    await log('>>> Compara: ¿suena más LLENO/CLARO que el micro normal (boxy/16k)?');
+    await Future.delayed(const Duration(seconds: 30));
+
+    await log('4: parar capturador + monitor OFF ...');
+    await WebrtcApm.stopCustomMicCapture(trackId);
+    await WebrtcApm.setVoiceMonitor(false);
+    await log('=== diag-mic48k FIN ok ===');
+  } catch (e, st) {
+    await log('EXCEPCIÓN: $e\n$st');
+  }
+  exit(0);
+}
+
 Future<void> _diagVoiceFx() async {
   final out =
       File(r'C:\Users\ferna\Downloads\chatpapol-toolchain\diag-voicefx.txt');
@@ -338,6 +387,10 @@ Future<void> _main(List<String> args) async {
   }
   if (args.contains('--diag-voicefx')) {
     await _diagVoiceFx();
+    return;
+  }
+  if (args.contains('--diag-mic48k')) {
+    await _diagMic48k();
     return;
   }
   // Desinstalación (la invoca Windows con la UninstallString del registro):

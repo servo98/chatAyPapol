@@ -130,6 +130,27 @@ class VoiceManager extends ChangeNotifier {
         autoGainControl: autoGainControl,
       );
 
+  // ───────── micro CUSTOM 48 kHz (calidad Discord, sin APM) ─────────
+  // Cuando está ON, el micro se publica por una pista kCustom alimentada por un
+  // capturador nativo a 48k (ver webrtc_apm.dart / fork) EN VEZ de
+  // setMicrophoneEnabled. Sin APM no hay AEC → AURICULARES (opt-in en ajustes).
+  bool fullband48k = false;
+  // Pista custom publicada (si el modo está activo y estamos en sala).
+  LocalAudioTrack? _customMicTrack;
+  // trackId nativo del capturador en marcha (para start/stopCustomMicCapture).
+  String? _customMicNativeId;
+
+  /// Opciones de captura del track CUSTOM: stopAudioCaptureOnMute:false es CLAVE
+  /// — el mute de livekit por defecto llama stop()→mediaStreamTrack.stop() y eso
+  /// destruiría la fuente kCustom (no hay getUserMedia que la recree). Sin APM no
+  /// tiene sentido NS/AEC/AGC (van off; el procesado va a 48k fuera del APM).
+  AudioCaptureOptions get _customMicOptions => const AudioCaptureOptions(
+        noiseSuppression: false,
+        echoCancellation: false,
+        autoGainControl: false,
+        stopAudioCaptureOnMute: false,
+      );
+
   /// Track de micro publicado en la sala actual (o null si no hay).
   LocalAudioTrack? get micTrack {
     final pub = room?.localParticipant
@@ -146,6 +167,7 @@ class VoiceManager extends ChangeNotifier {
     echoCancellation = prefs.getBool('mic_echo_cancellation') ?? true;
     autoGainControl = prefs.getBool('mic_auto_gain') ?? true;
     rnnoise = prefs.getBool('mic_rnnoise') ?? false;
+    fullband48k = prefs.getBool('mic_fullband_48k') ?? false;
     outputVolume = prefs.getDouble('voice_output_volume') ?? 1.0;
     try {
       final raw = prefs.getString('voice_user_volumes');
@@ -222,6 +244,14 @@ class VoiceManager extends ChangeNotifier {
       } catch (_) {}
     }
     await _saveMicPrefs();
+    if (fullband48k && _customMicTrack != null) {
+      // micro custom: el deviceId va al capturador nativo, no a getUserMedia.
+      // Recrea la pista con el nuevo device (no hay replaceTrack para kCustom).
+      await _unpublishCustomMic();
+      await _publishCustomMic();
+      notifyListeners();
+      return;
+    }
     await applyMicOptions();
     notifyListeners();
   }
@@ -283,6 +313,9 @@ class VoiceManager extends ChangeNotifier {
   /// "muteado" (livekit hace este mismo guard en LocalAudioTrack.setDeviceId).
   /// En ese caso se difiere hasta el siguiente des-mute.
   Future<void> applyMicOptions() async {
+    // El micro CUSTOM 48k no usa getUserMedia: restartTrack lo destruiría. El
+    // cambio de device se maneja recreando la pista en setMicDevice.
+    if (fullband48k && _customMicTrack != null) return;
     final t = micTrack;
     if (t == null) return;
     if (t.muted) {
@@ -291,6 +324,128 @@ class VoiceManager extends ChangeNotifier {
     }
     try {
       await t.restartTrack(micOptions);
+    } catch (_) {}
+  }
+
+  // ───────── publicación del micro CUSTOM 48 kHz ─────────
+
+  /// Publica el micro CUSTOM a 48 kHz en la sala actual: crea la pista kCustom
+  /// en el nativo (Helper.createCustomAudioStream → MediaStream real, sin APM),
+  /// la envuelve en un LocalAudioTrack de livekit, arranca el capturador nativo
+  /// a 48k y publica con las mismas opciones que el micro normal. Devuelve false
+  /// (y no toca nada) si el build no soporta el modo: el llamador hace fallback.
+  Future<bool> _publishCustomMic() async {
+    final lp = room?.localParticipant;
+    if (lp == null) return false;
+    try {
+      // MediaStream real ya registrado en el nativo (resuelve el fromMap que no
+      // existe en la API pública: usamos el helper del fork).
+      final stream = await rtc.Helper.createCustomAudioStream();
+      final tracks = stream.getAudioTracks();
+      if (tracks.isEmpty) return false;
+      final nativeTrack = tracks.first;
+      _customMicNativeId = nativeTrack.id;
+
+      // Envuelve la pista nativa en un LocalAudioTrack de livekit (constructor
+      // @internal: source, stream, track, options) — livekit_client 2.8.0.
+      // ignore: invalid_use_of_internal_member
+      final lkTrack = LocalAudioTrack(
+        TrackSource.microphone,
+        stream,
+        nativeTrack,
+        _customMicOptions,
+      );
+
+      // Arranca el capturador nativo a 48k ANTES de publicar (para que ya fluya
+      // PCM). deviceId = entrada elegida en ajustes.
+      await WebrtcApm.startCustomMicCapture(_customMicNativeId!,
+          deviceId: micDeviceId ?? '');
+
+      // Estado de mute inicial: si entramos muteados, deshabilita la pista.
+      if (muted) {
+        try {
+          nativeTrack.enabled = false;
+        } catch (_) {}
+      }
+
+      await lp.publishAudioTrack(lkTrack, publishOptions: _micPublishOptions);
+      _customMicTrack = lkTrack;
+      return true;
+    } catch (e) {
+      debugPrint('[voice] custom mic 48k falló: $e — fallback a micro normal');
+      if (_customMicNativeId != null) {
+        await WebrtcApm.stopCustomMicCapture(_customMicNativeId!);
+      }
+      _customMicNativeId = null;
+      _customMicTrack = null;
+      return false;
+    }
+  }
+
+  /// Quita la pista custom de la sala y para el capturador nativo. No re-publica
+  /// el micro normal (eso lo decide el llamador).
+  Future<void> _unpublishCustomMic() async {
+    final lp = room?.localParticipant;
+    final t = _customMicTrack;
+    if (lp != null && t != null) {
+      try {
+        final pub = lp.getTrackPublicationBySource(TrackSource.microphone);
+        if (pub != null && identical(pub.track, t)) {
+          await lp.removePublishedTrack(pub.sid);
+        }
+      } catch (_) {}
+    }
+    if (_customMicNativeId != null) {
+      await WebrtcApm.stopCustomMicCapture(_customMicNativeId!);
+    }
+    try {
+      await t?.stop();
+    } catch (_) {}
+    _customMicTrack = null;
+    _customMicNativeId = null;
+  }
+
+  /// Activa/desactiva el modo micro 48 kHz. Persiste y, si estamos en sala,
+  /// re-publica el micro por la ruta correspondiente. Vuelve al micro normal si
+  /// el build no soporta el modo custom.
+  Future<void> setFullband48k(bool v) async {
+    if (fullband48k == v) return;
+    fullband48k = v;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('mic_fullband_48k', v);
+    if (room?.localParticipant != null) {
+      if (v) {
+        try {
+          await room?.localParticipant?.setMicrophoneEnabled(false);
+        } catch (_) {}
+        final ok = await _publishCustomMic();
+        if (!ok) {
+          fullband48k = false; // no soportado → revertir
+          await prefs.setBool('mic_fullband_48k', false);
+          try {
+            await room?.localParticipant?.setMicrophoneEnabled(!muted,
+                audioCaptureOptions: micOptions);
+          } catch (_) {}
+        }
+      } else {
+        await _unpublishCustomMic();
+        try {
+          await room?.localParticipant
+              ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
+        } catch (_) {}
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Aplica el mute al micro CUSTOM sin destruir la fuente kCustom: alterna
+  /// enabled (el fork lo respeta a nivel RTP). NUNCA mute(stopOnMute) ni
+  /// restartTrack en la pista custom: ambos llaman a getUserMedia/stop().
+  Future<void> _applyCustomMute() async {
+    final t = _customMicTrack;
+    if (t == null) return;
+    try {
+      muted ? await t.disable() : await t.enable();
     } catch (_) {}
   }
 
@@ -403,9 +558,20 @@ class VoiceManager extends ChangeNotifier {
         ..on<ParticipantConnectedEvent>((_) => notifyListeners())
         ..on<ParticipantDisconnectedEvent>((_) => notifyListeners());
       try {
-        debugPrint('[voice] publicando micro (mute=$muted)');
-        await r.localParticipant
-            ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
+        if (fullband48k) {
+          debugPrint('[voice] publicando micro CUSTOM 48k (mute=$muted)');
+          final ok = await _publishCustomMic();
+          if (!ok) {
+            // build sin soporte 48k → micro normal
+            fullband48k = false;
+            await r.localParticipant
+                ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
+          }
+        } else {
+          debugPrint('[voice] publicando micro (mute=$muted)');
+          await r.localParticipant
+              ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
+        }
       } catch (_) {/* sin permiso SPEAK: solo escucha */}
       // Post-procesado nativo del micro (RNNoise + efectos de voz). Reaplicamos
       // el estado persistido SOLO si hay algo encendido. Es optimización (no
@@ -486,6 +652,9 @@ class VoiceManager extends ChangeNotifier {
     channelId = null;
     sharing = false;
     _micOptionsPending = false;
+    // suelta refs de la pista custom (el track ya se va con la sala al disconnect)
+    _customMicTrack = null;
+    _customMicNativeId = null;
     speaking.clear();
     AmbienceService.instance.stop(); // al salir del canal, calla su ambiente
     // apaga el monitor "escucharme" al salir (si no, reaparecería al reentrar)
@@ -499,13 +668,18 @@ class VoiceManager extends ChangeNotifier {
     // para no re-silenciarlo al desensordecer.
     if (!fromDeafen) _mutedByDeafen = false;
     try {
-      // las opciones solo aplican si es la primera publicación del micro
-      await room?.localParticipant
-          ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
-      if (!muted && _micOptionsPending) {
-        // hubo cambios de opciones mientras estaba muteado: aplícalos ahora
-        _micOptionsPending = false;
-        await applyMicOptions();
+      if (fullband48k && _customMicTrack != null) {
+        // micro custom: mute por enabled (no destruye la fuente kCustom)
+        await _applyCustomMute();
+      } else {
+        // las opciones solo aplican si es la primera publicación del micro
+        await room?.localParticipant
+            ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
+        if (!muted && _micOptionsPending) {
+          // hubo cambios de opciones mientras estaba muteado: aplícalos ahora
+          _micOptionsPending = false;
+          await applyMicOptions();
+        }
       }
     } catch (_) {}
     // SFX solo si el usuario lo hizo a mano (no cuando el mute viene del deafen,
