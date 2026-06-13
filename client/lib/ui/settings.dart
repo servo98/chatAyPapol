@@ -17,6 +17,7 @@ import '../version.dart';
 import '../webrtc_apm.dart';
 import 'totp.dart';
 import '../voice.dart';
+import 'appearance.dart';
 import 'bootstrap_runner.dart';
 import 'notifs_panel.dart';
 import 'sound_lab.dart';
@@ -53,6 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ('cuenta', 'Mi cuenta', LucideIcons.user),
       ('voz', 'Voz y micrófono', LucideIcons.mic),
       ('fx', 'Efectos de voz', LucideIcons.sparkles),
+      ('apariencia', 'Apariencia', LucideIcons.palette),
       ('notifs', 'Notificaciones', LucideIcons.bell),
       if (store.canI(P.manageRoles)) ('roles', 'Roles', LucideIcons.venetianMask),
       if (store.canI(P.createInvites)) ('invites', 'Invitaciones', LucideIcons.mail),
@@ -111,15 +113,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.all(12),
                   child: Column(children: [
                     Text('ChatPapol v$appVersion',
-                        style: const TextStyle(color: Pal.faint, fontSize: 11)),
+                        style: TextStyle(color: Pal.faint, fontSize: 11)),
                     const SizedBox(height: 8),
                     TextButton.icon(
                       onPressed: () async {
                         Navigator.pop(context);
                         await store.logout();
                       },
-                      icon: const Icon(LucideIcons.logOut, size: 15, color: Pal.red),
-                      label: const Text('Cerrar sesión',
+                      icon: Icon(LucideIcons.logOut, size: 15, color: Pal.red),
+                      label: Text('Cerrar sesión',
                           style: TextStyle(color: Pal.red, fontSize: 12.5)),
                     ),
                   ]),
@@ -137,12 +139,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Container(
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(top: 6, right: 8, bottom: 6),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                       border: Border(
                           bottom: BorderSide(color: Pal.borderDefault))),
                   child: IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(LucideIcons.x, color: Pal.muted),
+                    icon: Icon(LucideIcons.x, color: Pal.muted),
                     tooltip: 'Cerrar',
                   ),
                 ),
@@ -164,6 +166,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'cuenta' => _AccountPanel(store),
         'voz' => _VoicePanel(widget.voice),
         'fx' => const VoiceFxSettings(),
+        'apariencia' => const AppearancePanel(),
         'notifs' => NotificationsPanel(store),
         'roles' => _RolesPanel(store),
         'invites' => _InvitesPanel(store),
@@ -356,7 +359,7 @@ class _AccountPanelState extends State<_AccountPanel> {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(err!,
-                      style: const TextStyle(color: Pal.red, fontSize: 12.5)),
+                      style: TextStyle(color: Pal.red, fontSize: 12.5)),
                 ),
             ]),
           ),
@@ -416,7 +419,7 @@ class _VoicePanelState extends State<_VoicePanel> {
   // el prompt de permisos); la continuación compara y libera lo que creó.
   int _gen = 0;
 
-  static const _label = TextStyle(
+  static final _label = TextStyle(
       fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700,
       letterSpacing: 1.3);
 
@@ -590,7 +593,7 @@ class _VoicePanelState extends State<_VoicePanel> {
             : null;
         return ListView(children: [
           _title('Voz y micrófono'),
-          const Text('DISPOSITIVO DE ENTRADA', style: _label),
+          Text('DISPOSITIVO DE ENTRADA', style: _label),
           const SizedBox(height: 6),
           DropdownButtonFormField<String?>(
             // FormField solo lee initialValue en su initState: el primer build
@@ -600,7 +603,7 @@ class _VoicePanelState extends State<_VoicePanel> {
             key: ValueKey<String?>(value),
             initialValue: value,
             dropdownColor: Pal.bg0,
-            style: const TextStyle(fontSize: 13.5, color: Pal.text),
+            style: TextStyle(fontSize: 13.5, color: Pal.text),
             items: [
               const DropdownMenuItem<String?>(
                   value: null, child: Text('Predeterminado del sistema')),
@@ -618,7 +621,7 @@ class _VoicePanelState extends State<_VoicePanel> {
           ),
           const SizedBox(height: 20),
           // ── DISPOSITIVO DE SALIDA (altavoces/auriculares) ──
-          const Text('DISPOSITIVO DE SALIDA', style: _label),
+          Text('DISPOSITIVO DE SALIDA', style: _label),
           const SizedBox(height: 6),
           Builder(builder: (ctx) {
             final outVal = outputs.any((d) => d.deviceId == voice.outputDeviceId)
@@ -628,7 +631,7 @@ class _VoicePanelState extends State<_VoicePanel> {
               key: ValueKey<String?>('out_$outVal'),
               initialValue: outVal,
               dropdownColor: Pal.bg0,
-              style: const TextStyle(fontSize: 13.5, color: Pal.text),
+              style: TextStyle(fontSize: 13.5, color: Pal.text),
               items: [
                 const DropdownMenuItem<String?>(
                     value: null, child: Text('Predeterminado del sistema')),
@@ -645,12 +648,12 @@ class _VoicePanelState extends State<_VoicePanel> {
             );
           }),
           const SizedBox(height: 6),
-          const Text('Por dónde oyes a los demás. El monitor "escucharme" usa '
+          Text('Por dónde oyes a los demás. El monitor "escucharme" usa '
               'el dispositivo PREDETERMINADO de Windows.',
               style: TextStyle(color: Pal.faint, fontSize: 12)),
           const SizedBox(height: 20),
           // ── ESCUCHARME (monitor local) ──
-          const Text('ESCUCHARME (MONITOR)', style: _label),
+          Text('ESCUCHARME (MONITOR)', style: _label),
           ListenableBuilder(
             listenable: VoiceMonitor.instance,
             builder: (ctx, _) => SwitchListTile(
@@ -660,14 +663,14 @@ class _VoicePanelState extends State<_VoicePanel> {
               value: VoiceMonitor.instance.on,
               onChanged: (v) => VoiceMonitor.instance.set(v),
               title: const Text('Oírme a mí mismo con los efectos'),
-              subtitle: const Text(
+              subtitle: Text(
                   'Reproduce tu micro (ya procesado) en tus altavoces. Solo suena '
                   'dentro de un canal de voz. Usa AURICULARES para evitar eco.',
                   style: TextStyle(color: Pal.faint, fontSize: 11.5)),
             ),
           ),
           const SizedBox(height: 20),
-          const Text('PROBAR MICRÓFONO', style: _label),
+          Text('PROBAR MICRÓFONO', style: _label),
           const SizedBox(height: 8),
           Row(children: [
             ElevatedButton.icon(
@@ -701,9 +704,9 @@ class _VoicePanelState extends State<_VoicePanel> {
                   : voice.connected
                       ? 'Mide el micro que ya está publicado en el canal de voz.'
                       : 'Crea una captura local sin entrar a ningún canal.',
-              style: const TextStyle(color: Pal.faint, fontSize: 12)),
+              style: TextStyle(color: Pal.faint, fontSize: 12)),
           const SizedBox(height: 20),
-          const Text('PROCESADO DE VOZ', style: _label),
+          Text('PROCESADO DE VOZ', style: _label),
           SwitchListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
@@ -711,7 +714,7 @@ class _VoicePanelState extends State<_VoicePanel> {
             value: voice.noiseSuppression,
             title: const Text('Supresión de ruido',
                 style: TextStyle(fontSize: 13.5)),
-            subtitle: const Text('Filtra ventiladores, teclado y ruido de fondo.',
+            subtitle: Text('Filtra ventiladores, teclado y ruido de fondo.',
                 style: TextStyle(fontSize: 11, color: Pal.faint)),
             onChanged: (v) =>
                 _applyMicChange(() => voice.setNoiseSuppression(v)),
@@ -723,7 +726,7 @@ class _VoicePanelState extends State<_VoicePanel> {
             value: voice.echoCancellation,
             title: const Text('Cancelación de eco',
                 style: TextStyle(fontSize: 13.5)),
-            subtitle: const Text('Evita que se cuele el audio de tus altavoces.',
+            subtitle: Text('Evita que se cuele el audio de tus altavoces.',
                 style: TextStyle(fontSize: 11, color: Pal.faint)),
             onChanged: (v) =>
                 _applyMicChange(() => voice.setEchoCancellation(v)),
@@ -735,7 +738,7 @@ class _VoicePanelState extends State<_VoicePanel> {
             value: voice.autoGainControl,
             title: const Text('Ganancia automática (AGC)',
                 style: TextStyle(fontSize: 13.5)),
-            subtitle: const Text('Nivela el volumen de tu voz automáticamente.',
+            subtitle: Text('Nivela el volumen de tu voz automáticamente.',
                 style: TextStyle(fontSize: 11, color: Pal.faint)),
             onChanged: (v) =>
                 _applyMicChange(() => voice.setAutoGainControl(v)),
@@ -746,7 +749,7 @@ class _VoicePanelState extends State<_VoicePanel> {
             activeTrackColor: Pal.accent,
             value: voice.rnnoise,
             title: const Text('RNNoise (IA)', style: TextStyle(fontSize: 13.5)),
-            subtitle: const Text(
+            subtitle: Text(
                 'Supresor de ruido neuronal (CPU). Mejor que el clásico para '
                 'ventilador/teclado. No requiere GPU.',
                 style: TextStyle(fontSize: 11, color: Pal.faint)),
@@ -760,7 +763,7 @@ class _VoicePanelState extends State<_VoicePanel> {
             value: voice.fullband48k,
             title: const Text('Micro fullband 48 kHz',
                 style: TextStyle(fontSize: 13.5)),
-            subtitle: const Text(
+            subtitle: Text(
                 'Calidad Discord o mejor: tu voz va a 48 kHz sin recorte a 16k. '
                 'NO cancela eco → usa AURICULARES (si no, los demás oirán eco). '
                 'Se aplica al reconectar al canal.',
@@ -768,9 +771,9 @@ class _VoicePanelState extends State<_VoicePanel> {
             onChanged: (v) => voice.setFullband48k(v),
           ),
           const SizedBox(height: 12),
-          const Text('VOLUMEN DE SALIDA', style: _label),
+          Text('VOLUMEN DE SALIDA', style: _label),
           Row(children: [
-            const Icon(LucideIcons.volume1, size: 18, color: Pal.muted),
+            Icon(LucideIcons.volume1, size: 18, color: Pal.muted),
             Expanded(
               child: Slider(
                 value: voice.outputVolume,
@@ -778,22 +781,22 @@ class _VoicePanelState extends State<_VoicePanel> {
                 onChanged: (v) => voice.setOutputVolume(v),
               ),
             ),
-            const Icon(LucideIcons.volume2, size: 18, color: Pal.muted),
+            Icon(LucideIcons.volume2, size: 18, color: Pal.muted),
             SizedBox(
               width: 42,
               child: Text('${(voice.outputVolume * 100).round()}%',
                   textAlign: TextAlign.right,
-                  style: const TextStyle(fontSize: 12.5, color: Pal.muted)),
+                  style: TextStyle(fontSize: 12.5, color: Pal.muted)),
             ),
           ]),
-          const Text(
+          Text(
               'Atenúa lo que oyes de los demás. El volumen de captura del micro '
               'no se puede ajustar por software en escritorio: usa la ganancia '
               'automática o el volumen de micrófono del sistema.',
               style: TextStyle(color: Pal.faint, fontSize: 12)),
           const SizedBox(height: 12),
-          const Text('CRÉDITOS DE AUDIO', style: _label),
-          const Text(
+          Text('CRÉDITOS DE AUDIO', style: _label),
+          Text(
               'Ambientes de sala (CC0 · freesound.org): Lluvia — idomusics · '
               'Mar — INNORECORDS · Viento — florianreichelt · Fogata — Sauron974 · '
               'Goteo de cueva — Sclolex. Zumbido sci-fi: sintético propio. '
@@ -877,7 +880,7 @@ class _RolesPanelState extends State<_RolesPanel> {
               const VerticalDivider(),
               Expanded(
                 child: sel == null
-                    ? const Center(
+                    ? Center(
                         child: Text('Elige un rol',
                             style: TextStyle(color: Pal.muted)))
                     : _roleEditor(sel),
@@ -921,7 +924,7 @@ class _RolesPanelState extends State<_RolesPanel> {
         ],
       ]),
       const SizedBox(height: 10),
-      const Text('COLOR',
+      Text('COLOR',
           style: TextStyle(fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700,
               letterSpacing: 1.3)),
       const SizedBox(height: 6),
@@ -941,13 +944,13 @@ class _RolesPanelState extends State<_RolesPanel> {
                       : null,
                 ),
                 child: c == null
-                    ? const Icon(LucideIcons.ban, size: 14, color: Pal.faint)
+                    ? Icon(LucideIcons.ban, size: 14, color: Pal.faint)
                     : null,
               ),
             )).toList(),
       ),
       const SizedBox(height: 16),
-      const Text('PERMISOS',
+      Text('PERMISOS',
           style: TextStyle(fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700,
               letterSpacing: 1.3)),
       ...permLabels.entries.map((e) {
@@ -961,7 +964,7 @@ class _RolesPanelState extends State<_RolesPanel> {
           subtitle: e.value.$2.isEmpty
               ? null
               : Text(e.value.$2,
-                  style: const TextStyle(fontSize: 11, color: Pal.faint)),
+                  style: TextStyle(fontSize: 11, color: Pal.faint)),
           onChanged: (v) {
             final next = v
                 ? role.permissions | e.key
@@ -1014,14 +1017,14 @@ class _InvitesPanelState extends State<_InvitesPanel> {
         child: ListView(
           children: invites.map((i) => ListTile(
                 dense: true,
-                leading: const Icon(LucideIcons.mail, color: Pal.accent, size: 18),
+                leading: Icon(LucideIcons.mail, color: Pal.accent, size: 18),
                 title: SelectableText(i['code'],
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback, fontSize: 14,
                         fontWeight: FontWeight.w700)),
                 subtitle: Text(
                     'Usos: ${i['uses']}${i['max_uses'] > 0 ? '/${i['max_uses']}' : ' (∞)'}',
-                    style: const TextStyle(fontSize: 11.5, color: Pal.faint)),
+                    style: TextStyle(fontSize: 11.5, color: Pal.faint)),
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                   SmallIconBtn(LucideIcons.copy, 'Copiar', () {
                     Clipboard.setData(ClipboardData(text: i['code']));
@@ -1063,7 +1066,7 @@ class _ExpressionsPanel extends StatelessWidget {
               stickers
                   ? 'PNG/GIF/WebP, máx 2 MB.'
                   : 'MP3/OGG/WAV, máx 1 MB. Todos en el canal de voz lo oyen.',
-              style: const TextStyle(color: Pal.faint, fontSize: 12)),
+              style: TextStyle(color: Pal.faint, fontSize: 12)),
           const SizedBox(height: 12),
           Expanded(
             child: stickers
@@ -1094,7 +1097,7 @@ class _ExpressionsPanel extends StatelessWidget {
                     children: store.sounds.map((s) => ListTile(
                           dense: true,
                           leading: Text(s.emoji ?? '♪',
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 18, color: Pal.accent)),
                           title: Text(s.name, style: const TextStyle(fontSize: 13.5)),
                           trailing: SmallIconBtn(LucideIcons.trash2, 'Borrar',
@@ -1209,7 +1212,7 @@ class _AutomodPanelState extends State<_AutomodPanel> {
             icon: const Icon(LucideIcons.plus, size: 16),
             label: const Text('Nueva regla')),
       ]),
-      const Text('Los administradores están exentos de los filtros.',
+      Text('Los administradores están exentos de los filtros.',
           style: TextStyle(color: Pal.faint, fontSize: 12)),
       const SizedBox(height: 8),
       Expanded(
@@ -1227,7 +1230,7 @@ class _AutomodPanelState extends State<_AutomodPanel> {
                 title: Text(r['name'], style: const TextStyle(fontSize: 13.5)),
                 subtitle: Text(r['pattern'],
                     maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11.5, color: Pal.faint)),
+                    style: TextStyle(fontSize: 11.5, color: Pal.faint)),
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                   Switch(
                     value: r['enabled'] == 1,
@@ -1296,7 +1299,7 @@ class _WebhooksPanelState extends State<_WebhooksPanel> {
           label: const Text('Crear'),
         ),
       ]),
-      const Text('POST {content, username?, avatar_url?} a la URL → mensaje en el canal.',
+      Text('POST {content, username?, avatar_url?} a la URL → mensaje en el canal.',
           style: TextStyle(color: Pal.faint, fontSize: 12)),
       const SizedBox(height: 8),
       Expanded(
@@ -1306,13 +1309,13 @@ class _WebhooksPanelState extends State<_WebhooksPanel> {
                 '${store.api.base}/api/webhooks/${h['id']}/${h['token']}';
             return ListTile(
               dense: true,
-              leading: const Icon(LucideIcons.webhook, color: Pal.accent, size: 18),
+              leading: Icon(LucideIcons.webhook, color: Pal.accent, size: 18),
               title: Text(
                   '${h['name']}  →  #${store.channels[h['channel_id']]?.name ?? '?'}',
                   style: const TextStyle(fontSize: 13.5)),
               subtitle: Text(url,
                   maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 11, color: Pal.faint, fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback)),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 SmallIconBtn(LucideIcons.copy, 'Copiar URL', () {
@@ -1373,7 +1376,7 @@ class _BotsPanelState extends State<_BotsPanel> {
           label: const Text('Crear bot'),
         ),
       ]),
-      const Text(
+      Text(
           'El bot usa su token en la misma API y gateway. Ejemplo en examples/dice-bot.ts.',
           style: TextStyle(color: Pal.faint, fontSize: 12)),
       const SizedBox(height: 8),
@@ -1381,11 +1384,11 @@ class _BotsPanelState extends State<_BotsPanel> {
         child: ListView(
           children: bots.map((b) => ListTile(
                 dense: true,
-                leading: const Icon(LucideIcons.bot, color: Pal.accent, size: 18),
+                leading: Icon(LucideIcons.bot, color: Pal.accent, size: 18),
                 title: Text(b['username'], style: const TextStyle(fontSize: 13.5)),
                 subtitle: Text('token: ${b['token']}',
                     maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 11, color: Pal.faint, fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback)),
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                   SmallIconBtn(LucideIcons.copy, 'Copiar token', () {
@@ -1434,12 +1437,12 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _title('Actualizaciones'),
       Text('Versión instalada: v$appVersion',
-          style: const TextStyle(color: Pal.muted, fontSize: 13.5)),
+          style: TextStyle(color: Pal.muted, fontSize: 13.5)),
       const SizedBox(height: 16),
       if (!checked)
         const CircularProgressIndicator(strokeWidth: 2)
       else if (available == null)
-        const Row(children: [
+        Row(children: [
           Icon(LucideIcons.checkCircle, color: Pal.green, size: 18),
           SizedBox(width: 8),
           Text('✔ estás al día', style: TextStyle(fontSize: 14, color: Pal.green)),
@@ -1451,13 +1454,13 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
               color: Pal.bg0, borderRadius: BorderRadius.circular(8)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('❯ nueva versión: v${available!.version}',
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 15, fontWeight: FontWeight.w700, color: Pal.accent)),
             if (available!.notes.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(available!.notes,
-                    style: const TextStyle(color: Pal.muted, fontSize: 12.5)),
+                    style: TextStyle(color: Pal.muted, fontSize: 12.5)),
               ),
             const SizedBox(height: 12),
             ElevatedButton.icon(
@@ -1477,7 +1480,7 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
       ],
       const Spacer(),
       if (widget.store.canI(P.administrator))
-        const Text(
+        Text(
             'Publicar release: POST /api/updates/:platform con el instalador '
             '(ver client/packaging/README.md).',
             style: TextStyle(color: Pal.faint, fontSize: 11.5)),

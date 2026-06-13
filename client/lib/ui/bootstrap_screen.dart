@@ -24,7 +24,7 @@ class BootstrapScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: RadialGradient(
             center: Alignment.center,
             radius: 1.1,
@@ -38,22 +38,22 @@ class BootstrapScreen extends StatelessWidget {
               const _Logo(),
               const SizedBox(height: 24),
               Text(title,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 20, fontWeight: FontWeight.w800, color: Pal.text)),
               const SizedBox(height: 8),
               if (error == null)
                 Text.rich(
                   TextSpan(children: [
-                    const TextSpan(text: '❯ ',
+                    TextSpan(text: '❯ ',
                         style: TextStyle(color: Pal.accent, fontWeight: FontWeight.w700)),
                     TextSpan(text: status),
                   ]),
-                  style: const TextStyle(fontSize: 13.5, color: Pal.muted),
+                  style: TextStyle(fontSize: 13.5, color: Pal.muted),
                 )
               else
                 Text('! $error',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 13, color: Pal.red)),
+                    style: TextStyle(fontSize: 13, color: Pal.red)),
               const SizedBox(height: 28),
               SizedBox(
                 width: 320,
@@ -71,7 +71,7 @@ class BootstrapScreen extends StatelessWidget {
                             value: progress,
                             minHeight: 6,
                             backgroundColor: Pal.inset,
-                            valueColor: const AlwaysStoppedAnimation(Pal.accent),
+                            valueColor: AlwaysStoppedAnimation(Pal.accent),
                           ),
                         ),
                       )
@@ -86,17 +86,17 @@ class BootstrapScreen extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text('${(progress! * 100).round()}%',
-                      style: const TextStyle(fontSize: 11.5, color: Pal.faint)),
+                      style: TextStyle(fontSize: 11.5, color: Pal.faint)),
                 ),
               const SizedBox(height: 40),
-              const Text('ChatPapol',
+              Text('ChatPapol',
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                       color: Pal.faint,
                       letterSpacing: 1)),
               Text('v$appVersion',
-                  style: const TextStyle(fontSize: 11, color: Pal.faint)),
+                  style: TextStyle(fontSize: 11, color: Pal.faint)),
             ],
           ),
         ),
@@ -147,14 +147,14 @@ class _LogoState extends State<_Logo> with SingleTickerProviderStateMixin {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Text('❯',
+              Text('❯',
                   style: TextStyle(
                       color: Pal.accent, fontSize: 40, height: 1,
                       fontWeight: FontWeight.w700)),
               const SizedBox(width: 4),
               Opacity(
                 opacity: _c.value < 0.5 ? 1 : 0,
-                child: const Text('▮',
+                child: Text('▮',
                     style: TextStyle(
                         color: Pal.accent, fontSize: 34, height: 1.05,
                         fontWeight: FontWeight.w700)),

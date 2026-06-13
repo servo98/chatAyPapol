@@ -33,7 +33,7 @@ class MemberList extends StatelessWidget {
   Widget _section(String label) => Padding(
         padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
         child: Text(label,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 11, fontWeight: FontWeight.w700,
                 color: Pal.faint, letterSpacing: 1.2)),
       );
@@ -69,7 +69,7 @@ class MemberList extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
                     color: Pal.accent, borderRadius: BorderRadius.circular(3)),
-                child: const Text('BOT',
+                child: Text('BOT',
                     style: TextStyle(
                         fontSize: 11, fontWeight: FontWeight.w800,
                         color: Pal.greenInk)),
@@ -96,7 +96,7 @@ class MemberList extends StatelessWidget {
         if (store.canI(P.kickMembers))
           const PopupMenuItem(value: 'kick', child: Text('→  expulsar')),
         if (store.canI(P.banMembers))
-          const PopupMenuItem(value: 'ban',
+          PopupMenuItem(value: 'ban',
               child: Text('✕  banear', style: TextStyle(color: Pal.red))),
       ],
     );

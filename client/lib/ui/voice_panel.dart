@@ -70,14 +70,14 @@ class VoicePanel extends StatelessWidget {
   Widget _header(int connected) => Container(
         height: 52,
         padding: const EdgeInsets.symmetric(horizontal: 18),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: Pal.borderSubtle)),
         ),
         child: Row(children: [
           const _EqBars(height: 12),
           const SizedBox(width: 9),
           Text(channel.name,
-              style: const TextStyle(
+              style: TextStyle(
                   fontWeight: FontWeight.w700, fontSize: 16, color: Pal.text)),
           const SizedBox(width: 13),
           Container(width: 1, height: 16, color: Pal.borderDefault),
@@ -86,11 +86,11 @@ class VoicePanel extends StatelessWidget {
             const TextSpan(text: '/ '),
             TextSpan(
                 text: '$connected',
-                style: const TextStyle(
+                style: TextStyle(
                     color: Pal.accent, fontWeight: FontWeight.w700)),
             const TextSpan(text: ' conectados · baja latencia'),
           ]),
-              style: const TextStyle(fontSize: 13, color: Pal.faint)),
+              style: TextStyle(fontSize: 13, color: Pal.faint)),
           if (joinedHere) ...[
             const SizedBox(width: 14),
             Flexible(
@@ -204,7 +204,7 @@ class VoicePanel extends StatelessWidget {
   // ----- escenario sin screenshare: grid de tiles centrado
   Widget _tilesOnly(List<m.VoiceState> users) {
     if (users.isEmpty) {
-      return const Center(
+      return Center(
           child: Text('❯ nadie por aquí todavía — únete',
               style: TextStyle(color: Pal.muted)));
     }
@@ -262,7 +262,7 @@ class VoicePanel extends StatelessWidget {
         ),
         // compartiendo: indicador arriba-izquierda
         if (v.streaming)
-          const Positioned(
+          Positioned(
             top: 0,
             left: 0,
             child: Icon(LucideIcons.screenShare, size: 15, color: Pal.green),
@@ -300,7 +300,7 @@ class VoicePanel extends StatelessWidget {
                   ),
                 ),
                 if (isSelf)
-                  const Text(' (tú)',
+                  Text(' (tú)',
                       style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w400,
@@ -344,15 +344,15 @@ class VoicePanel extends StatelessWidget {
           borderRadius: BorderRadius.circular(999),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: speaking
-            ? const [
-                _EqBars(height: 9),
-                SizedBox(width: 6),
+            ? [
+                const _EqBars(height: 9),
+                const SizedBox(width: 6),
                 Text('hablando',
                     style: TextStyle(fontSize: 11, color: Pal.accent)),
               ]
-            : const [
+            : [
                 Icon(LucideIcons.micOff, size: 11, color: Pal.red),
-                SizedBox(width: 6),
+                const SizedBox(width: 6),
                 Text('silenciado',
                     style: TextStyle(fontSize: 11, color: Pal.red)),
               ]),
@@ -366,7 +366,7 @@ class VoicePanel extends StatelessWidget {
   Widget _controls(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 20),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Pal.bg0,
         border: Border(top: BorderSide(color: Pal.borderSubtle)),
       ),
@@ -426,7 +426,7 @@ class VoicePanel extends StatelessWidget {
                   onPressed:
                       voice.connecting ? null : () => voice.join(channel.id),
                   icon: voice.connecting
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
@@ -581,7 +581,7 @@ class VoicePanel extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Row(children: [
-                  const Text('Calidad: 1080p a',
+                  Text('Calidad: 1080p a',
                       style: TextStyle(fontSize: 13, color: Pal.muted)),
                   const SizedBox(width: 8),
                   SegmentedButton<int>(
@@ -607,7 +607,7 @@ class VoicePanel extends StatelessWidget {
                   controlAffinity: ListTileControlAffinity.leading,
                   title: const Text('Compartir también el audio del sistema',
                       style: TextStyle(fontSize: 13)),
-                  subtitle: const Text('Beta: avísanos si algo suena raro',
+                  subtitle: Text('Beta: avísanos si algo suena raro',
                       style: TextStyle(fontSize: 11, color: Pal.faint)),
                   onChanged: (v) => setSt(() => setAudio(v ?? true)),
                 ),
@@ -646,7 +646,7 @@ class VoicePanel extends StatelessWidget {
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Text(title.toUpperCase(),
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
                 color: Pal.muted,
@@ -724,7 +724,7 @@ class VoicePanel extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         height: 280,
         child: store.sounds.isEmpty
-            ? const Center(
+            ? Center(
                 child: Text('No hay sonidos.\nSúbelos en Ajustes → Soundboard.',
                     textAlign: TextAlign.center, style: TextStyle(color: Pal.muted)))
             : GridView.count(
@@ -743,13 +743,13 @@ class VoicePanel extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(s.emoji ?? '♪',
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontSize: 24, color: Pal.accent)),
                             const SizedBox(height: 4),
                             Text(s.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontSize: 11, color: Pal.muted)),
                           ],
                         ),
@@ -905,7 +905,7 @@ class _ShareStageState extends State<_ShareStage>
                         ),
                       ),
                       const SizedBox(width: 6),
-                      const Text('EN VIVO',
+                      Text('EN VIVO',
                           style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
@@ -916,21 +916,21 @@ class _ShareStageState extends State<_ShareStage>
                         child: Text('${widget.sharerName} comparte pantalla',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 12, color: Pal.text)),
                       ),
                       const Spacer(),
                       if (_stats != null)
                         Text(_stats!,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 12, color: Pal.muted)),
                       if (widget.onFullscreen != null) ...[
                         const SizedBox(width: 10),
                         InkWell(
                           onTap: widget.onFullscreen,
                           borderRadius: BorderRadius.circular(6),
-                          child: const Padding(
-                            padding: EdgeInsets.all(4),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
                             child: Icon(LucideIcons.expand,
                                 size: 18, color: Pal.text),
                           ),

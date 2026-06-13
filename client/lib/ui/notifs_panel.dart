@@ -9,7 +9,7 @@ class NotificationsPanel extends StatelessWidget {
   final AppStore store;
   const NotificationsPanel(this.store, {super.key});
 
-  static const _label = TextStyle(
+  static final _label = TextStyle(
       fontSize: 11,
       color: Pal.faint,
       fontWeight: FontWeight.w700,
@@ -36,7 +36,7 @@ class NotificationsPanel extends StatelessWidget {
             value: store.notificationsEnabled,
             title: const Text('Activar notificaciones',
                 style: TextStyle(fontSize: 13.5)),
-            subtitle: const Text(
+            subtitle: Text(
                 'Muestra un aviso del sistema cuando la ventana no está enfocada.',
                 style: TextStyle(fontSize: 11, color: Pal.faint)),
             onChanged: (v) => store.setNotificationsEnabled(v),
@@ -47,16 +47,16 @@ class NotificationsPanel extends StatelessWidget {
             activeTrackColor: Pal.accent,
             value: store.dnd,
             title: const Text('No molestar', style: TextStyle(fontSize: 13.5)),
-            subtitle: const Text(
+            subtitle: Text(
                 'Silencia el sonido y los avisos del sistema (sigue marcando lo no leído).',
                 style: TextStyle(fontSize: 11, color: Pal.faint)),
             onChanged: (v) => store.setDnd(v),
           ),
           const SizedBox(height: 18),
-          const Text('NOTIFICACIONES POR CANAL', style: _label),
+          Text('NOTIFICACIONES POR CANAL', style: _label),
           const SizedBox(height: 8),
           if (channels.isEmpty)
-            const Text('No hay canales de texto.',
+            Text('No hay canales de texto.',
                 style: TextStyle(fontSize: 12.5, color: Pal.faint))
           else
             ...channels.map((c) {
@@ -64,7 +64,7 @@ class NotificationsPanel extends StatelessWidget {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(children: [
-                  const Icon(LucideIcons.hash, size: 15, color: Pal.muted),
+                  Icon(LucideIcons.hash, size: 15, color: Pal.muted),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(c.name,

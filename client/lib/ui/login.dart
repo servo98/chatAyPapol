@@ -44,7 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: RadialGradient(
             center: Alignment.center,
             radius: 1.1,
@@ -80,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       boxShadow: Pal.glowGreenSm,
                     ),
                     alignment: Alignment.center,
-                    child: const Text('❯',
+                    child: Text('❯',
                         style: TextStyle(
                             color: Pal.accent, fontSize: 30, height: 1,
                             fontWeight: FontWeight.w700)),
@@ -93,7 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 4),
-                const Text('ChatPapol — tu server, tus reglas',
+                Text('ChatPapol — tu server, tus reglas',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Pal.muted, fontSize: 13)),
                 const SizedBox(height: 24),
@@ -110,12 +110,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Text(error!,
-                        style: const TextStyle(color: Pal.red, fontSize: 13)),
+                        style: TextStyle(color: Pal.red, fontSize: 13)),
                   ),
                 ElevatedButton(
                   onPressed: busy ? null : _submit,
                   child: busy
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18, height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Pal.greenInk))
                       : Text(registering ? '❯ registrarme' : '❯ entrar'),
@@ -130,13 +130,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     registering
                         ? '¿ya tienes cuenta? inicia sesión'
                         : '¿necesitas una cuenta? regístrate',
-                    style: const TextStyle(color: Pal.link, fontSize: 13),
+                    style: TextStyle(color: Pal.link, fontSize: 13),
                   ),
                 ),
                 if (!registering)
                   TextButton(
                     onPressed: () => _recoverDialog(context),
-                    child: const Text('¿olvidaste tu contraseña? recupérala con tu 2FA',
+                    child: Text('¿olvidaste tu contraseña? recupérala con tu 2FA',
                         style: TextStyle(color: Pal.muted, fontSize: 12)),
                   ),
               ],
@@ -161,7 +161,7 @@ class _LoginScreenState extends State<LoginScreen> {
           content: SizedBox(
             width: 340,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Text(
+              Text(
                   'sin emails: usa el código de tu app de autenticación (2FA).',
                   style: TextStyle(fontSize: 12.5, color: Pal.muted)),
               const SizedBox(height: 12),
@@ -180,7 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
               if (err != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
-                  child: Text(err!, style: const TextStyle(color: Pal.red, fontSize: 12.5)),
+                  child: Text(err!, style: TextStyle(color: Pal.red, fontSize: 12.5)),
                 ),
             ]),
           ),
@@ -217,7 +217,7 @@ class _LoginScreenState extends State<LoginScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('// $label',
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 12, fontWeight: FontWeight.w500,
                   color: Pal.muted, letterSpacing: 1.44)),
           const SizedBox(height: 6),

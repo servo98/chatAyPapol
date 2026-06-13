@@ -71,7 +71,7 @@ class _SoundLabPanelState extends State<SoundLabPanel> {
 
   String get _root => _rootCtrl.text.trim();
 
-  static const _label = TextStyle(
+  static final _label = TextStyle(
       fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700,
       letterSpacing: 1.3);
 
@@ -90,12 +90,12 @@ class _SoundLabPanelState extends State<SoundLabPanel> {
           label: const Text('Exportar manifest', style: TextStyle(fontSize: 12.5)),
         ),
       ]),
-      const Text(
+      Text(
           'Asigna sonidos del pack a cada acción. Solo se prueban localmente; '
           'el manifest se hornea en el build final.',
           style: TextStyle(color: Pal.faint, fontSize: 12)),
       const SizedBox(height: 14),
-      const Text('CARPETA DEL PACK', style: _label),
+      Text('CARPETA DEL PACK', style: _label),
       const SizedBox(height: 6),
       TextField(
         controller: _rootCtrl,
@@ -109,7 +109,7 @@ class _SoundLabPanelState extends State<SoundLabPanel> {
         },
       ),
       const SizedBox(height: 16),
-      const Text('ACCIONES', style: _label),
+      Text('ACCIONES', style: _label),
       const SizedBox(height: 6),
       Expanded(
         child: ListView(
@@ -132,9 +132,9 @@ class _SoundLabPanelState extends State<SoundLabPanel> {
           flex: 3,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(_labels[s] ?? s.name,
-                style: const TextStyle(fontSize: 13.5, color: Pal.text)),
+                style: TextStyle(fontSize: 13.5, color: Pal.text)),
             Text(s.name,
-                style: const TextStyle(fontSize: 10.5, color: Pal.faint)),
+                style: TextStyle(fontSize: 10.5, color: Pal.faint)),
           ]),
         ),
         Expanded(
@@ -199,13 +199,13 @@ class _SoundLabPanelState extends State<SoundLabPanel> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text('Escrito en:\n$writtenTo',
-                    style: const TextStyle(fontSize: 11.5, color: Pal.green, fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback)),
+                    style: TextStyle(fontSize: 11.5, color: Pal.green, fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback)),
               ),
             if (writeErr != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text('No se pudo escribir a disco: $writeErr',
-                    style: const TextStyle(fontSize: 11.5, color: Pal.red)),
+                    style: TextStyle(fontSize: 11.5, color: Pal.red)),
               ),
             Container(
               constraints: const BoxConstraints(maxHeight: 320),
@@ -214,7 +214,7 @@ class _SoundLabPanelState extends State<SoundLabPanel> {
                   color: Pal.inset, borderRadius: BorderRadius.circular(6)),
               child: SingleChildScrollView(
                 child: SelectableText(json,
-                    style: const TextStyle(fontSize: 11.5, fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback, color: Pal.text)),
+                    style: TextStyle(fontSize: 11.5, fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback, color: Pal.text)),
               ),
             ),
           ]),
@@ -311,7 +311,7 @@ class _PackBrowserState extends State<_PackBrowser> {
         child: ListView(children: [
           ...subdirs.map((d) => ListTile(
                 dense: true,
-                leading: const Icon(LucideIcons.folder, size: 18, color: Pal.accent),
+                leading: Icon(LucideIcons.folder, size: 18, color: Pal.accent),
                 title: Text(_name(d.path), style: const TextStyle(fontSize: 13)),
                 onTap: () => setState(() {
                   _cwd = d.path;
@@ -336,8 +336,8 @@ class _PackBrowserState extends State<_PackBrowser> {
             );
           }),
           if (subdirs.isEmpty && wavs.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(20),
+            Padding(
+              padding: const EdgeInsets.all(20),
               child: Text('(carpeta vacía)',
                   style: TextStyle(color: Pal.faint, fontSize: 12)),
             ),

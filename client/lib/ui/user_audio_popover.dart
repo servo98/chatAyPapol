@@ -223,14 +223,14 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
           Container(
             width: 28,
             height: 28,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Pal.accentDim,
             ),
             alignment: Alignment.center,
             child: Text(
               initials,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: Pal.greenInk,
@@ -244,7 +244,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
               displayName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13.5,
                 fontWeight: FontWeight.w700,
                 color: Pal.text,
@@ -280,7 +280,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
               ),
             ),
             const SizedBox(width: 6),
-            const Text(
+            Text(
               '// sólo tú oyes estos ajustes',
               style: TextStyle(fontSize: 10.5, color: Pal.accentDim, letterSpacing: 0.01),
             ),
@@ -305,7 +305,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         // Label + valor
         Row(children: [
-          const Text('VOLUMEN',
+          Text('VOLUMEN',
               style: TextStyle(
                   fontSize: 10,
                   letterSpacing: 0.16,
@@ -346,7 +346,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
         ]),
         const SizedBox(height: 5),
         // Escala 0% / 100% / 200%
-        const Row(
+        Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text('0%', style: TextStyle(fontSize: 9, color: Pal.comment)),
@@ -368,7 +368,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('ECUALIZADOR',
+        Text('ECUALIZADOR',
             style: TextStyle(fontSize: 10, letterSpacing: 0.16, color: Pal.faint)),
         const SizedBox(height: 9),
         // Curva EQ SVG
@@ -416,7 +416,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('PRESETS',
+        Text('PRESETS',
             style: TextStyle(fontSize: 10, letterSpacing: 0.16, color: Pal.faint)),
         const SizedBox(height: 9),
         Wrap(spacing: 6, runSpacing: 6, children: [
@@ -463,7 +463,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
               borderRadius: BorderRadius.circular(5),
               border: Border.all(color: const Color(0xFF2CE60F)),
             ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: const [
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
               Icon(LucideIcons.check, size: 14, color: Pal.greenInk),
               SizedBox(width: 7),
               Text('listo',
@@ -480,7 +480,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
   }
 
   Widget _buildDivider() =>
-      const Divider(height: 1, thickness: 1, color: Pal.borderSubtle);
+      Divider(height: 1, thickness: 1, color: Pal.borderSubtle);
 }
 
 // ─── _VolTrack — slider horizontal custom ─────────────────────────────────────
@@ -574,7 +574,7 @@ class _EqCurveWidget extends StatelessWidget {
           child: Container(height: 1, color: const Color(0x8C4D5F56)),
         ),
         // Label "0 dB"
-        const Positioned(
+        Positioned(
           right: 5,
           top: 15,
           child: Text('0 dB',
@@ -727,7 +727,7 @@ class _EqBand extends StatelessWidget {
         const SizedBox(height: 7),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 9,
             letterSpacing: 0.08,
             color: Pal.faint,
@@ -857,7 +857,7 @@ class _PresetChipState extends State<_PresetChip> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (widget.active) ...[
-                const Icon(LucideIcons.check, size: 12, color: Pal.greenInk),
+                Icon(LucideIcons.check, size: 12, color: Pal.greenInk),
                 const SizedBox(width: 6),
               ],
               Text(

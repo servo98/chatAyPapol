@@ -389,6 +389,8 @@ Future<void> _main(List<String> args) async {
   // archivo de log (rota la sesión anterior y detecta si crasheó).
   await CrashLog.instance.init();
   CrashLog.instance.install();
+  // Tema (acento + claro/oscuro) elegido por el usuario, antes de cualquier UI.
+  await ThemeController.instance.load();
   if (args.contains('--diag')) {
     await _diag();
     return;
@@ -556,12 +558,15 @@ class _BootstrapApp extends StatelessWidget {
   const _BootstrapApp({required this.child});
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'ChatPapol',
-      debugShowCheckedModeBanner: false,
-      theme: buildTheme(),
-      builder: (ctx, c) => _withTitleBar(c),
-      home: child,
+    return ListenableBuilder(
+      listenable: ThemeController.instance,
+      builder: (ctx, _) => MaterialApp(
+        title: 'ChatPapol',
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(ThemeController.instance.palette),
+        builder: (ctx, c) => _withTitleBar(c),
+        home: child,
+      ),
     );
   }
 }
@@ -573,22 +578,25 @@ class ChatPapolApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'ChatPapol',
-      debugShowCheckedModeBanner: false,
-      theme: buildTheme(),
-      builder: (ctx, child) => _withTitleBar(child),
-      home: ListenableBuilder(
-        listenable: store,
-        builder: (ctx, _) {
-          if (store.restoring) {
-            return const Scaffold(
-                body: Center(child: CircularProgressIndicator(strokeWidth: 2)));
-          }
-          return store.loggedIn
-              ? Shell(store: store, voice: voice)
-              : LoginScreen(store: store);
-        },
+    return ListenableBuilder(
+      listenable: ThemeController.instance,
+      builder: (ctx, _) => MaterialApp(
+        title: 'ChatPapol',
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(ThemeController.instance.palette),
+        builder: (ctx, child) => _withTitleBar(child),
+        home: ListenableBuilder(
+          listenable: store,
+          builder: (ctx, _) {
+            if (store.restoring) {
+              return const Scaffold(
+                  body: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+            }
+            return store.loggedIn
+                ? Shell(store: store, voice: voice)
+                : LoginScreen(store: store);
+          },
+        ),
       ),
     );
   }
