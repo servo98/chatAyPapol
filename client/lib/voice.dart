@@ -111,7 +111,9 @@ class VoiceManager extends ChangeNotifier {
   bool autoGainControl = true;
   // RNNoise (IA, CPU): supresor de ruido extra del micro, encima del NS clásico.
   // El APM es global del factory → se aplica una vez (no por track).
-  bool rnnoise = false;
+  // Default ON: limpia ruido DURANTE el habla (a diferencia del gate, que solo
+  // corta silencios) en el path 16k. En fullband48k actúa como gate, no como IA.
+  bool rnnoise = true;
   // Volumen de SALIDA (playout de tracks remotos). NO hay ganancia de captura:
   // ver setOutputVolume.
   double outputVolume = 1.0;
@@ -173,7 +175,7 @@ class VoiceManager extends ChangeNotifier {
     noiseSuppression = prefs.getBool('mic_noise_suppression') ?? true;
     echoCancellation = prefs.getBool('mic_echo_cancellation') ?? true;
     autoGainControl = prefs.getBool('mic_auto_gain') ?? true;
-    rnnoise = prefs.getBool('mic_rnnoise') ?? false;
+    rnnoise = prefs.getBool('mic_rnnoise') ?? true;
     fullband48k = prefs.getBool('mic_fullband_48k') ?? false;
     outputVolume = prefs.getDouble('voice_output_volume') ?? 1.0;
     try {

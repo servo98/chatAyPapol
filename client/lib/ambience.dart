@@ -130,18 +130,25 @@ class AmbienceService extends ChangeNotifier {
     try {
       await _player
           .setReleaseMode(state.loop ? ReleaseMode.loop : ReleaseMode.release);
-      await _player.setSource(AssetSource(d.file));
+      // play(source) ESPERA a que la fuente esté "prepared". setSource()+resume()
+      // (lo anterior) arrancaba contra una fuente sin preparar y en desktop
+      // (Windows sobre todo) no sacaba audio y el error se tragaba en release.
+      // sfx.dart suena justo porque usa play(source). Ver workflow de triage.
+      await _player.play(AssetSource(d.file), volume: _volume);
       if (gen != _gen) return; // otra llamada nos adelantó
-      final dur = (await _player.getDuration()) ?? const Duration(seconds: 10);
-      if (gen != _gen) return;
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final refMs = state.paused ? (state.pausedAt ?? state.startedAt) : now;
-      final elapsed = (refMs - state.startedAt);
-      final lenMs = dur.inMilliseconds <= 0 ? 10000 : dur.inMilliseconds;
-      final posMs = ((elapsed % lenMs) + lenMs) % lenMs; // siempre >= 0
-      await _player.seek(Duration(milliseconds: posMs));
-      await _player.setVolume(_volume);
-      await _player.resume();
+      // Sincronía con el reloj del server: best-effort. Si getDuration/seek
+      // fallan, da igual — preferimos que SUENE a quedar mudos por un seek.
+      try {
+        final dur = (await _player.getDuration()) ?? const Duration(seconds: 10);
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final refMs = state.paused ? (state.pausedAt ?? state.startedAt) : now;
+        final elapsed = (refMs - state.startedAt);
+        final lenMs = dur.inMilliseconds <= 0 ? 10000 : dur.inMilliseconds;
+        final posMs = ((elapsed % lenMs) + lenMs) % lenMs; // siempre >= 0
+        await _player.seek(Duration(milliseconds: posMs));
+      } catch (e) {
+        debugPrint('[ambience] sync/seek best-effort falló (${state.ambienceId}): $e');
+      }
       if (gen != _gen) return;
       if (state.paused) await _player.pause();
       _curId = state.ambienceId;
@@ -149,9 +156,11 @@ class AmbienceService extends ChangeNotifier {
       _curPaused = state.paused;
       _curLoop = state.loop;
       _playing = true;
+      debugPrint('[ambience] play(${state.ambienceId}) OK (file=${d.file})');
       notifyListeners();
     } catch (e) {
-      if (kDebugMode) debugPrint('ambience apply(${state.ambienceId}) falló: $e');
+      // Loguear SIEMPRE (no solo en debug): este fallo era invisible en release.
+      debugPrint('[ambience] play(${state.ambienceId}) FALLÓ: $e');
     }
   }
 

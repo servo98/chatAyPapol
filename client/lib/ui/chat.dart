@@ -29,10 +29,14 @@ class _ChatViewState extends State<ChatView> {
   final pendingUploads = <Map<String, dynamic>>[];
   bool sending = false;
 
-  // Canal del último build + si ya hicimos el scroll inicial al fondo (al abrir
-  // o cambiar de canal el chat debe arrancar en el ÚLTIMO mensaje, no arriba).
+  // Canal del último build + posición de scroll recordada POR canal: al volver a
+  // un canal recuperamos dónde estabas (no siempre arriba). La 1ª vez vamos al
+  // último mensaje; si llegan mensajes nuevos y ya estabas al fondo, te seguimos.
   String? _lastChannelId;
-  bool _didInitialScroll = false;
+  final _scrollOffsets = <String, double>{}; // channelId → offset px
+  bool _restorePending = false; // reposicionar el canal recién abierto
+  bool _atBottom = true; // el usuario está pegado al fondo (para autoscroll)
+  int _lastMsgCount = 0; // nº de mensajes del último build (detecta nuevos)
 
   // ── autocompletado de @menciones ──
   bool _mentionOpen = false; // hay overlay de menciones abierto
@@ -46,8 +50,12 @@ class _ChatViewState extends State<ChatView> {
   void initState() {
     super.initState();
     scroll.addListener(() {
-      if (scroll.position.pixels <= 60 && channel != null) {
-        store.loadMessages(channel!.id, older: true);
+      if (!scroll.hasClients) return;
+      final ch = channel;
+      if (ch != null) _scrollOffsets[ch.id] = scroll.position.pixels;
+      _atBottom = scroll.position.pixels >= scroll.position.maxScrollExtent - 80;
+      if (scroll.position.pixels <= 60 && ch != null) {
+        store.loadMessages(ch.id, older: true);
       }
     });
   }
@@ -189,18 +197,34 @@ class _ChatViewState extends State<ChatView> {
               style: TextStyle(color: Pal.muted)));
     }
     final msgs = store.messages[ch.id] ?? [];
-    // Al abrir o cambiar de canal, arranca en el último mensaje (no arriba). Como
-    // los mensajes cargan async, se hace en el primer build con la lista ya
-    // poblada para ese canal (jumpTo tras el frame).
+    // Posición de scroll por canal. Al cambiar de canal restauramos el offset
+    // recordado (o vamos al fondo la 1ª vez); como los mensajes cargan async, el
+    // reposicionado espera al primer build con la lista ya poblada. Si llegan
+    // mensajes NUEVOS y ya estabas pegado al fondo, te seguimos al fondo.
     if (ch.id != _lastChannelId) {
       _lastChannelId = ch.id;
-      _didInitialScroll = false;
+      _restorePending = true;
+      _lastMsgCount = msgs.length;
     }
-    if (!_didInitialScroll && msgs.isNotEmpty) {
-      _didInitialScroll = true;
+    if (_restorePending && msgs.isNotEmpty) {
+      _restorePending = false;
+      _lastMsgCount = msgs.length;
+      final saved = _scrollOffsets[ch.id];
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (scroll.hasClients) scroll.jumpTo(scroll.position.maxScrollExtent);
+        if (!scroll.hasClients) return;
+        final max = scroll.position.maxScrollExtent;
+        scroll.jumpTo(saved == null ? max : saved.clamp(0.0, max));
       });
+    } else if (msgs.length != _lastMsgCount) {
+      final grew = msgs.length > _lastMsgCount;
+      _lastMsgCount = msgs.length;
+      // Solo si creció por el FINAL (mensaje nuevo) y ya estabas al fondo; en
+      // paginación 'older' el usuario está arriba (_atBottom=false) → no molesta.
+      if (grew && _atBottom) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (scroll.hasClients) scroll.jumpTo(scroll.position.maxScrollExtent);
+        });
+      }
     }
     final canSend = store.canI(P.sendMessages, ch.id);
     final body = Column(

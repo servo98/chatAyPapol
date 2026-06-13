@@ -26,8 +26,13 @@ services:
   livekit:
     image: livekit/livekit-server:latest
     restart: unless-stopped
-    # host networking: el rango UDP 50000-50100 de WebRTC sin mapear puerto a puerto
+    # host networking: el rango UDP 50000-50100 de WebRTC sin mapear puerto a puerto.
+    # Abre en el FIREWALL del VPS: UDP 50000-50100 (ya), TCP 7881 (fallback ICE-TCP,
+    # ver livekit.yaml), y si activas el TURN: 443/tcp o 5349/tcp.
     network_mode: host
     command: --config /etc/livekit.yaml
     volumes:
       - ./server/livekit.yaml:/etc/livekit.yaml:ro
+      # Para el TURN-TLS: monta aquí el cert del dominio del SFU y descomenta el
+      # bloque 'turn:' de livekit.yaml.
+      # - /etc/letsencrypt/live/livekit.aypapol.com:/etc/livekit/tls:ro
