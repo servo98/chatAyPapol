@@ -791,6 +791,14 @@ class _VoicePanelState extends State<_VoicePanel> {
               'no se puede ajustar por software en escritorio: usa la ganancia '
               'automática o el volumen de micrófono del sistema.',
               style: TextStyle(color: Pal.faint, fontSize: 12)),
+          const SizedBox(height: 12),
+          const Text('CRÉDITOS DE AUDIO', style: _label),
+          const Text(
+              'Ambientes de sala (CC0 · freesound.org): Lluvia — idomusics · '
+              'Mar — INNORECORDS · Viento — florianreichelt · Fogata — Sauron974 · '
+              'Goteo de cueva — Sclolex. Zumbido sci-fi: sintético propio. '
+              '¡Gracias a los autores!',
+              style: TextStyle(color: Pal.faint, fontSize: 11)),
         ]);
       },
     );
