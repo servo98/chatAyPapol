@@ -29,8 +29,19 @@ class CrashLog {
 
   static const _maxLines = 1200;
   static const _cleanMarker = '=== cierre limpio ===';
+  // Tope DURO del log en disco: si un error se repite cada frame (p.ej. un
+  // "No Overlay widget found" en un build persistente), sin esto el archivo
+  // crece sin límite (llegó a 5GB y llenó el disco). Al alcanzarlo, deja de
+  // escribir a disco (el ring en memoria sigue para el banner).
+  static const _maxDiskBytes = 16 * 1024 * 1024; // 16 MB
 
   final Queue<String> _lines = Queue<String>();
+  int _diskBytes = 0;
+  bool _diskCapped = false;
+  // Dedupe de errores de framework idénticos consecutivos (no re-loguear el
+  // mismo stack cada frame).
+  String? _lastFlutterErr;
+  int _flutterErrRepeat = 0;
   String _header = 'ChatPapol';
   String _prevSession = '';
 
@@ -90,10 +101,19 @@ class CrashLog {
       _lines.removeFirst();
     }
     final raf = _raf;
-    if (raf != null) {
+    if (raf != null && !_diskCapped) {
       try {
-        raf.writeStringSync('$entry\n');
+        final data = '$entry\n';
+        raf.writeStringSync(data);
         raf.flushSync();
+        _diskBytes += data.length;
+        if (_diskBytes >= _maxDiskBytes) {
+          _diskCapped = true;
+          raf.writeStringSync(
+              '=== log truncado: tope de ${_maxDiskBytes ~/ (1024 * 1024)}MB '
+              'alcanzado (probable error en bucle) ===\n');
+          raf.flushSync();
+        }
       } catch (_) {}
     }
   }
@@ -113,11 +133,24 @@ class CrashLog {
     // Errores del framework (build/layout/gestos). Se registran SIEMPRE y se
     // muestran en consola; además levantan el banner para que se vean en vivo.
     FlutterError.onError = (FlutterErrorDetails details) {
-      record('FLUTTER ERROR: ${details.exceptionAsString()}');
+      final msg = details.exceptionAsString();
+      // Dedupe: si es el MISMO error que el anterior (error de build persistente
+      // que se repite cada frame), no re-loguear su stack en bucle. Cada 200
+      // repeticiones deja una nota, y nada más.
+      if (msg == _lastFlutterErr) {
+        _flutterErrRepeat++;
+        if (_flutterErrRepeat % 200 == 0) {
+          record('FLUTTER ERROR (repetido ${_flutterErrRepeat}x): $msg');
+        }
+        return;
+      }
+      _lastFlutterErr = msg;
+      _flutterErrRepeat = 0;
+      record('FLUTTER ERROR: $msg');
       final st = details.stack;
       if (st != null) record(st.toString());
       FlutterError.presentError(details);
-      _raise(details.exceptionAsString(), st);
+      _raise(msg, st);
     };
 
     // Errores asíncronos no atrapados que escapan del árbol de widgets.

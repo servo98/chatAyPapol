@@ -123,7 +123,11 @@ class _CrashBannerState extends State<_CrashBanner> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'cerrar',
+                  // SIN tooltip: este banner se monta FUERA del Overlay del
+                  // Navigator (envuelve toda la app), y Tooltip/SelectableText
+                  // necesitan un Overlay ancestro → lanzarían "No Overlay widget
+                  // found" cada frame (llenó el log a 5GB). Por eso aquí no se
+                  // usan widgets que requieran Overlay.
                   iconSize: 16,
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(LucideIcons.x, color: Pal.muted),
@@ -158,7 +162,7 @@ class _CrashBannerState extends State<_CrashBanner> {
                   border: Border.all(color: Pal.borderDefault),
                 ),
                 child: SingleChildScrollView(
-                  child: SelectableText(
+                  child: Text(
                     detail,
                     style: const TextStyle(
                       color: Pal.faint,
