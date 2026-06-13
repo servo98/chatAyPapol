@@ -181,9 +181,9 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
           color: Pal.bg0,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: Pal.borderStrong),
-          boxShadow: const [
-            BoxShadow(color: Color(0xCC000000), blurRadius: 40, offset: Offset(0, 18), spreadRadius: -14),
-            BoxShadow(color: Color(0x1439FF14), blurRadius: 26, spreadRadius: -10),
+          boxShadow: [
+            const BoxShadow(color: Color(0xCC000000), blurRadius: 40, offset: Offset(0, 18), spreadRadius: -14),
+            BoxShadow(color: Pal.accent.withValues(alpha: 0.078), blurRadius: 26, spreadRadius: -10),
           ],
         ),
         child: ClipRRect(
@@ -265,9 +265,9 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
           height: 21,
           padding: const EdgeInsets.symmetric(horizontal: 9),
           decoration: BoxDecoration(
-            color: const Color(0x1239FF14),
+            color: Pal.accent.withValues(alpha: 0.071),
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: const Color(0x4239FF14)),
+            border: Border.all(color: Pal.accent.withValues(alpha: 0.259)),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Container(
@@ -461,7 +461,7 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
             decoration: BoxDecoration(
               color: Pal.accentDim,
               borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: const Color(0xFF2CE60F)),
+              border: Border.all(color: Pal.accentDim),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Icon(LucideIcons.check, size: 14, color: Pal.greenInk),
@@ -512,7 +512,9 @@ class _VolTrack extends StatelessWidget {
         thumbColor: muted ? Pal.red : Pal.accent,
         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
         overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-        overlayColor: Color(muted ? 0x2FFF4D4D : 0x2F39FF14),
+        overlayColor: muted
+            ? const Color(0x2FFF4D4D)
+            : Pal.accent.withValues(alpha: 0.184),
         trackShape: const _VolTrackShape(),
       ),
       child: Slider(
@@ -644,14 +646,14 @@ class _EqCurvePainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: const [Color(0x4239FF14), Color(0x0039FF14)],
+        colors: [Pal.accent.withValues(alpha: 0.259), Pal.accent.withValues(alpha: 0.0)],
       ).createShader(areaRect)
       ..style = PaintingStyle.fill;
     canvas.drawPath(areaPath, areaPaint);
 
     // Línea de la curva con glow
     final glowPaint = Paint()
-      ..color = const Color(0x6039FF14)
+      ..color = Pal.accent.withValues(alpha: 0.376)
       ..strokeWidth = 3.5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
@@ -710,7 +712,7 @@ class _EqBand extends StatelessWidget {
                 thumbColor: Pal.accent,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                overlayColor: const Color(0x2F39FF14),
+                overlayColor: Pal.accent.withValues(alpha: 0.184),
                 trackShape: _CenteredTrackShape(),
               ),
               child: Slider(

@@ -24,7 +24,7 @@ import 'widgets.dart';
 
 // Tokens del design system que no viven en Pal (color-mix / washes).
 const _inset = Color(0xFF070A09); // --surface-inset
-const _washGreen = Color(0x1A39FF14); // rgba(57,255,20,0.10)
+Color get _washGreen => Pal.accent.withValues(alpha: 0.10); // sigue el acento
 const _washRed = Color(0x1FFF4D4D); // rgba(255,77,77,0.12)
 
 /// Vista principal cuando el canal seleccionado es de voz:

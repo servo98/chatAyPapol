@@ -23,7 +23,7 @@ import '../webrtc_apm.dart';
 import 'widgets.dart';
 
 // Washes locales (no viven en Pal): mismos que voice_panel.dart.
-const _washGreen = Color(0x1A39FF14);
+Color get _washGreen => Pal.accent.withValues(alpha: 0.10); // sigue el acento
 const _washCyan = Color(0x1A22D3EE);
 
 // Categorías de preset (espejo de voice_fx_presets) → pestañas del diseño.
