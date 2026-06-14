@@ -70,6 +70,11 @@ class AppStore extends ChangeNotifier {
   /// canal en el que estoy. [state] null = el ambiente de ese canal se apagó.
   void Function(String channelId, AmbienceState? state)? onAmbienceChange;
 
+  /// El VoiceManager se cuelga aquí para re-anunciar VOICE_JOIN tras un READY
+  /// (reconexión del gateway / reinicio del backend): si no, el server pierde
+  /// nuestro voiceState y descarta en silencio AMBIENCE_*/moderación.
+  void Function()? onReconnected;
+
   AmbienceState? ambienceIn(String channelId) => ambienceStates[channelId];
 
   Channel? get selectedChannel => channels[selectedChannelId];
@@ -373,6 +378,10 @@ class AppStore extends ChangeNotifier {
     switch (t) {
       case 'READY':
         _applyReady(d);
+        // (re)conexión del gateway: el server pudo perder nuestro voiceState
+        // (reinicio del backend). El voice se re-anuncia para no quedar mudo
+        // ante el server (ambiente/moderación se descartaban en silencio).
+        onReconnected?.call();
         break;
       case 'MESSAGE_CREATE':
         final m = Message.fromJson(d);

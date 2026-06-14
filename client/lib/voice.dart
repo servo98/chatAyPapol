@@ -65,6 +65,7 @@ class VoiceManager extends ChangeNotifier {
   VoiceManager(this.store) {
     store.onSoundPlay = _playSound;
     store.onAmbienceChange = _onAmbienceChange;
+    store.onReconnected = _reannounceVoice;
     // Empuja la cadena de efectos al procesador nativo cada vez que cambia.
     VoiceFxEngine.instance.addListener(_onVoiceFxChanged);
     _loadPrefs();
@@ -742,6 +743,20 @@ class VoiceManager extends ChangeNotifier {
     }
   }
 
+  /// Tras un READY (reconexión del gateway / reinicio del backend) re-anuncia
+  /// VOICE_JOIN si seguimos en una sala: el server reconstruye su voiceState con
+  /// nuestra presencia. Sin esto, el server nos cree fuera del canal y descarta
+  /// en SILENCIO AMBIENCE_*/moderación (el síntoma: "tengo permiso pero no me
+  /// deja activar el ambiente"). channelId/room siguen vivos porque LiveKit no
+  /// se cae cuando el WS del gateway se reconecta.
+  void _reannounceVoice() {
+    final cid = channelId;
+    if (cid == null || room == null) return;
+    debugPrint('[voice] READY: re-anunciando VOICE_JOIN (canal=$cid)');
+    store.gateway.send('VOICE_JOIN', {'channel_id': cid, 'mute': muted, 'deaf': deafened});
+    if (sharing) store.gateway.send('VOICE_STATE', {'streaming': true});
+  }
+
   Future<void> leave() async {
     if (room == null) return;
     SfxService.instance.play(UiSound.disconnected); // salí de voz
@@ -985,7 +1000,11 @@ class VoiceManager extends ChangeNotifier {
   /// en el canal; el server valida permiso (CONTROL_AMBIENCE).
   Future<void> setAmbience(String ambienceId, {bool loop = true}) async {
     final cid = channelId;
-    if (cid == null) return;
+    if (cid == null) {
+      debugPrint('[ambience] setAmbience($ambienceId) ignorado: no estoy en voz');
+      return;
+    }
+    debugPrint('[ambience] setAmbience($ambienceId) → AMBIENCE_SET canal=$cid');
     store.gateway.send('AMBIENCE_SET',
         {'channel_id': cid, 'ambience_id': ambienceId, 'loop': loop});
   }
