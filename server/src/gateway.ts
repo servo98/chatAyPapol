@@ -176,12 +176,13 @@ export const websocket = {
         leaveVoice(userId);
         break;
       // ---- ambiente de sala (cama de sonido compartida, sin WebRTC) ----
-      // Quien lo controla debe estar EN el canal de voz y tener CONTROL_AMBIENCE
-      // (permiso dedicado: el dueño lo concede a admins / rol "DJ" por rol/canal).
+      // Para controlarlo basta el permiso CONTROL_AMBIENCE en el canal. ANTES se
+      // exigía además estar en voiceStates (en el canal de voz), pero eso se
+      // desincroniza (reinicio del backend / VOICE_JOIN perdido) y descartaba la
+      // orden EN SILENCIO → "tengo permiso pero no me deja". El permiso es el gate.
       case "AMBIENCE_SET": {
         const chId = d.channel_id as string;
         const ambId = d.ambience_id as string;
-        if (voiceStates.get(userId)?.channel_id !== chId) return;
         if (!AMBIENCE_IDS.has(ambId) || !can(userId, P.CONTROL_AMBIENCE, chId)) return;
         const st: AmbienceState = {
           ambience_id: ambId,
@@ -196,7 +197,6 @@ export const websocket = {
       }
       case "AMBIENCE_STOP": {
         const chId = d.channel_id as string;
-        if (voiceStates.get(userId)?.channel_id !== chId) return;
         if (!can(userId, P.CONTROL_AMBIENCE, chId)) return;
         roomAmbience.delete(chId);
         broadcast("AMBIENCE_STATE", { channel_id: chId, ambience_id: null, by_user: userId }, chId);
@@ -205,8 +205,7 @@ export const websocket = {
       case "AMBIENCE_PAUSE": {
         const chId = d.channel_id as string;
         const st = roomAmbience.get(chId);
-        if (!st || voiceStates.get(userId)?.channel_id !== chId) return;
-        if (!can(userId, P.CONTROL_AMBIENCE, chId)) return;
+        if (!st || !can(userId, P.CONTROL_AMBIENCE, chId)) return;
         const wantPaused = !!d.paused;
         if (wantPaused && !st.paused) {
           st.paused = true;
@@ -224,8 +223,7 @@ export const websocket = {
       case "AMBIENCE_LOOP": {
         const chId = d.channel_id as string;
         const st = roomAmbience.get(chId);
-        if (!st || voiceStates.get(userId)?.channel_id !== chId) return;
-        if (!can(userId, P.CONTROL_AMBIENCE, chId)) return;
+        if (!st || !can(userId, P.CONTROL_AMBIENCE, chId)) return;
         st.loop = !!d.loop;
         broadcast("AMBIENCE_STATE", { channel_id: chId, ...st }, chId);
         break;
