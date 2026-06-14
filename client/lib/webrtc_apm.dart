@@ -51,6 +51,14 @@ class WebrtcApm {
     } catch (_) {/* build sin soporte */}
   }
 
+  /// Auto-nivelado (AGC) del path 48k: sube tu voz a un nivel consistente (como
+  /// Discord). El 48k no pasa por el AGC del APM. No-op si no soportado.
+  static Future<void> setAgc48(bool on) async {
+    try {
+      await _ch.invokeMethod('setAgc48', {'on': on});
+    } catch (_) {/* build sin soporte */}
+  }
+
   /// [diag] Empieza a grabar el micro a [dir]/diag-raw.wav (crudo) y
   /// diag-out.wav (procesado). Para diagnosticar el audio con datos reales.
   static Future<void> startMicDump(String dir) async {

@@ -417,8 +417,10 @@ class VoiceManager extends ChangeNotifier {
       _setFlag(() => noiseSuppression = v);
   Future<void> setEchoCancellation(bool v) =>
       _setFlag(() => echoCancellation = v);
-  Future<void> setAutoGainControl(bool v) =>
-      _setFlag(() => autoGainControl = v);
+  Future<void> setAutoGainControl(bool v) async {
+    await WebrtcApm.setAgc48(v); // AGC del path 48k (no reinicia el track)
+    await _setFlag(() => autoGainControl = v); // AGC del APM (16k) — reinicia track
+  }
 
   Future<void> _setFlag(void Function() apply) async {
     apply();
@@ -747,6 +749,7 @@ class VoiceManager extends ChangeNotifier {
       await WebrtcApm.setRnnoise(rnnoise);
       await WebrtcApm.setNsLevel(nsLevel);
       await WebrtcApm.setInputGain(inputGain);
+      await WebrtcApm.setAgc48(autoGainControl); // auto-nivelado del path 48k
       if (VoiceFxEngine.instance.enabled) {
         debugPrint('[voice] aplicando voicefx');
         await _pushVoiceFx();

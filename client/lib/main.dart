@@ -291,7 +291,9 @@ Future<void> _diagMic48k(List<String> args) async {
     // [diag] supresor de ruido ESPECTRAL propio: `nsoff`=0, `fuerte`=2, def 1.
     final nsLevel = args.contains('nsoff') ? 0 : (args.contains('fuerte') ? 2 : 1);
     await WebrtcApm.setNsLevel(nsLevel);
-    await log('1d: supresor espectral nivel=$nsLevel (0 off / 1 est / 2 fuerte)');
+    final agc = !args.contains('agcoff');
+    await WebrtcApm.setAgc48(agc);
+    await log('1d: supresor espectral nivel=$nsLevel · AGC(auto-nivel)=$agc');
 
     // [diag] graba crudo vs procesado a .wav para medir (sin adivinar).
     const dumpDir = r'C:\Users\ferna\Downloads\chatpapol-toolchain';
