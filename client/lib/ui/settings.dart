@@ -409,6 +409,9 @@ class _VoicePanelState extends State<_VoicePanel> {
   lk.LocalAudioTrack? _testTrack;
   lk.AudioVisualizer? _vis;
   lk.EventsListener<lk.AudioVisualizerEvent>? _visListener;
+  // trackId del capturador 48k dedicado usado para el test SIN canal (bombea
+  // audio → el monitor suena; una pista suelta no pasaría por el procesador).
+  String? _customTestId;
   bool testing = false;
   double level = 0;
   // Guard de operaciones en vuelo: evita doble click en "Probar micrófono"
@@ -468,6 +471,21 @@ class _VoicePanelState extends State<_VoicePanel> {
     lk.AudioTrack? track = voice.micTrack;
     lk.LocalAudioTrack? created;
     if (track == null) {
+      // Sin canal: una pista suelta NO pasa por el APM si no se publica → el
+      // monitor "escucharme" no suena. Usamos el capturador 48k dedicado (igual
+      // que --diag-mic48k): bombea audio → ProcessCustom48 → monitor. Solo
+      // Windows; pide auriculares (sin AEC). Sin medidor de barras en este modo.
+      final tid = await WebrtcApm.createCustomAudioTrack();
+      if (gen != _gen || !mounted) {
+        if (tid != null) await WebrtcApm.stopCustomMicCapture(tid);
+        return false;
+      }
+      if (tid != null) {
+        await WebrtcApm.startCustomMicCapture(tid);
+        _customTestId = tid;
+        return true; // el monitor lo enciende _startTest (VoiceMonitor.set(true))
+      }
+      // Plataforma/build sin capturador custom → pista normal (solo medidor).
       created = await lk.LocalAudioTrack.create(voice.micOptions);
       if (gen != _gen || !mounted) {
         await created.stop();
@@ -534,6 +552,13 @@ class _VoicePanelState extends State<_VoicePanel> {
   }
 
   Future<void> _releaseTest() async {
+    final cid = _customTestId;
+    _customTestId = null;
+    if (cid != null) {
+      try {
+        await WebrtcApm.stopCustomMicCapture(cid);
+      } catch (_) {}
+    }
     final vis = _vis;
     _vis = null;
     _visListener?.dispose();
@@ -693,10 +718,10 @@ class _VoicePanelState extends State<_VoicePanel> {
           const SizedBox(height: 6),
           Text(
               testing
-                  ? 'Habla: si la barra verde se mueve, se te escucha.'
+                  ? 'Habla con AURICULARES: deberías oírte a ti mismo.'
                   : voice.connected
                       ? 'Mide el micro que ya está publicado en el canal de voz.'
-                      : 'Crea una captura local sin entrar a ningún canal.',
+                      : 'Te oyes a ti mismo sin entrar a ningún canal (auriculares).',
               style: TextStyle(color: Pal.faint, fontSize: 12)),
           const SizedBox(height: 20),
           Text('PROCESADO DE VOZ', style: _label),
