@@ -36,7 +36,7 @@ enum VoiceFxType {
   noise, //      6 — cama de ruido aditivo (siseo de radio)
   tremolo, //    7 — LFO de amplitud (voz de anciano)
   chorus, //     8 — chorus (sci-fi)
-  comp, //       9 — RESERVADO: compresor + noise gate (aún sin impl nativa)
+  comp, //       9 — compresor + noise gate (gate thresh/release, ratio, attack, makeup)
   bitcrush, //  10 — cuantización de bits + sample&hold (8-bit / digital)
   vibrato, //   11 — delay corto modulado, sin dry (ondulación de PITCH)
   flanger, //   12 — comb corto + LFO + feedback (jet / robot resonante)
@@ -58,7 +58,7 @@ extension VoiceFxTypeLabel on VoiceFxType {
         VoiceFxType.noise => 'Ruido',
         VoiceFxType.tremolo => 'Trémolo',
         VoiceFxType.chorus => 'Chorus',
-        VoiceFxType.comp => 'Compresor', // reservado (sin impl nativa)
+        VoiceFxType.comp => 'Compresor',
         VoiceFxType.bitcrush => 'Bitcrush',
         VoiceFxType.vibrato => 'Vibrato',
         VoiceFxType.flanger => 'Flanger',
@@ -430,15 +430,14 @@ class VoiceFxEngine extends ChangeNotifier {
     if (_inited) return;
     _inited = true;
 
-    // 1. nativo (puede faltar en dev: degradar a no-op, el cliente sigue)
-    _native = VoicefxNative.open();
-    if (_native != null) {
-      _available = _native!.create(sampleRate, maxFrames);
-      if (!_available) {
-        debugPrint('[voicefx] vfx_create falló (sr=$sampleRate, maxFrames=$maxFrames)');
-        _native = null;
-      }
-    }
+    // 1. (FFI standalone retirado) El DSP del canal EN VIVO va por el fork
+    //    flutter_webrtc vía WebrtcApm.setVoiceFx(nativeChainSpec()). La antigua
+    //    dynlib voicefx.dll/libvoicefx.so era una ruta de PREVIEW nunca cableada
+    //    (processFrame) y su único efecto visible era el warning ruidoso
+    //    "voicefx.dll no encontrado". Se deja _native en null → todas sus
+    //    llamadas (null-safe) son no-op; la cadena se publica por nativeChainSpec.
+    _native = null;
+    _available = false;
 
     // 2. presets data-driven (assets/voicefx_presets.json, patrón sfx_manifest);
     //    fallback a los horneados en código si el asset falta o no parsea
