@@ -54,7 +54,7 @@ dependency_overrides:
   flutter_webrtc:
     git:
       url: https://github.com/servo98/flutter-webrtc.git
-      ref: ef70bf3cba1eac088de6783e2af1923fc7b6308a
+      ref: c158f813778edc41c63d7d506c5daa2e165def79
 
 flutter:
   uses-material-design: true
