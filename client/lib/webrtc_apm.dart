@@ -51,6 +51,21 @@ class WebrtcApm {
     } catch (_) {/* build sin soporte */}
   }
 
+  /// [diag] Empieza a grabar el micro a [dir]/diag-raw.wav (crudo) y
+  /// diag-out.wav (procesado). Para diagnosticar el audio con datos reales.
+  static Future<void> startMicDump(String dir) async {
+    try {
+      await _ch.invokeMethod('startMicDump', {'dir': dir});
+    } catch (_) {/* build sin soporte */}
+  }
+
+  /// [diag] Detiene la grabación y escribe los .wav.
+  static Future<void> stopMicDump() async {
+    try {
+      await _ch.invokeMethod('stopMicDump');
+    } catch (_) {/* build sin soporte */}
+  }
+
   // === [chatpapol 48k] micro kCustom fullband (sin APM → sin downsample 16k) ===
 
   /// Crea una pista de audio kCustom (Stage 1) a la que el capturador nativo

@@ -737,18 +737,14 @@ class VoiceManager extends ChangeNotifier {
               ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
         }
       } catch (_) {/* sin permiso SPEAK: solo escucha */}
-      // Post-procesado nativo del micro (RNNoise + efectos de voz). Reaplicamos
-      // el estado persistido SOLO si hay algo encendido. Es optimización (no
-      // instalar un post-procesador que igual haría no-op) y red de seguridad:
-      // el fork tenía un bug por el que SetCapturePostProcessing(null) crasheaba
-      // en Windows (libwebrtc m144) — ya arreglado en el fork (nunca se pasa
-      // null), pero saltar la llamada cuando todo está apagado también protege
-      // builds contra forks viejos.
-      if (rnnoise) {
-        debugPrint('[voice] aplicando RNNoise=$rnnoise');
-        await WebrtcApm.setRnnoise(rnnoise);
-      }
-      // [chatpapol audio] NS espectral + boost del path 48k (no-op en 16k nativo).
+      // Post-procesado nativo del micro. ⚠️ SIEMPRE instalamos el procesador
+      // (aunque RNNoise esté OFF): si no se instala, en el path 16k NUNCA se
+      // llama a Process() → ni el monitor "escucharme" ni la supresión de ruido
+      // ni los efectos corren (bug: "no me escucho / no cambia nada" con RNNoise
+      // off). setRnnoise instala el proc (NUNCA null → no crashea) y el on/off
+      // vive en su flag interno; Process() hace passthrough cuando todo está off.
+      debugPrint('[voice] instalando post-procesador (rnnoise=$rnnoise)');
+      await WebrtcApm.setRnnoise(rnnoise);
       await WebrtcApm.setNsLevel(nsLevel);
       await WebrtcApm.setInputGain(inputGain);
       if (VoiceFxEngine.instance.enabled) {

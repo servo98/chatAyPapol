@@ -507,7 +507,12 @@ class _VoicePanelState extends State<_VoicePanel> {
     final gen = ++_gen;
     try {
       final ok = await _acquireTest(gen);
-      if (ok && mounted) setState(() => testing = true);
+      if (ok && mounted) {
+        setState(() => testing = true);
+        // El test ENCIENDE el monitor automáticamente: probar = oírte (con
+        // auriculares). Instala el post-procesador → suena aunque RNNoise/FX off.
+        await VoiceMonitor.instance.set(true);
+      }
     } catch (e) {
       await _releaseTest();
       if (mounted) {
@@ -524,6 +529,7 @@ class _VoicePanelState extends State<_VoicePanel> {
     testing = false;
     level = 0;
     if (mounted) setState(() {});
+    await VoiceMonitor.instance.set(false); // apaga el "escucharme" del test
     await _releaseTest();
   }
 
@@ -652,25 +658,12 @@ class _VoicePanelState extends State<_VoicePanel> {
               'el dispositivo PREDETERMINADO de Windows.',
               style: TextStyle(color: Pal.faint, fontSize: 12)),
           const SizedBox(height: 20),
-          // ── ESCUCHARME (monitor local) ──
-          Text('ESCUCHARME (MONITOR)', style: _label),
-          ListenableBuilder(
-            listenable: VoiceMonitor.instance,
-            builder: (ctx, _) => SwitchListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              activeTrackColor: Pal.accent,
-              value: VoiceMonitor.instance.on,
-              onChanged: (v) => VoiceMonitor.instance.set(v),
-              title: const Text('Oírme a mí mismo con los efectos'),
-              subtitle: Text(
-                  'Reproduce tu micro (ya procesado) en tus altavoces. Solo suena '
-                  'dentro de un canal de voz. Usa AURICULARES para evitar eco.',
-                  style: TextStyle(color: Pal.faint, fontSize: 11.5)),
-            ),
-          ),
-          const SizedBox(height: 20),
           Text('PROBAR MICRÓFONO', style: _label),
+          const SizedBox(height: 4),
+          Text(
+              'Al probar, te OYES a ti mismo (ya procesado) en tus altavoces. '
+              'Usa AURICULARES para evitar eco.',
+              style: TextStyle(color: Pal.faint, fontSize: 11.5)),
           const SizedBox(height: 8),
           Row(children: [
             ElevatedButton.icon(
@@ -707,18 +700,60 @@ class _VoicePanelState extends State<_VoicePanel> {
               style: TextStyle(color: Pal.faint, fontSize: 12)),
           const SizedBox(height: 20),
           Text('PROCESADO DE VOZ', style: _label),
-          SwitchListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            activeTrackColor: Pal.accent,
-            value: voice.noiseSuppression,
-            title: const Text('Supresión de ruido',
-                style: TextStyle(fontSize: 13.5)),
-            subtitle: Text('Filtra ventiladores, teclado y ruido de fondo.',
-                style: TextStyle(fontSize: 11, color: Pal.faint)),
-            onChanged: (v) =>
-                _applyMicChange(() => voice.setNoiseSuppression(v)),
-          ),
+          const SizedBox(height: 8),
+          // UN control de ruido (reemplaza los toggles sueltos "Supresión de
+          // ruido" + "RNNoise" que confundían): maneja RNNoise (16k) y el
+          // supresor espectral (48k) a la vez. El código elige el algoritmo.
+          Text('Reducir ruido de fondo', style: const TextStyle(fontSize: 13.5)),
+          const SizedBox(height: 2),
+          Text(
+              'Filtra ventilador, teclado y ruido MIENTRAS hablas. Estándar para '
+              'casi todo; Fuerte para entornos ruidosos.',
+              style: TextStyle(fontSize: 11, color: Pal.faint)),
+          const SizedBox(height: 8),
+          Builder(builder: (_) {
+            final nl = !voice.rnnoise ? 0 : (voice.nsLevel >= 2 ? 2 : 1);
+            return Row(
+              children: [
+                for (final o in const <(int, String)>[
+                  (0, 'Off'),
+                  (1, 'Estándar'),
+                  (2, 'Fuerte')
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () {
+                        voice.setRnnoise(o.$1 > 0);
+                        voice.setNsLevel(o.$1);
+                        voice.setNoiseSuppression(false); // RNNoise reemplaza al clásico
+                        setState(() {});
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: nl == o.$1
+                              ? Pal.accentDim.withValues(alpha: .15)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                              color: nl == o.$1 ? Pal.accent : Pal.borderDefault),
+                        ),
+                        child: Text(o.$2,
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                color: nl == o.$1 ? Pal.accent : Pal.muted,
+                                fontWeight: nl == o.$1
+                                    ? FontWeight.w700
+                                    : FontWeight.w500)),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          }),
+          const SizedBox(height: 14),
           SwitchListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
@@ -747,74 +782,15 @@ class _VoicePanelState extends State<_VoicePanel> {
             dense: true,
             contentPadding: EdgeInsets.zero,
             activeTrackColor: Pal.accent,
-            value: voice.rnnoise,
-            title: const Text('RNNoise (IA)', style: TextStyle(fontSize: 13.5)),
-            subtitle: Text(
-                'Supresor de ruido neuronal (CPU). Mejor que el clásico para '
-                'ventilador/teclado. No requiere GPU.',
-                style: TextStyle(fontSize: 11, color: Pal.faint)),
-            // No usa _applyMicChange: el APM es global, no hay que reiniciar track.
-            onChanged: (v) => voice.setRnnoise(v),
-          ),
-          SwitchListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            activeTrackColor: Pal.accent,
             value: voice.fullband48k,
-            title: const Text('Micro fullband 48 kHz',
+            title: const Text('Micro fullband 48 kHz (experimental)',
                 style: TextStyle(fontSize: 13.5)),
             subtitle: Text(
-                'Calidad Discord o mejor: tu voz va a 48 kHz sin recorte a 16k. '
-                'NO cancela eco → usa AURICULARES (si no, los demás oirán eco). '
-                'Se aplica al reconectar al canal.',
+                'Voz a 48 kHz sin recorte a 16k. EXPERIMENTAL: puede sonar roto '
+                'en algunos equipos y NO cancela eco (usa AURICULARES). Déjalo OFF '
+                'si quieres audio estable. Se aplica al reconectar.',
                 style: TextStyle(fontSize: 11, color: Pal.faint)),
             onChanged: (v) => voice.setFullband48k(v),
-          ),
-          const SizedBox(height: 14),
-          Text('SUPRESIÓN DE RUIDO (modo 48 kHz)', style: _label),
-          const SizedBox(height: 4),
-          Text(
-              'Supresor espectral propio (Wiener+MCRA): limpia el ruido MIENTRAS '
-              'hablas, sin agachar la voz. Aplica al micro fullband 48 kHz.',
-              style: TextStyle(fontSize: 11, color: Pal.faint)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              for (final o in const <(int, String)>[
-                (0, 'Off'),
-                (1, 'Estándar'),
-                (2, 'Fuerte')
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: () => setState(() => voice.setNsLevel(o.$1)),
-                    child: Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: voice.nsLevel == o.$1
-                            ? Pal.accentDim.withValues(alpha: .15)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(
-                            color: voice.nsLevel == o.$1
-                                ? Pal.accent
-                                : Pal.borderDefault),
-                      ),
-                      child: Text(o.$2,
-                          style: TextStyle(
-                              fontSize: 12.5,
-                              color: voice.nsLevel == o.$1
-                                  ? Pal.accent
-                                  : Pal.muted,
-                              fontWeight: voice.nsLevel == o.$1
-                                  ? FontWeight.w700
-                                  : FontWeight.w500)),
-                    ),
-                  ),
-                ),
-            ],
           ),
           const SizedBox(height: 14),
           Text('VOLUMEN DE ENTRADA (boost del micro)', style: _label),

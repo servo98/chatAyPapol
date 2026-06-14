@@ -288,6 +288,16 @@ Future<void> _diagMic48k(List<String> args) async {
       await WebrtcApm.setVoiceFx(true, '1.0;1.0;5,0,600=-7&601=0.8');
     }
 
+    // [diag] supresor de ruido ESPECTRAL propio: `nsoff`=0, `fuerte`=2, def 1.
+    final nsLevel = args.contains('nsoff') ? 0 : (args.contains('fuerte') ? 2 : 1);
+    await WebrtcApm.setNsLevel(nsLevel);
+    await log('1d: supresor espectral nivel=$nsLevel (0 off / 1 est / 2 fuerte)');
+
+    // [diag] graba crudo vs procesado a .wav para medir (sin adivinar).
+    const dumpDir = r'C:\Users\ferna\Downloads\chatpapol-toolchain';
+    await WebrtcApm.startMicDump(dumpDir);
+    await log('1e: grabando → $dumpDir\\diag-raw.wav (crudo) y diag-out.wav (procesado)');
+
     await log('2: crear pista kCustom (sin APM/16k) ...');
     final trackId = await WebrtcApm.createCustomAudioTrack();
     if (trackId == null) {
@@ -307,11 +317,13 @@ Future<void> _diagMic48k(List<String> args) async {
     await log('>>> ¿Limpio y a buen volumen, o roto/raro?');
     await Future.delayed(const Duration(seconds: 30));
 
-    await log('4: parar capturador + monitor/rnn/fx OFF ...');
+    await log('4: parar capturador + escribir dumps + monitor/rnn/fx OFF ...');
+    await WebrtcApm.stopMicDump(); // escribe diag-raw.wav / diag-out.wav
     await WebrtcApm.stopCustomMicCapture(trackId);
     if (withFx) await WebrtcApm.setVoiceFx(false, '');
     if (withRnn) await WebrtcApm.setRnnoise(false);
     await WebrtcApm.setVoiceMonitor(false);
+    await log('  dumps escritos: diag-raw.wav (crudo) + diag-out.wav (procesado)');
     await log('=== diag-mic48k FIN ok ===');
   } catch (e, st) {
     await log('EXCEPCIÓN: $e\n$st');
