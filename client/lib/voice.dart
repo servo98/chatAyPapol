@@ -115,6 +115,11 @@ class VoiceManager extends ChangeNotifier {
   // Default ON: limpia ruido DURANTE el habla (a diferencia del gate, que solo
   // corta silencios) en el path 16k. En fullband48k actúa como gate, no como IA.
   bool rnnoise = true;
+  // [chatpapol audio] Supresor de ruido ESPECTRAL propio (Wiener+MCRA) del path
+  // 48k: 0=off, 1=estándar, 2=fuerte. Reemplaza al viejo gate/AGC del 48k.
+  int nsLevel = 1;
+  // Boost de captura (volumen de entrada) del path 48k: 0..3 (1.0 = sin cambio).
+  double inputGain = 1.0;
   // Volumen de SALIDA (playout de tracks remotos). NO hay ganancia de captura:
   // ver setOutputVolume.
   double outputVolume = 1.0;
@@ -177,6 +182,8 @@ class VoiceManager extends ChangeNotifier {
     echoCancellation = prefs.getBool('mic_echo_cancellation') ?? true;
     autoGainControl = prefs.getBool('mic_auto_gain') ?? true;
     rnnoise = prefs.getBool('mic_rnnoise') ?? true;
+    nsLevel = prefs.getInt('mic_ns_level') ?? 1;
+    inputGain = prefs.getDouble('mic_input_gain') ?? 1.0;
     fullband48k = prefs.getBool('mic_fullband_48k') ?? false;
     outputVolume = prefs.getDouble('voice_output_volume') ?? 1.0;
     try {
@@ -325,6 +332,8 @@ class VoiceManager extends ChangeNotifier {
     await prefs.setBool('mic_echo_cancellation', echoCancellation);
     await prefs.setBool('mic_auto_gain', autoGainControl);
     await prefs.setBool('mic_rnnoise', rnnoise);
+    await prefs.setInt('mic_ns_level', nsLevel);
+    await prefs.setDouble('mic_input_gain', inputGain);
   }
 
   /// Activa/desactiva RNNoise. El APM es global del factory → NO reinicia el
@@ -333,6 +342,22 @@ class VoiceManager extends ChangeNotifier {
     rnnoise = v;
     await _saveMicPrefs();
     await WebrtcApm.setRnnoise(v);
+    notifyListeners();
+  }
+
+  /// Nivel del supresor espectral del path 48k (0/1/2). Persiste y aplica en vivo.
+  Future<void> setNsLevel(int v) async {
+    nsLevel = v.clamp(0, 2);
+    await _saveMicPrefs();
+    await WebrtcApm.setNsLevel(nsLevel);
+    notifyListeners();
+  }
+
+  /// Boost de captura del path 48k (0..3). Persiste y aplica en vivo.
+  Future<void> setInputGain(double v) async {
+    inputGain = v.clamp(0.0, 3.0);
+    await _saveMicPrefs();
+    await WebrtcApm.setInputGain(inputGain);
     notifyListeners();
   }
 
@@ -724,6 +749,9 @@ class VoiceManager extends ChangeNotifier {
         debugPrint('[voice] aplicando RNNoise=$rnnoise');
         await WebrtcApm.setRnnoise(rnnoise);
       }
+      // [chatpapol audio] NS espectral + boost del path 48k (no-op en 16k nativo).
+      await WebrtcApm.setNsLevel(nsLevel);
+      await WebrtcApm.setInputGain(inputGain);
       if (VoiceFxEngine.instance.enabled) {
         debugPrint('[voice] aplicando voicefx');
         await _pushVoiceFx();

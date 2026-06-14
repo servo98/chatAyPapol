@@ -34,6 +34,23 @@ class WebrtcApm {
     } catch (_) {/* build sin soporte de monitor */}
   }
 
+  /// Boost de captura (volumen de entrada) del path 48k: multiplicador lineal
+  /// 0..3 (1.0 = sin cambio). Reemplaza al AGC siempre-on. No-op si no soportado.
+  static Future<void> setInputGain(double gain) async {
+    try {
+      await _ch.invokeMethod('setInputGain', {'gain': gain});
+    } catch (_) {/* build sin soporte */}
+  }
+
+  /// Nivel del supresor de ruido ESPECTRAL propio (Wiener+MCRA) del path 48k:
+  /// 0=off, 1=estándar, 2=fuerte. Limpia el ruido durante el habla sin agachar
+  /// la voz (a diferencia del viejo gate). No-op si no soportado.
+  static Future<void> setNsLevel(int level) async {
+    try {
+      await _ch.invokeMethod('setNsLevel', {'level': level});
+    } catch (_) {/* build sin soporte */}
+  }
+
   // === [chatpapol 48k] micro kCustom fullband (sin APM → sin downsample 16k) ===
 
   /// Crea una pista de audio kCustom (Stage 1) a la que el capturador nativo
