@@ -543,8 +543,19 @@ class VoiceManager extends ChangeNotifier {
     await prefs.setBool('mic_fullband_48k', v);
     if (room?.localParticipant != null) {
       if (v) {
+        // Despublica el micro NORMAL del todo: setMicrophoneEnabled(false) solo
+        // MUTEA (stopMicTrackOnMute=false por defecto) → quedarían DOS pistas de
+        // micrófono publicadas y el SFU podría reenviar la muteada (otros no te
+        // oyen). Hay que quitar la publicación normal ANTES de crear la custom,
+        // si no getTrackPublicationBySource(microphone) sería ambiguo al
+        // despublicar luego la custom.
+        final lp = room?.localParticipant;
         try {
-          await room?.localParticipant?.setMicrophoneEnabled(false);
+          await lp?.setMicrophoneEnabled(false);
+        } catch (_) {}
+        try {
+          final pub = lp?.getTrackPublicationBySource(TrackSource.microphone);
+          if (pub != null) await lp?.removePublishedTrack(pub.sid);
         } catch (_) {}
         final ok = await _publishCustomMic();
         if (!ok) {
