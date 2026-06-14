@@ -414,6 +414,7 @@ class _VoicePanelState extends State<_VoicePanel> {
   String? _customTestId;
   bool testing = false;
   double level = 0;
+  bool _recDiag = false; // grabando diagnóstico de micro (.wav)
   // Guard de operaciones en vuelo: evita doble click en "Probar micrófono"
   // y cambios de opciones solapados.
   bool _busy = false;
@@ -540,6 +541,20 @@ class _VoicePanelState extends State<_VoicePanel> {
     } finally {
       _busy = false;
     }
+  }
+
+  // [diag] Graba 6s del micro (crudo + procesado) en el modo ACTUAL (normal o
+  // 48k, en canal o no) para diagnosticar. Escribe diag-raw.wav/diag-out.wav.
+  Future<void> _recordDiag() async {
+    if (_recDiag) return;
+    setState(() => _recDiag = true);
+    const dir = r'C:\Users\ferna\Downloads\chatpapol-toolchain';
+    try {
+      await WebrtcApm.startMicDump(dir);
+      await Future.delayed(const Duration(seconds: 6));
+      await WebrtcApm.stopMicDump();
+    } catch (_) {}
+    if (mounted) setState(() => _recDiag = false);
   }
 
   Future<void> _stopTest() async {
@@ -723,6 +738,17 @@ class _VoicePanelState extends State<_VoicePanel> {
                       ? 'Mide el micro que ya está publicado en el canal de voz.'
                       : 'Te oyes a ti mismo sin entrar a ningún canal (auriculares).',
               style: TextStyle(color: Pal.faint, fontSize: 12)),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _recDiag ? null : _recordDiag,
+            icon: Icon(_recDiag ? LucideIcons.loaderCircle : LucideIcons.fileAudio2,
+                size: 15),
+            label: Text(_recDiag ? 'Grabando 6s…' : 'Grabar diagnóstico (6s)'),
+          ),
+          Text(
+              'Graba tu micro (crudo + procesado) 6s en el modo actual → '
+              'Downloads\\chatpapol-toolchain\\diag-raw.wav / diag-out.wav.',
+              style: TextStyle(color: Pal.faint, fontSize: 11)),
           const SizedBox(height: 20),
           Text('PROCESADO DE VOZ', style: _label),
           const SizedBox(height: 8),
