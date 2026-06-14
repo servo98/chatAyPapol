@@ -99,18 +99,14 @@ class WebrtcApm {
   /// en el primer test (riesgo bloqueante #1 del blueprint).
   static Future<void> setUserEq(
     String? trackId,
-    double bassDb,
-    double midDb,
-    double trebleDb,
+    List<double> gains, // ganancia dB por banda (8)
     double gain,
   ) async {
     if (trackId == null || trackId.isEmpty) return; // sin pista → no-op
     try {
       await _ch.invokeMethod('setUserEq', {
         'trackId': trackId,
-        'bassDb': bassDb,
-        'midDb': midDb,
-        'trebleDb': trebleDb,
+        'gains': gains,
         'gain': gain,
       });
     } catch (_) {/* build sin soporte */}

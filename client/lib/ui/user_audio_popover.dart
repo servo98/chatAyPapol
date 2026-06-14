@@ -371,38 +371,23 @@ class _UserAudioPopoverState extends State<_UserAudioPopover> {
         Text('ECUALIZADOR',
             style: TextStyle(fontSize: 10, letterSpacing: 0.16, color: Pal.faint)),
         const SizedBox(height: 9),
-        // Curva EQ SVG
-        _EqCurveWidget(bass: _eq.bass, mid: _eq.mid, treble: _eq.treble),
+        // Curva EQ
+        _EqCurveWidget(gains: _eq.gains),
         const SizedBox(height: 12),
-        // 3 faders verticales
+        // 8 faders verticales (uno por banda de kEqFreqs)
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: _EqBand(
-                  label: 'GRAVES',
-                  value: _eq.bass,
-                  onChanged: (v) => _applyEq(_eq.copyWith(bass: v, clearPreset: true)),
-                  onChangeEnd: (_) => _flushEq(),
+              for (var i = 0; i < kEqBands; i++)
+                Expanded(
+                  child: _EqBand(
+                    label: kEqFreqLabels[i],
+                    value: _eq.band(i),
+                    onChanged: (v) => _applyEq(_eq.withBand(i, v)),
+                    onChangeEnd: (_) => _flushEq(),
+                  ),
                 ),
-              ),
-              Expanded(
-                child: _EqBand(
-                  label: 'MEDIOS',
-                  value: _eq.mid,
-                  onChanged: (v) => _applyEq(_eq.copyWith(mid: v, clearPreset: true)),
-                  onChangeEnd: (_) => _flushEq(),
-                ),
-              ),
-              Expanded(
-                child: _EqBand(
-                  label: 'AGUDOS',
-                  value: _eq.treble,
-                  onChanged: (v) => _applyEq(_eq.copyWith(treble: v, clearPreset: true)),
-                  onChangeEnd: (_) => _flushEq(),
-                ),
-              ),
             ],
           ),
         ),
@@ -550,13 +535,9 @@ class _VolTrackShape extends RoundedRectSliderTrackShape {
 // ─── _EqCurveWidget — mini curva del EQ ──────────────────────────────────────
 
 class _EqCurveWidget extends StatelessWidget {
-  final double bass, mid, treble; // −12..+12
+  final List<double> gains; // ganancia dB por banda
 
-  const _EqCurveWidget({
-    required this.bass,
-    required this.mid,
-    required this.treble,
-  });
+  const _EqCurveWidget({required this.gains});
 
   @override
   Widget build(BuildContext context) {
@@ -585,7 +566,7 @@ class _EqCurveWidget extends StatelessWidget {
         // Curva SVG
         Positioned.fill(
           child: CustomPaint(
-            painter: _EqCurvePainter(bass: bass, mid: mid, treble: treble),
+            painter: _EqCurvePainter(gains: gains),
           ),
         ),
       ]),
@@ -594,13 +575,9 @@ class _EqCurveWidget extends StatelessWidget {
 }
 
 class _EqCurvePainter extends CustomPainter {
-  final double bass, mid, treble;
+  final List<double> gains;
 
-  const _EqCurvePainter({
-    required this.bass,
-    required this.mid,
-    required this.treble,
-  });
+  const _EqCurvePainter({required this.gains});
 
   static double _dbToY(double db, double h) {
     const pad = 7.0;
@@ -614,18 +591,17 @@ class _EqCurvePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const N = 48;
-    final bands = [bass, mid, treble];
+    const N = 96;
+    final n = gains.length;
+    if (n < 2) return;
     final pts = <Offset>[];
 
     for (int i = 0; i <= N; i++) {
-      final x = i / N;
-      double db;
-      if (x <= 0.5) {
-        db = _cosInterp(bands[0], bands[1], x / 0.5);
-      } else {
-        db = _cosInterp(bands[1], bands[2], (x - 0.5) / 0.5);
-      }
+      final x = i / N; // 0..1
+      final fpos = x * (n - 1); // posición en espacio de banda
+      final lo = fpos.floor().clamp(0, n - 1);
+      final hi = (lo + 1).clamp(0, n - 1);
+      final db = _cosInterp(gains[lo], gains[hi], fpos - lo);
       pts.add(Offset(x * size.width, _dbToY(db, size.height)));
     }
 
@@ -671,8 +647,13 @@ class _EqCurvePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_EqCurvePainter old) =>
-      old.bass != bass || old.mid != mid || old.treble != treble;
+  bool shouldRepaint(_EqCurvePainter old) {
+    if (old.gains.length != gains.length) return true;
+    for (var i = 0; i < gains.length; i++) {
+      if (old.gains[i] != gains[i]) return true;
+    }
+    return false;
+  }
 }
 
 // ─── _EqBand — fader vertical individual ────────────────────────────────────

@@ -300,7 +300,7 @@ class VoiceManager extends ChangeNotifier {
       } else {
         // No-plano → instalar/actualizar sink (nativo hace AddSink + SetVolume(0)
         // la primera vez; en llamadas sucesivas solo actualiza los parámetros).
-        await WebrtcApm.setUserEq(trackId, eq.bass, eq.mid, eq.treble, gain);
+        await WebrtcApm.setUserEq(trackId, eq.gains, gain);
       }
     }
   }
@@ -610,8 +610,7 @@ class VoiceManager extends ChangeNotifier {
         pub.source == TrackSource.microphone &&
         !userEq(identity).isFlat) {
       final eq = userEq(identity);
-      WebrtcApm.setUserEq(
-          t.mediaStreamTrack.id, eq.bass, eq.mid, eq.treble, gain);
+      WebrtcApm.setUserEq(t.mediaStreamTrack.id, eq.gains, gain);
       return;
     }
 

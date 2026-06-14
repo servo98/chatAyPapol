@@ -770,6 +770,73 @@ class _VoicePanelState extends State<_VoicePanel> {
                 style: TextStyle(fontSize: 11, color: Pal.faint)),
             onChanged: (v) => voice.setFullband48k(v),
           ),
+          const SizedBox(height: 14),
+          Text('SUPRESIÓN DE RUIDO (modo 48 kHz)', style: _label),
+          const SizedBox(height: 4),
+          Text(
+              'Supresor espectral propio (Wiener+MCRA): limpia el ruido MIENTRAS '
+              'hablas, sin agachar la voz. Aplica al micro fullband 48 kHz.',
+              style: TextStyle(fontSize: 11, color: Pal.faint)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              for (final o in const <(int, String)>[
+                (0, 'Off'),
+                (1, 'Estándar'),
+                (2, 'Fuerte')
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GestureDetector(
+                    onTap: () => setState(() => voice.setNsLevel(o.$1)),
+                    child: Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: voice.nsLevel == o.$1
+                            ? Pal.accentDim.withValues(alpha: .15)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(
+                            color: voice.nsLevel == o.$1
+                                ? Pal.accent
+                                : Pal.borderDefault),
+                      ),
+                      child: Text(o.$2,
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              color: voice.nsLevel == o.$1
+                                  ? Pal.accent
+                                  : Pal.muted,
+                              fontWeight: voice.nsLevel == o.$1
+                                  ? FontWeight.w700
+                                  : FontWeight.w500)),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text('VOLUMEN DE ENTRADA (boost del micro)', style: _label),
+          Row(children: [
+            Icon(LucideIcons.mic, size: 18, color: Pal.muted),
+            Expanded(
+              child: Slider(
+                value: voice.inputGain.clamp(0.5, 3.0),
+                min: 0.5,
+                max: 3.0,
+                divisions: 25,
+                label: '${(voice.inputGain * 100).round()}%',
+                onChanged: (v) => setState(() => voice.setInputGain(v)),
+              ),
+            ),
+            SizedBox(
+              width: 44,
+              child: Text('${(voice.inputGain * 100).round()}%',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 12, color: Pal.muted)),
+            ),
+          ]),
           const SizedBox(height: 12),
           Text('VOLUMEN DE SALIDA', style: _label),
           Row(children: [

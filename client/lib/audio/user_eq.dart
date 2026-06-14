@@ -1,72 +1,85 @@
-/// Ajuste de EQ por usuario: graves/medios/agudos + preset.
+/// EQ por usuario: 8 bandas de ganancia + preset.
 /// Solo el dueño lo oye; SOLO afecta al audio de un participante concreto.
 /// Cuando [isFlat] el nativo NO instala ningún sink (playout WebRTC intacto).
+
+/// Frecuencias fijas (Hz) de las 8 bandas. COINCIDEN con kEqFreqs[] del nativo
+/// (per_user_eq.cc). El usuario solo ajusta la ganancia dB de cada una.
+const kEqFreqs = <double>[60, 120, 250, 500, 1000, 2400, 6000, 12000];
+const kEqBands = 8;
+
+/// Etiquetas cortas para la UI (mismo orden que kEqFreqs).
+const kEqFreqLabels = <String>['60', '120', '250', '500', '1k', '2.4k', '6k', '12k'];
+
+const _kFlat = <double>[0, 0, 0, 0, 0, 0, 0, 0];
+
 class UserEqSettings {
-  final double bass;    // -12..+12 dB
-  final double mid;     // -12..+12 dB
-  final double treble;  // -12..+12 dB
-  final String? preset; // 'plano'|'voz'|'calido'|'radio'|null
+  /// Ganancia por banda en dB (-12..+12). Longitud = [kEqBands].
+  final List<double> gains;
+  final String? preset;
 
-  const UserEqSettings({
-    this.bass = 0,
-    this.mid = 0,
-    this.treble = 0,
-    this.preset,
-  });
+  const UserEqSettings({this.gains = _kFlat, this.preset});
 
-  /// true cuando la curva es plana (sin EQ activo). Umbral de 0.1 dB para
-  /// absorber imprecisiones de serialización JSON.
-  bool get isFlat =>
-      bass.abs() < 0.1 && mid.abs() < 0.1 && treble.abs() < 0.1;
+  /// true cuando todas las bandas están ~planas (sin EQ activo).
+  bool get isFlat => gains.every((g) => g.abs() < 0.1);
+
+  /// Ganancia de la banda [i] (0 si fuera de rango).
+  double band(int i) => (i >= 0 && i < gains.length) ? gains[i] : 0.0;
+
+  /// Copia con la banda [i] = [db] (editar a mano borra el preset).
+  UserEqSettings withBand(int i, double db) {
+    final g = List<double>.filled(kEqBands, 0.0);
+    for (var k = 0; k < kEqBands; k++) {
+      g[k] = band(k);
+    }
+    g[i] = db.clamp(-12.0, 12.0);
+    return UserEqSettings(gains: g);
+  }
 
   Map<String, dynamic> toJson() => {
-        'b': bass,
-        'm': mid,
-        't': treble,
+        'v': 2,
+        'g': gains,
         if (preset != null) 'p': preset,
       };
 
-  factory UserEqSettings.fromJson(Map<dynamic, dynamic> j) => UserEqSettings(
-        bass: (j['b'] as num?)?.toDouble() ?? 0,
-        mid: (j['m'] as num?)?.toDouble() ?? 0,
-        treble: (j['t'] as num?)?.toDouble() ?? 0,
-        preset: j['p'] as String?,
-      );
-
-  UserEqSettings copyWith({
-    double? bass,
-    double? mid,
-    double? treble,
-    String? preset,
-    bool clearPreset = false,
-  }) =>
-      UserEqSettings(
-        bass: bass ?? this.bass,
-        mid: mid ?? this.mid,
-        treble: treble ?? this.treble,
-        preset: clearPreset ? null : (preset ?? this.preset),
-      );
+  /// v2 = lista de ganancias. v1 (viejo) = {b,m,t} de 3 bandas → mapea a las
+  /// bandas más cercanas (250/1k/6k = índices 2/4/6).
+  factory UserEqSettings.fromJson(Map<dynamic, dynamic> j) {
+    if (j['g'] is List) {
+      final raw = (j['g'] as List).map((e) => (e as num).toDouble()).toList();
+      final g = List<double>.filled(kEqBands, 0.0);
+      for (var i = 0; i < kEqBands && i < raw.length; i++) {
+        g[i] = raw[i];
+      }
+      return UserEqSettings(gains: g, preset: j['p'] as String?);
+    }
+    final g = List<double>.filled(kEqBands, 0.0);
+    g[2] = (j['b'] as num?)?.toDouble() ?? 0; // graves → 250 Hz
+    g[4] = (j['m'] as num?)?.toDouble() ?? 0; // medios → 1 kHz
+    g[6] = (j['t'] as num?)?.toDouble() ?? 0; // agudos → 6 kHz
+    return UserEqSettings(gains: g, preset: j['p'] as String?);
+  }
 
   @override
-  String toString() =>
-      'UserEqSettings(bass=$bass, mid=$mid, treble=$treble, preset=$preset)';
+  String toString() => 'UserEqSettings(gains=$gains, preset=$preset)';
 }
 
-/// Presets listos para usar.
-///
-/// "Plano" y "Voz clara" vienen del mockup HTML (valores confirmados).
-/// "Cálido" y "Radio" son propuesta del blueprint — CONFIRMAR DE OÍDO.
+/// Presets (ganancias dB por banda, 60→12k). "Voz clara" y "Plano" confirmados;
+/// el resto son propuesta — afinar de oído.
 const kEqPresets = <String, UserEqSettings>{
-  'plano': UserEqSettings(bass: 0, mid: 0, treble: 0, preset: 'plano'),
-  'voz': UserEqSettings(bass: -3, mid: 1, treble: 5, preset: 'voz'),
-  'calido': UserEqSettings(bass: 4, mid: 1, treble: -2, preset: 'calido'), // INCIERTO: confirmar de oído
-  'radio': UserEqSettings(bass: 2, mid: 3, treble: 2, preset: 'radio'),    // INCIERTO: confirmar de oído
+  'plano': UserEqSettings(gains: [0, 0, 0, 0, 0, 0, 0, 0], preset: 'plano'),
+  'voz': UserEqSettings(gains: [-2, -2, -1, 0, 2, 4, 3, 1], preset: 'voz'),
+  'calido': UserEqSettings(gains: [3, 2, 1, 0, -1, -2, -2, -1], preset: 'calido'),
+  'radio': UserEqSettings(gains: [-6, -3, 0, 3, 4, 2, -4, -8], preset: 'radio'),
+  'aire': UserEqSettings(gains: [0, 0, 0, 0, 1, 2, 4, 5], preset: 'aire'),
+  'grave': UserEqSettings(gains: [5, 4, 2, 0, 0, 0, -1, -1], preset: 'grave'),
 };
 
-/// Etiquetas para mostrar en la UI (mismo orden que kEqPresets).
+/// Etiquetas para la UI (mismo orden que kEqPresets).
 const kEqPresetLabels = <String, String>{
   'plano': 'Plano',
   'voz': 'Voz clara',
   'calido': 'Cálido',
   'radio': 'Radio',
+  'aire': 'Aire',
+  'grave': 'Grave',
 };
