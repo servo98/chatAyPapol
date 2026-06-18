@@ -25,9 +25,15 @@ VideoParameters _shareParamsFor(int fps) => switch (fps) {
 /// el soundboard NO usa WebRTC: cada cliente reproduce el archivo localmente.
 class VoiceManager extends ChangeNotifier {
   final AppStore store;
+  /// Se completa cuando las prefs persistidas (NS/AEC/AGC, dispositivo,
+  /// volúmenes…) están cargadas. join() lo espera ANTES de publicar el micro:
+  /// si no, un join al arranque (antes de que SharedPreferences resuelva)
+  /// publicaría con los defaults (true/true/true) y los toggles guardados "no
+  /// se aplicarían desde el principio".
+  late final Future<void> _prefsReady;
   VoiceManager(this.store) {
     store.onSoundPlay = _playSound;
-    _loadPrefs();
+    _prefsReady = _loadPrefs();
   }
 
   Room? room;
@@ -208,12 +214,26 @@ class VoiceManager extends ChangeNotifier {
     connecting = true;
     notifyListeners();
     try {
+      // las opciones de captura (NS/AEC/AGC, micDeviceId) deben reflejar lo
+      // guardado YA en el primer publish, no los defaults: espera a las prefs.
+      await _prefsReady;
       final t = await store.api.post('/api/channels/$chId/voice-token');
       final r = Room(
         roomOptions: RoomOptions(
           adaptiveStream: true,
           dynacast: true,
           defaultAudioCaptureOptions: micOptions,
+          // Bitrate de PUBLICACIÓN del micro. Sin esto la voz va al default de
+          // livekit (presetMusic, 48k) y suena más "apagada". 64k = el default
+          // por canal de voz de Discord (nuestra vara de medir). Mono a
+          // propósito: el estéreo duplica bitrate/latencia sin mejorar la voz.
+          // RED = paquetes Opus redundantes (lo que más sube la nitidez ante
+          // pérdida); DTX corta el envío en silencio.
+          defaultAudioPublishOptions: const AudioPublishOptions(
+            encoding: AudioEncoding(maxBitrate: 64000),
+            dtx: true,
+            red: true,
+          ),
           // captureScreenAudio va por llamada en startShare (opt-in): el
           // loopback de audio en Windows puede crashear el capturador nativo
           // maxFrameRate explícito SIEMPRE: si queda null, livekit manda
