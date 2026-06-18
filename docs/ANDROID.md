@@ -9,6 +9,12 @@ pendiente. Para compilar ver [BUILD.md](BUILD.md).
   → `applicationId`/namespace **`dev.papol.chatpapol`** (igual que el bundle id de
   escritorio).
 - **`compileSdk 36`** (lo exigen `flutter_webrtc` fork + `livekit_client`).
+- **AGP 8.13.2** en `android/settings.gradle.kts` (no la 9.0.1 que pone
+  `flutter create` con Flutter 3.44): `file_picker` 11.0.2 no aplica su plugin de
+  Kotlin con AGP ≥ 9 y rompe el build (`cannot find symbol FilePickerPlugin`). Si
+  subes Flutter y vuelve a poner AGP 9, vuelve a fijar 8.13.x.
+- El build nativo de `jni` (dep transitiva de livekit) necesita **CMake 3.22.1 +
+  NDK**; `flutter build` los instala solo si el SDK tiene `cmdline-tools`.
 - Icono de launcher generado desde `assets/icon.png` con `flutter_launcher_icons`
   (adaptativo, fondo `#17131f`). Regenerar: `dart run flutter_launcher_icons`.
 - Permisos (`AndroidManifest.xml`): `INTERNET`/red, `RECORD_AUDIO` +
