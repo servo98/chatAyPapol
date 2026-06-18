@@ -263,8 +263,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: 3f54f5fda8b8db067ea0776549227f4ff9f5c8ee
-      resolved-ref: 3f54f5fda8b8db067ea0776549227f4ff9f5c8ee
+      ref: "3f54f5fda8b8db067ea0776549227f4ff9f5c8ee"
+      resolved-ref: "3f54f5fda8b8db067ea0776549227f4ff9f5c8ee"
       url: "https://github.com/servo98/flutter-webrtc.git"
     source: git
     version: "1.4.1"
