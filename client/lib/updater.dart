@@ -3,6 +3,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'api.dart';
+import 'config.dart';
 import 'version.dart';
 
 class UpdateInfo {
@@ -27,6 +28,7 @@ bool _newer(String a, String b) {
 class Updater {
   /// Devuelve info si hay una versión más nueva publicada en el server.
   static Future<UpdateInfo?> check(Api api) async {
+    if (isMobile) return null; // en móvil la actualización va por la tienda
     final platform = Platform.isWindows
         ? 'windows'
         : Platform.isLinux

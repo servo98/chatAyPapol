@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+import '../config.dart';
 import '../md.dart';
 import '../models.dart';
 import '../perms.dart';
@@ -244,7 +245,8 @@ class _ChatViewState extends State<ChatView> {
         if (canSend) _inputBar(ch) else _readOnlyBar(),
       ],
     );
-    if (!store.canI(P.attachFiles, ch.id)) return body;
+    // en móvil no hay drag&drop del SO: el botón + (file_picker) ya cubre adjuntar
+    if (isMobile || !store.canI(P.attachFiles, ch.id)) return body;
     // arrastrar archivos a la ventana = adjuntarlos (como el botón +)
     return DropTarget(
       onDragEntered: (_) => setState(() => dragging = true),

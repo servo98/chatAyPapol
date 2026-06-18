@@ -5,6 +5,7 @@ import 'package:livekit_client/livekit_client.dart'
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../config.dart';
 import '../theme.dart';
 import '../voice.dart';
 
@@ -76,20 +77,33 @@ class _ScreenShareFullscreenState extends State<ScreenShareFullscreen> {
   @override
   void initState() {
     super.initState();
-    // ocultar la titlebar y ocupar toda la ventana
-    windowManager.setFullScreen(true);
+    // escritorio: ocultar la titlebar y ocupar toda la ventana.
+    // móvil: modo inmersivo (oculta barras de estado/navegación del sistema).
+    if (isDesktop) {
+      windowManager.setFullScreen(true);
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    }
   }
 
   Future<void> _exit() async {
-    // restaurar la ventana ANTES de volver para que no quede en fullscreen
-    await windowManager.setFullScreen(false);
+    // restaurar la ventana/UI del sistema ANTES de volver
+    if (isDesktop) {
+      await windowManager.setFullScreen(false);
+    } else {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
     if (mounted) Navigator.of(context).pop();
   }
 
   @override
   void dispose() {
     // por si se sale por gesto de sistema sin pasar por _exit
-    windowManager.setFullScreen(false);
+    if (isDesktop) {
+      windowManager.setFullScreen(false);
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
     super.dispose();
   }
 

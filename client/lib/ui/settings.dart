@@ -7,6 +7,7 @@ import 'package:image/image.dart' as img;
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
+import '../config.dart';
 import '../models.dart';
 import '../perms.dart';
 import '../sfx.dart';
@@ -1516,6 +1517,10 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
   @override
   void initState() {
     super.initState();
+    if (isMobile) {
+      checked = true;
+      return; // sin auto-updater en móvil (actualización por la tienda)
+    }
     Updater.check(widget.store.api).then((u) {
       if (mounted) {
         setState(() {

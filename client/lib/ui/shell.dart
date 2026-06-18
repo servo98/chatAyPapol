@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../config.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../updater.dart';
@@ -43,6 +44,7 @@ class _ShellState extends State<Shell> {
   }
 
   Future<void> _checkUpdates() async {
+    if (!isDesktop) return; // el auto-updater es solo de escritorio
     update = await Updater.check(widget.store.api);
     if (mounted) setState(() {});
     // re-chequea cada 6 horas

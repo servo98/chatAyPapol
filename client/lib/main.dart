@@ -25,8 +25,6 @@ import 'ui/shell.dart';
 import 'ui/titlebar.dart';
 import 'voice.dart';
 
-bool get _desktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
-
 // Diagnóstico aislado de screenshare + dispositivos. Escribe paso a paso a un
 // archivo (si la app CRASHEA en un paso nativo, falta esa línea → ahí murió).
 Future<void> _diag() async {
@@ -431,7 +429,7 @@ Future<void> _main(List<String> args) async {
     await Bootstrap.uninstall();
     return;
   }
-  if (_desktop) {
+  if (isDesktop) {
     // tras una actualización quedan los binarios viejos como *.old (el swap
     // in-process los aparta porque estaban en uso): bórralos sin bloquear
     unawaited(Bootstrap.cleanupOldFiles());
@@ -500,7 +498,7 @@ Future<void> _main(List<String> args) async {
     store.selectChannel(chId);
   };
   // Foco de ventana: solo notificamos por toast cuando la app NO está enfocada.
-  if (_desktop) {
+  if (isDesktop) {
     try {
       store.setWindowFocused(await windowManager.isFocused());
     } catch (_) {}
@@ -553,7 +551,7 @@ class _FocusListener extends WindowListener {
 /// con normalidad en cada rebuild.
 Widget _withTitleBar(Widget? child) {
   final content = child ?? const SizedBox.shrink();
-  if (!_desktop) return CrashOverlay(child: content);
+  if (!isDesktop) return CrashOverlay(child: content);
   return CrashOverlay(
     child: Column(children: [
       SizedBox(

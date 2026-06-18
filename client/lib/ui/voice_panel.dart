@@ -10,6 +10,7 @@ import 'package:livekit_client/livekit_client.dart'
         VideoViewFit,
         LocalVideoTrack,
         RemoteVideoTrack;
+import '../config.dart';
 import '../ambience.dart';
 import '../audio/voice_fx.dart';
 import '../models.dart' as m;
@@ -386,7 +387,7 @@ class VoicePanel extends StatelessWidget {
                   voice.toggleDeafen,
                   danger: voice.deafened,
                 ),
-                if (store.canI(P.stream, channel.id))
+                if (isDesktop && store.canI(P.stream, channel.id))
                   _vctl(
                     voice.sharing
                         ? LucideIcons.screenShareOff
