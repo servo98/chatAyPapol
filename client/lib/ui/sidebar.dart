@@ -12,7 +12,11 @@ import 'widgets.dart';
 class Sidebar extends StatefulWidget {
   final AppStore store;
   final VoiceManager voice;
-  const Sidebar({super.key, required this.store, required this.voice});
+  /// Ancho fijo en escritorio; en móvil se pasa double.infinity para llenar
+  /// el Drawer.
+  final double width;
+  const Sidebar(
+      {super.key, required this.store, required this.voice, this.width = 248});
   @override
   State<Sidebar> createState() => _SidebarState();
 }
@@ -30,7 +34,7 @@ class _SidebarState extends State<Sidebar> {
       (byCat[c.categoryId] ??= []).add(c);
     }
     return Container(
-      width: 248,
+      width: widget.width,
       color: Pal.bg1,
       child: Column(
         children: [

@@ -7,7 +7,9 @@ import 'widgets.dart';
 
 class MemberList extends StatelessWidget {
   final AppStore store;
-  const MemberList({super.key, required this.store});
+  /// Ancho fijo en escritorio; en móvil double.infinity para llenar el Drawer.
+  final double width;
+  const MemberList({super.key, required this.store, this.width = 224});
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +18,7 @@ class MemberList extends StatelessWidget {
     final onlineUsers = all.where((u) => store.online.contains(u.id)).toList();
     final offline = all.where((u) => !store.online.contains(u.id)).toList();
     return Container(
-      width: 224,
+      width: width,
       color: Pal.bg1,
       child: ListView(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
