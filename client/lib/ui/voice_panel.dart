@@ -10,6 +10,7 @@ import 'package:livekit_client/livekit_client.dart'
         VideoViewFit,
         LocalVideoTrack,
         RemoteVideoTrack;
+import '../config.dart';
 import '../ambience.dart';
 import '../audio/voice_fx.dart';
 import '../models.dart' as m;
@@ -76,21 +77,30 @@ class VoicePanel extends StatelessWidget {
         child: Row(children: [
           const _EqBars(height: 12),
           const SizedBox(width: 9),
-          Text(channel.name,
-              style: TextStyle(
-                  fontWeight: FontWeight.w700, fontSize: 16, color: Pal.text)),
+          Flexible(
+            child: Text(channel.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontWeight: FontWeight.w700, fontSize: 16, color: Pal.text)),
+          ),
           const SizedBox(width: 13),
           Container(width: 1, height: 16, color: Pal.borderDefault),
           const SizedBox(width: 13),
-          Text.rich(TextSpan(children: [
-            const TextSpan(text: '/ '),
-            TextSpan(
-                text: '$connected',
-                style: TextStyle(
-                    color: Pal.accent, fontWeight: FontWeight.w700)),
-            const TextSpan(text: ' conectados · baja latencia'),
-          ]),
-              style: TextStyle(fontSize: 13, color: Pal.faint)),
+          Flexible(
+            child: Text.rich(
+                TextSpan(children: [
+                  const TextSpan(text: '/ '),
+                  TextSpan(
+                      text: '$connected',
+                      style: TextStyle(
+                          color: Pal.accent, fontWeight: FontWeight.w700)),
+                  const TextSpan(text: ' conectados · baja latencia'),
+                ]),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 13, color: Pal.faint)),
+          ),
           if (joinedHere) ...[
             const SizedBox(width: 14),
             Flexible(
@@ -370,9 +380,14 @@ class VoicePanel extends StatelessWidget {
         color: Pal.bg0,
         border: Border(top: BorderSide(color: Pal.borderSubtle)),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: joinedHere
+      child: LayoutBuilder(
+        builder: (_, cons) => SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: cons.maxWidth),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: joinedHere
             ? [
                 _vctl(
                   voice.muted ? LucideIcons.micOff : LucideIcons.mic,
@@ -386,7 +401,7 @@ class VoicePanel extends StatelessWidget {
                   voice.toggleDeafen,
                   danger: voice.deafened,
                 ),
-                if (store.canI(P.stream, channel.id))
+                if (isDesktop && store.canI(P.stream, channel.id))
                   _vctl(
                     voice.sharing
                         ? LucideIcons.screenShareOff
@@ -446,7 +461,10 @@ class VoicePanel extends StatelessWidget {
                   ),
                 ),
               ],
-      ),
+              ),
+            ),
+          ),
+        ),
     );
   }
 

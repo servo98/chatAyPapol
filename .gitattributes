@@ -1,0 +1,36 @@
+# Normalize line endings: store everything as LF in the repo, regardless of the
+# OS used to edit. This kills the CRLF<->LF churn that otherwise makes every file
+# edited on Windows show up as "modified". Files are checked out with LF too.
+* text=auto eol=lf
+
+# Windows-only scripts must keep CRLF to run correctly.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# 7-Zip SFX installer config is consumed by the Windows installer build
+# (client/scripts/publish-windows.sh) and conventionally uses CRLF.
+client/packaging/sfx-config.txt text eol=crlf
+
+# Treat these as binary (never normalize / diff as text).
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.icns   binary
+*.webp   binary
+*.ttf    binary
+*.otf    binary
+*.woff   binary
+*.woff2  binary
+*.jar    binary
+*.keystore binary
+*.jks    binary
+*.pfx    binary
+*.so     binary
+*.dll    binary
+*.dylib  binary
+*.zip    binary
+*.7z     binary
+*.AppImage binary

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:window_manager/window_manager.dart';
@@ -24,8 +25,6 @@ import 'ui/login.dart';
 import 'ui/shell.dart';
 import 'ui/titlebar.dart';
 import 'voice.dart';
-
-bool get _desktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
 // Diagnóstico aislado de screenshare + dispositivos. Escribe paso a paso a un
 // archivo (si la app CRASHEA en un paso nativo, falta esa línea → ahí murió).
@@ -399,6 +398,16 @@ Future<void> main(List<String> args) async {
 
 Future<void> _main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Móvil: barras de estado/navegación transparentes con iconos claros, acorde
+  // al tema oscuro (en escritorio no aplica).
+  if (isMobile) {
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Color(0xFF17131F),
+      systemNavigationBarIconBrightness: Brightness.light,
+    ));
+  }
   // Lo más temprano posible: engancha debugPrint + errores globales y abre el
   // archivo de log (rota la sesión anterior y detecta si crasheó).
   await CrashLog.instance.init();
@@ -431,7 +440,7 @@ Future<void> _main(List<String> args) async {
     await Bootstrap.uninstall();
     return;
   }
-  if (_desktop) {
+  if (isDesktop) {
     // tras una actualización quedan los binarios viejos como *.old (el swap
     // in-process los aparta porque estaban en uso): bórralos sin bloquear
     unawaited(Bootstrap.cleanupOldFiles());
@@ -500,7 +509,7 @@ Future<void> _main(List<String> args) async {
     store.selectChannel(chId);
   };
   // Foco de ventana: solo notificamos por toast cuando la app NO está enfocada.
-  if (_desktop) {
+  if (isDesktop) {
     try {
       store.setWindowFocused(await windowManager.isFocused());
     } catch (_) {}
@@ -553,7 +562,7 @@ class _FocusListener extends WindowListener {
 /// con normalidad en cada rebuild.
 Widget _withTitleBar(Widget? child) {
   final content = child ?? const SizedBox.shrink();
-  if (!_desktop) return CrashOverlay(child: content);
+  if (!isDesktop) return CrashOverlay(child: content);
   return CrashOverlay(
     child: Column(children: [
       SizedBox(

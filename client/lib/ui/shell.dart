@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../config.dart';
+import '../models.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../updater.dart';
@@ -24,6 +26,8 @@ class _ShellState extends State<Shell> {
   bool showMembers = true;
   UpdateInfo? update;
   bool updateDismissed = false;
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  String? _lastChId; // para cerrar el Drawer al cambiar de canal en móvil
 
   @override
   void initState() {
@@ -43,6 +47,7 @@ class _ShellState extends State<Shell> {
   }
 
   Future<void> _checkUpdates() async {
+    if (!isDesktop) return; // el auto-updater es solo de escritorio
     update = await Updater.check(widget.store.api);
     if (mounted) setState(() {});
     // re-chequea cada 6 horas
@@ -55,6 +60,13 @@ class _ShellState extends State<Shell> {
   Widget build(BuildContext context) {
     final store = widget.store;
     final ch = store.selectedChannel;
+    // Ventana estrecha / móvil → navegación por Drawer; ancho → 3 columnas.
+    final phone = MediaQuery.sizeOf(context).width < 600;
+    return phone ? _mobileLayout(store, ch) : _desktopLayout(store, ch);
+  }
+
+  // ─────────────────────── escritorio: 3 columnas ───────────────────────
+  Widget _desktopLayout(AppStore store, Channel? ch) {
     return Scaffold(
       body: Column(
         children: [
@@ -90,6 +102,135 @@ class _ShellState extends State<Shell> {
           ),
         ],
       ),
+    );
+  }
+
+  // ───────────────────────── móvil: Drawer nav ─────────────────────────
+  Widget _mobileLayout(AppStore store, Channel? ch) {
+    final isVoice = ch?.isVoice == true;
+    // Elegir un canal en el Drawer notifica al store y reconstruye: cerramos
+    // el Drawer para mostrar el canal a pantalla completa.
+    if (_lastChId != ch?.id) {
+      _lastChId = ch?.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scaffoldKey.currentState?.closeDrawer();
+      });
+    }
+    return Scaffold(
+      key: _scaffoldKey,
+      appBar: AppBar(
+        titleSpacing: 4,
+        title: Row(children: [
+          Icon(isVoice ? LucideIcons.volume2 : LucideIcons.hash,
+              size: 17, color: Pal.muted),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(ch?.name ?? 'ChatPapol',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          ),
+        ]),
+        actions: [
+          if (ch != null && !isVoice)
+            IconButton(
+              icon: const Icon(LucideIcons.users, size: 20),
+              tooltip: 'Miembros',
+              onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
+            ),
+        ],
+      ),
+      drawer: Drawer(
+        width: 300,
+        backgroundColor: Pal.bg1,
+        child: SafeArea(
+          child:
+              Sidebar(store: store, voice: widget.voice, width: double.infinity),
+        ),
+      ),
+      endDrawer: Drawer(
+        width: 280,
+        backgroundColor: Pal.bg1,
+        child:
+            SafeArea(child: MemberList(store: store, width: double.infinity)),
+      ),
+      body: SafeArea(
+        top: false,
+        child: Column(children: [
+          Expanded(
+            child: ch == null
+                ? _mobileEmpty()
+                : isVoice
+                    ? VoicePanel(store: store, voice: widget.voice, channel: ch)
+                    : PapolCanvas(child: ChatView(store: store)),
+          ),
+          if (widget.voice.connected && !isVoice) _miniVoiceBar(store),
+        ]),
+      ),
+    );
+  }
+
+  Widget _mobileEmpty() {
+    return Center(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(LucideIcons.hash, size: 44, color: Pal.faint),
+        const SizedBox(height: 12),
+        Text('Elige un canal',
+            style: TextStyle(
+                color: Pal.muted, fontSize: 15, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Text('Desliza desde el borde o toca ☰',
+            style: TextStyle(color: Pal.faint, fontSize: 12)),
+      ]),
+    );
+  }
+
+  /// Barra compacta cuando sigues conectado a voz pero estás viendo un canal de
+  /// texto: tap para volver al canal de voz; mute/ensordecer/colgar rápidos.
+  Widget _miniVoiceBar(AppStore store) {
+    final voice = widget.voice;
+    final vch = store.channels[voice.channelId];
+    return Material(
+      color: Pal.bg2,
+      child: InkWell(
+        onTap: () {
+          final id = voice.channelId;
+          if (id != null) store.selectChannel(id);
+        },
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+          child: Row(children: [
+            Icon(LucideIcons.volume2, size: 16, color: Pal.green),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(vch?.name ?? 'En voz',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Pal.green)),
+            ),
+            _miniBtn(voice.muted ? LucideIcons.micOff : LucideIcons.mic,
+                voice.muted ? Pal.red : Pal.muted, () => voice.toggleMute()),
+            _miniBtn(
+                voice.deafened ? LucideIcons.volumeX : LucideIcons.headphones,
+                voice.deafened ? Pal.red : Pal.muted,
+                () => voice.toggleDeafen()),
+            _miniBtn(LucideIcons.phoneOff, Pal.red, () => voice.leave()),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _miniBtn(IconData icon, Color color, VoidCallback onTap) {
+    return IconButton(
+      icon: Icon(icon, size: 19, color: color),
+      onPressed: onTap,
+      visualDensity: VisualDensity.compact,
+      splashRadius: 20,
     );
   }
 

@@ -42,6 +42,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // La tarjeta no debe exceder el ancho disponible (móvil/ventana estrecha).
+    final cardW = MediaQuery.sizeOf(context).width - 32;
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -53,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         child: Center(
           child: Container(
-            width: 400,
+            width: cardW < 400 ? cardW : 400,
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
               color: Pal.bg1,
@@ -159,7 +161,7 @@ class _LoginScreenState extends State<LoginScreen> {
         builder: (ctx, setSt) => AlertDialog(
           title: const Text('recuperar contraseña', style: TextStyle(fontSize: 17)),
           content: SizedBox(
-            width: 340,
+            width: (MediaQuery.sizeOf(ctx).width - 80).clamp(0.0, 340.0),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Text(
                   'sin emails: usa el código de tu app de autenticación (2FA).',

@@ -62,13 +62,19 @@ VideoParameters _shareParamsFor(int fps) => switch (fps) {
 /// el soundboard NO usa WebRTC: cada cliente reproduce el archivo localmente.
 class VoiceManager extends ChangeNotifier {
   final AppStore store;
+  /// Se completa cuando las prefs persistidas (NS/AEC/AGC, dispositivo,
+  /// volúmenes…) están cargadas. join() lo espera ANTES de publicar el micro:
+  /// si no, un join al arranque (antes de que SharedPreferences resuelva)
+  /// publicaría con los defaults (true/true/true) y los toggles guardados "no
+  /// se aplicarían desde el principio".
+  late final Future<void> _prefsReady;
   VoiceManager(this.store) {
     store.onSoundPlay = _playSound;
     store.onAmbienceChange = _onAmbienceChange;
     store.onReconnected = _reannounceVoice;
     // Empuja la cadena de efectos al procesador nativo cada vez que cambia.
     VoiceFxEngine.instance.addListener(_onVoiceFxChanged);
-    _loadPrefs();
+    _prefsReady = _loadPrefs();
   }
 
   // Debounce del push de la cadena de efectos al nativo (coalesce drags).
@@ -649,6 +655,9 @@ class VoiceManager extends ChangeNotifier {
     connecting = true;
     notifyListeners();
     try {
+      // las opciones de captura (NS/AEC/AGC, micDeviceId) deben reflejar lo
+      // guardado YA en el primer publish, no los defaults: espera a las prefs.
+      await _prefsReady;
       debugPrint('[voice] pidiendo voice-token');
       final t = await store.api.post('/api/channels/$chId/voice-token');
       final r = Room(
@@ -656,10 +665,11 @@ class VoiceManager extends ChangeNotifier {
           adaptiveStream: true,
           dynacast: true,
           defaultAudioCaptureOptions: micOptions,
-          // publicación del micro (96kbps, dtx/red ON): setMicrophoneEnabled no
-          // acepta publish options en 2.8.0, así que se gobierna desde aquí.
-          // El audio del screenshare NO usa este default (se publica a mano en
-          // startShare con opciones de alta fidelidad estéreo).
+          // publicación del micro (dtx/red ON): setMicrophoneEnabled no acepta
+          // publish options en 2.8.0, así que se gobierna desde aquí. El audio
+          // del screenshare NO usa este default (se publica a mano en startShare
+          // con opciones de alta fidelidad estéreo). Bitrate definido en
+          // _micPublishOptions (ver nota de 64k Discord-parity vs 96k).
           defaultAudioPublishOptions: _micPublishOptions,
           // captureScreenAudio va por llamada en startShare (opt-in): el
           // loopback de audio en Windows puede crashear el capturador nativo
