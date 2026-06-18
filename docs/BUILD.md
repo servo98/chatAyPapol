@@ -46,26 +46,37 @@ APK resultante: `client/build/app/outputs/flutter-apk/`. Detalle del target en
 [ANDROID.md](ANDROID.md).
 
 ### Requisitos del toolchain Android (¡importante!)
-`flutter_webrtc` + `livekit_client` obligan a **`compileSdk 36`**. Para compilar
-en local hace falta tener instalado:
-- **Android SDK Platform 36** (`platforms;android-36`) y build-tools recientes
-  (≥ 34). El SDK que trae un Android Studio viejo (plataformas ≤ 30) **no basta**:
-  instala lo que falte con el SDK Manager de Android Studio o con `sdkmanager`.
-- **JDK 17**.
-- No hace falta NDK (los plugins traen sus `.so` precompilados).
+`flutter_webrtc` + `livekit_client` obligan a **`compileSdk 36`**, y por eso
+`android/settings.gradle.kts` fija **AGP 8.13.2** (con AGP ≥ 9 `file_picker` 11 no
+compila — ver [ANDROID.md](ANDROID.md)). Para compilar en local hace falta:
+- **JDK 17** (Gradle 9.x lo exige; un JRE 8 NO sirve).
+- **Android SDK Platform 36** + build-tools (≥ 34) + **`cmdline-tools`**. Un SDK de
+  Android Studio viejo (plataformas ≤ 30, sin `cmdline-tools`) **no basta**; instala
+  lo que falte con `sdkmanager`.
+- **CMake 3.22.1 + NDK** para el build nativo de `jni` (dep transitiva de livekit);
+  `flutter build` los instala solo si el SDK tiene `cmdline-tools` y licencias aceptadas.
+- **Modo Desarrollador** de Windows (symlinks de plugins): `start ms-settings:developers`.
 
-> La CI (`release.yml`, job `android`) ya construye el APK con un toolchain
-> fresco; si compilar en local te bloquea por el SDK, usa la release de CI.
+> Verificado: APK debug construido e **instalado y lanzado en un Pixel 5 (Android 14)**.
+> La CI (`release.yml`, job `android`) compila con un toolchain fresco (instala
+> SDK 36 + cmake y acepta licencias), así que no depende de tu setup local.
+
+### Lanzar en un dispositivo
+```bash
+cd client
+flutter devices                       # confirma que ves el teléfono
+flutter run -d <id-del-dispositivo>   # build + install + launch + logs en vivo
+# o, con el APK ya construido:
+adb -s <id> install -r build/app/outputs/flutter-apk/app-debug.apk
+adb -s <id> shell am start -n dev.papol.chatpapol/.MainActivity
+```
 
 ### Notas WSL / Windows
-- Si editas en **WSL** pero tienes Flutter solo en **Windows**, invoca el Flutter
-  de Windows vía `cmd.exe` (los scripts `.sh` del SDK de Windows tienen CRLF y
-  fallan bajo bash):
+- Flutter está solo en **Windows** (`C:\src\flutter`); el de WSL falla (sus scripts
+  `.sh` tienen CRLF). Invócalo vía `cmd.exe`:
   ```bash
   cmd.exe /c "cd /d C:\ruta\al\client && C:\src\flutter\bin\flutter.bat <args>"
   ```
-- En Windows, compilar con plugins requiere **Modo Desarrollador** activado
-  (symlinks): `start ms-settings:developers`.
 
 ## Releases (CI)
 Empujar un tag `vX.Y.Z` (o cambiar `client/**` en `main`, que dispara
