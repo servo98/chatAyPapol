@@ -19,15 +19,18 @@ necesitan una invitación (créala desde la app o `POST /api/invites`).
 
 Prueba E2E del backend: `bun scripts/smoke-test.ts` (con `data/` limpio).
 
-## Cliente (Flutter, Windows/Linux)
+## Cliente (Flutter — Windows/Linux/macOS/Android)
 
 ```bash
 cd client
 flutter pub get
-flutter run -d windows     # o -d linux
+flutter run -d windows      # o -d linux / -d macos
+flutter build apk --debug   # Android (requiere Android SDK 36 + JDK 17)
 ```
 
 Empaquetado e instaladores con auto-update: ver `client/packaging/README.md`.
+Guías por plataforma y arquitectura en [`docs/`](docs/):
+[BUILD](docs/BUILD.md) · [ARCHITECTURE](docs/ARCHITECTURE.md) · [ANDROID](docs/ANDROID.md).
 
 ## Bots y webhooks
 
