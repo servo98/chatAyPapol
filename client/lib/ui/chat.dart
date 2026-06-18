@@ -3,6 +3,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import '../md.dart';
 import '../models.dart';
@@ -28,6 +29,20 @@ class _ChatViewState extends State<ChatView> {
   final pendingUploads = <Map<String, dynamic>>[];
   bool sending = false;
 
+  // Canal del último build + posición de scroll recordada POR canal: al volver a
+  // un canal recuperamos dónde estabas (no siempre arriba). La 1ª vez vamos al
+  // último mensaje; si llegan mensajes nuevos y ya estabas al fondo, te seguimos.
+  String? _lastChannelId;
+  final _scrollOffsets = <String, double>{}; // channelId → offset px
+  bool _restorePending = false; // reposicionar el canal recién abierto
+  bool _atBottom = true; // el usuario está pegado al fondo (para autoscroll)
+  int _lastMsgCount = 0; // nº de mensajes del último build (detecta nuevos)
+
+  // ── autocompletado de @menciones ──
+  bool _mentionOpen = false; // hay overlay de menciones abierto
+  int _mentionSel = 0; // índice resaltado en la lista
+  List<User> _mentionMatches = const [];
+
   AppStore get store => widget.store;
   Channel? get channel => store.selectedChannel;
 
@@ -35,8 +50,12 @@ class _ChatViewState extends State<ChatView> {
   void initState() {
     super.initState();
     scroll.addListener(() {
-      if (scroll.position.pixels <= 60 && channel != null) {
-        store.loadMessages(channel!.id, older: true);
+      if (!scroll.hasClients) return;
+      final ch = channel;
+      if (ch != null) _scrollOffsets[ch.id] = scroll.position.pixels;
+      _atBottom = scroll.position.pixels >= scroll.position.maxScrollExtent - 80;
+      if (scroll.position.pixels <= 60 && ch != null) {
+        store.loadMessages(ch.id, older: true);
       }
     });
   }
@@ -71,6 +90,8 @@ class _ChatViewState extends State<ChatView> {
         replyingTo = null;
         editing = null;
         pendingUploads.clear();
+        _mentionOpen = false;
+        _mentionMatches = const [];
       });
       _scrollToBottom();
     } catch (e) {
@@ -78,6 +99,64 @@ class _ChatViewState extends State<ChatView> {
     } finally {
       setState(() => sending = false);
     }
+  }
+
+  // ── @menciones: detección/cálculo/inserción ──
+
+  static final _mentionRe = RegExp(r'@([a-zA-Z0-9_.]*)$');
+
+  // recalcula matches según el token bajo el cursor; abre/cierra el overlay
+  void _updateMentions() {
+    final sel = input.selection;
+    if (!sel.isValid || !sel.isCollapsed) {
+      if (_mentionOpen) setState(() => _mentionOpen = false);
+      return;
+    }
+    final before = input.text.substring(0, sel.baseOffset);
+    final m = _mentionRe.firstMatch(before);
+    if (m == null) {
+      if (_mentionOpen) setState(() => _mentionOpen = false);
+      return;
+    }
+    final prefix = m.group(1)!.toLowerCase();
+    final matches = store.users.values
+        .where((u) => u.username.toLowerCase().startsWith(prefix))
+        .toList()
+      ..sort((a, b) {
+        final ao = store.online.contains(a.id) ? 0 : 1;
+        final bo = store.online.contains(b.id) ? 0 : 1;
+        if (ao != bo) return ao - bo;
+        return a.username.toLowerCase().compareTo(b.username.toLowerCase());
+      });
+    final top = matches.take(8).toList();
+    setState(() {
+      _mentionMatches = top;
+      _mentionOpen = top.isNotEmpty;
+      if (_mentionSel >= top.length) _mentionSel = 0;
+    });
+  }
+
+  // inserta el usuario resaltado reemplazando el token '@prefijo'
+  void _insertMention(User u) {
+    final sel = input.selection;
+    if (!sel.isValid) return;
+    final cursor = sel.baseOffset;
+    final before = input.text.substring(0, cursor);
+    final m = _mentionRe.firstMatch(before);
+    if (m == null) return;
+    final start = m.start;
+    final after = input.text.substring(cursor);
+    final inserted = '@${u.username} ';
+    final newText = input.text.substring(0, start) + inserted + after;
+    input.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: start + inserted.length),
+    );
+    setState(() {
+      _mentionOpen = false;
+      _mentionMatches = const [];
+      _mentionSel = 0;
+    });
   }
 
   void _scrollToBottom() {
@@ -113,11 +192,40 @@ class _ChatViewState extends State<ChatView> {
   Widget build(BuildContext context) {
     final ch = channel;
     if (ch == null) {
-      return const Center(
-          child: Text('Elige un canal para empezar 👈',
+      return Center(
+          child: Text('❯ elige un canal para empezar',
               style: TextStyle(color: Pal.muted)));
     }
     final msgs = store.messages[ch.id] ?? [];
+    // Posición de scroll por canal. Al cambiar de canal restauramos el offset
+    // recordado (o vamos al fondo la 1ª vez); como los mensajes cargan async, el
+    // reposicionado espera al primer build con la lista ya poblada. Si llegan
+    // mensajes NUEVOS y ya estabas pegado al fondo, te seguimos al fondo.
+    if (ch.id != _lastChannelId) {
+      _lastChannelId = ch.id;
+      _restorePending = true;
+      _lastMsgCount = msgs.length;
+    }
+    if (_restorePending && msgs.isNotEmpty) {
+      _restorePending = false;
+      _lastMsgCount = msgs.length;
+      final saved = _scrollOffsets[ch.id];
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!scroll.hasClients) return;
+        final max = scroll.position.maxScrollExtent;
+        scroll.jumpTo(saved == null ? max : saved.clamp(0.0, max));
+      });
+    } else if (msgs.length != _lastMsgCount) {
+      final grew = msgs.length > _lastMsgCount;
+      _lastMsgCount = msgs.length;
+      // Solo si creció por el FINAL (mensaje nuevo) y ya estabas al fondo; en
+      // paginación 'older' el usuario está arriba (_atBottom=false) → no molesta.
+      if (grew && _atBottom) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (scroll.hasClients) scroll.jumpTo(scroll.position.maxScrollExtent);
+        });
+      }
+    }
     final canSend = store.canI(P.sendMessages, ch.id);
     final body = Column(
       children: [
@@ -158,12 +266,12 @@ class _ChatViewState extends State<ChatView> {
                     border: Border.all(color: Pal.accent, width: 2),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.file_upload, size: 42, color: Pal.accent),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(LucideIcons.upload, size: 40, color: Pal.accent),
                     SizedBox(height: 8),
                     Text('Suelta para adjuntar',
                         style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600)),
+                            fontSize: 16, fontWeight: FontWeight.w700)),
                   ]),
                 ),
               ),
@@ -190,12 +298,15 @@ class _ChatViewState extends State<ChatView> {
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.black.withValues(alpha: .25))),
+        border: Border(bottom: BorderSide(color: Pal.borderSubtle)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.tag, color: Pal.faint, size: 20),
-          const SizedBox(width: 6),
+          Text('#',
+              style: TextStyle(
+                  color: Pal.faint, fontSize: 20, fontWeight: FontWeight.w700,
+                  height: 1)),
+          const SizedBox(width: 8),
           Text(ch.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
           if (ch.topic != null && ch.topic!.isNotEmpty) ...[
             Container(
@@ -204,7 +315,7 @@ class _ChatViewState extends State<ChatView> {
             Expanded(
               child: Text(ch.topic!,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Pal.muted, fontSize: 13)),
+                  style: TextStyle(color: Pal.muted, fontSize: 13)),
             ),
           ] else
             const Spacer(),
@@ -218,13 +329,21 @@ class _ChatViewState extends State<ChatView> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircleAvatar(
-              radius: 34, backgroundColor: Pal.bg3,
-              child: const Icon(Icons.tag, size: 36, color: Pal.muted)),
+          Container(
+            width: 68, height: 68,
+            decoration: BoxDecoration(
+                color: Pal.bg3,
+                shape: BoxShape.circle,
+                border: Border.all(color: Pal.borderStrong)),
+            alignment: Alignment.center,
+            child: Text('#',
+                style: TextStyle(
+                    fontSize: 30, fontWeight: FontWeight.w700, color: Pal.accent)),
+          ),
           const SizedBox(height: 12),
-          Text('Bienvenido a #${ch.name}',
+          Text('bienvenido a #${ch.name}',
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-          const Text('Este es el principio del canal. Di algo 👋',
+          Text('este es el principio del canal — di algo ▮',
               style: TextStyle(color: Pal.muted, fontSize: 13)),
         ],
       ),
@@ -280,8 +399,8 @@ class _ChatViewState extends State<ChatView> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Text(fmtDate(ms),
-              style: const TextStyle(
-                  color: Pal.faint, fontSize: 11.5, fontWeight: FontWeight.w700)),
+              style: TextStyle(
+                  color: Pal.faint, fontSize: 11, fontWeight: FontWeight.w700)),
         ),
         const Expanded(child: Divider()),
       ]),
@@ -301,7 +420,7 @@ class _ChatViewState extends State<ChatView> {
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(text,
-            style: const TextStyle(
+            style: TextStyle(
                 color: Pal.muted, fontSize: 12, fontStyle: FontStyle.italic)),
       ),
     );
@@ -311,9 +430,11 @@ class _ChatViewState extends State<ChatView> {
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(12),
-      decoration:
-          BoxDecoration(color: Pal.bg3, borderRadius: BorderRadius.circular(8)),
-      child: const Text('No tienes permiso para escribir en este canal 🔒',
+      decoration: BoxDecoration(
+          color: Pal.bg3,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Pal.borderDefault)),
+      child: Text('! no tienes permiso para escribir en este canal',
           style: TextStyle(color: Pal.muted, fontSize: 13)),
     );
   }
@@ -326,11 +447,21 @@ class _ChatViewState extends State<ChatView> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (slashMatches.isNotEmpty) _slashPopup(slashMatches),
+          if (_mentionOpen && _mentionMatches.isNotEmpty) _mentionPopup(),
           if (replyingTo != null || editing != null) _contextBar(),
           if (pendingUploads.isNotEmpty) _uploadsBar(),
-          Container(
-            decoration: BoxDecoration(
-                color: Pal.bg3, borderRadius: BorderRadius.circular(10)),
+          ListenableBuilder(
+            listenable: focus,
+            builder: (_, child) => Container(
+              decoration: BoxDecoration(
+                  color: Pal.inset,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: focus.hasFocus ? Pal.accent : Pal.borderDefault,
+                      width: focus.hasFocus ? 1.5 : 1),
+                  boxShadow: focus.hasFocus ? Pal.glowGreen : null),
+              child: child,
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -338,19 +469,52 @@ class _ChatViewState extends State<ChatView> {
                   Padding(
                     padding: const EdgeInsets.only(left: 6, bottom: 6),
                     child: SmallIconBtn(
-                        Icons.add_circle, 'Adjuntar archivo', _attach, size: 22),
+                        LucideIcons.plusCircle, 'Adjuntar archivo', _attach, size: 22),
                   ),
+                Padding(
+                  padding: EdgeInsets.only(left: 10, right: 2, bottom: 12),
+                  child: Text('❯',
+                      style: TextStyle(
+                          color: Pal.accent, fontSize: 14, height: 1,
+                          fontWeight: FontWeight.w700)),
+                ),
                 Expanded(
                   child: Focus(
                     onKeyEvent: (node, e) {
-                      if (e is KeyDownEvent &&
-                          e.logicalKey == LogicalKeyboardKey.enter &&
+                      if (e is! KeyDownEvent && e is! KeyRepeatEvent) {
+                        return KeyEventResult.ignored;
+                      }
+                      // overlay de menciones abierto: ↑/↓ navegan,
+                      // Enter/Tab insertan, Esc cierra (sin enviar).
+                      if (_mentionOpen && _mentionMatches.isNotEmpty) {
+                        final k = e.logicalKey;
+                        if (k == LogicalKeyboardKey.arrowDown) {
+                          setState(() => _mentionSel =
+                              (_mentionSel + 1) % _mentionMatches.length);
+                          return KeyEventResult.handled;
+                        }
+                        if (k == LogicalKeyboardKey.arrowUp) {
+                          setState(() => _mentionSel =
+                              (_mentionSel - 1 + _mentionMatches.length) %
+                                  _mentionMatches.length);
+                          return KeyEventResult.handled;
+                        }
+                        if (k == LogicalKeyboardKey.enter ||
+                            k == LogicalKeyboardKey.tab) {
+                          _insertMention(_mentionMatches[_mentionSel]);
+                          return KeyEventResult.handled;
+                        }
+                        if (k == LogicalKeyboardKey.escape) {
+                          setState(() => _mentionOpen = false);
+                          return KeyEventResult.handled;
+                        }
+                      }
+                      if (e.logicalKey == LogicalKeyboardKey.enter &&
                           !HardwareKeyboard.instance.isShiftPressed) {
                         _send();
                         return KeyEventResult.handled;
                       }
-                      if (e is KeyDownEvent &&
-                          e.logicalKey == LogicalKeyboardKey.escape) {
+                      if (e.logicalKey == LogicalKeyboardKey.escape) {
                         setState(() {
                           editing = null;
                           replyingTo = null;
@@ -367,6 +531,7 @@ class _ChatViewState extends State<ChatView> {
                       minLines: 1,
                       onChanged: (v) {
                         if (v.isNotEmpty) store.sendTyping(ch.id);
+                        _updateMentions();
                         setState(() {});
                       },
                       decoration: InputDecoration(
@@ -380,9 +545,9 @@ class _ChatViewState extends State<ChatView> {
                 Padding(
                   padding: const EdgeInsets.only(right: 4, bottom: 6),
                   child: Row(children: [
-                    SmallIconBtn(Icons.emoji_emotions_outlined, 'Stickers',
+                    SmallIconBtn(LucideIcons.smile, 'Stickers',
                         () => _stickerPicker(), size: 22),
-                    SmallIconBtn(Icons.send_rounded, 'Enviar', _send,
+                    SmallIconBtn(LucideIcons.send, 'Enviar', _send,
                         color: Pal.accent, size: 22),
                   ]),
                 ),
@@ -432,16 +597,69 @@ class _ChatViewState extends State<ChatView> {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Row(children: [
                   Text('/${m.$1}',
-                      style: const TextStyle(
-                          color: Pal.accent, fontWeight: FontWeight.w700, fontSize: 13.5)),
+                      style: TextStyle(
+                          color: Pal.accent, fontWeight: FontWeight.w700, fontSize: 13)),
                   const SizedBox(width: 10),
                   Flexible(
                       child: Text(m.$2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Pal.muted, fontSize: 12.5))),
+                          style: TextStyle(color: Pal.muted, fontSize: 12))),
                 ]),
               ),
             )).toList(),
+      ),
+    );
+  }
+
+  Widget _mentionPopup() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      constraints: const BoxConstraints(maxHeight: 264),
+      decoration: BoxDecoration(
+          color: Pal.bg0,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Pal.borderDefault)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: ListView.builder(
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          itemCount: _mentionMatches.length,
+          itemBuilder: (_, i) {
+            final u = _mentionMatches[i];
+            final sel = i == _mentionSel;
+            final online = store.online.contains(u.id);
+            return InkWell(
+              onTap: () => _insertMention(u),
+              child: Container(
+                color: sel ? Pal.bg3 : null,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: Row(children: [
+                  Avatar(u, store, size: 24, showOnline: true),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(u.username,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight:
+                                sel ? FontWeight.w700 : FontWeight.w500,
+                            color: sel ? Pal.text : Pal.muted)),
+                  ),
+                  if (online) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                            color: Pal.green, shape: BoxShape.circle)),
+                  ],
+                ]),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -458,10 +676,10 @@ class _ChatViewState extends State<ChatView> {
           color: Pal.bg0,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(8))),
       child: Row(children: [
-        Icon(isEdit ? Icons.edit : Icons.reply, size: 14, color: Pal.muted),
+        Icon(isEdit ? LucideIcons.pencil : LucideIcons.reply, size: 14, color: Pal.muted),
         const SizedBox(width: 8),
-        Expanded(child: Text(name, style: const TextStyle(color: Pal.muted, fontSize: 12.5))),
-        SmallIconBtn(Icons.close, 'Cancelar', () => setState(() {
+        Expanded(child: Text(name, style: TextStyle(color: Pal.muted, fontSize: 12))),
+        SmallIconBtn(LucideIcons.x, 'Cancelar', () => setState(() {
               replyingTo = null;
               editing = null;
               if (isEdit) input.clear();
@@ -478,7 +696,7 @@ class _ChatViewState extends State<ChatView> {
         children: pendingUploads.map((u) => Chip(
               backgroundColor: Pal.bg3,
               label: Text(u['name'] ?? 'archivo', style: const TextStyle(fontSize: 12)),
-              deleteIcon: const Icon(Icons.close, size: 14),
+              deleteIcon: const Icon(LucideIcons.x, size: 14),
               onDeleted: () => setState(() => pendingUploads.remove(u)),
             )).toList(),
       ),
@@ -493,7 +711,7 @@ class _ChatViewState extends State<ChatView> {
         padding: const EdgeInsets.all(16),
         height: 320,
         child: store.stickers.isEmpty
-            ? const Center(
+            ? Center(
                 child: Text('No hay stickers todavía.\nSúbelos en Ajustes → Stickers.',
                     textAlign: TextAlign.center, style: TextStyle(color: Pal.muted)))
             : GridView.count(
@@ -564,8 +782,8 @@ class _MessageTile extends StatelessWidget {
                           ? Padding(
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(fmtTime(m.createdAt),
-                                  style: const TextStyle(
-                                      color: Pal.faint, fontSize: 10)))
+                                  style: TextStyle(
+                                      color: Pal.faint, fontSize: 11)))
                           : null)
                       : Avatar(author, store, size: 38),
                 ),
@@ -582,7 +800,7 @@ class _MessageTile extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                     fontWeight: FontWeight.w700,
-                                    fontSize: 14.5,
+                                    fontSize: 14,
                                     color: nameColor)),
                           ),
                           if (author?.isBot == true || m.webhookName != null)
@@ -592,23 +810,24 @@ class _MessageTile extends StatelessWidget {
                                   horizontal: 5, vertical: 1),
                               decoration: BoxDecoration(
                                   color: Pal.accent,
-                                  borderRadius: BorderRadius.circular(4)),
-                              child: const Text('BOT',
+                                  borderRadius: BorderRadius.circular(3)),
+                              child: Text('BOT',
                                   style: TextStyle(
-                                      fontSize: 9.5,
+                                      fontSize: 11,
                                       fontWeight: FontWeight.w800,
-                                      color: Colors.white)),
+                                      letterSpacing: 1.3,
+                                      color: Pal.greenInk)),
                             ),
                           const SizedBox(width: 8),
                           Text(fmtTime(m.createdAt),
                               style:
-                                  const TextStyle(color: Pal.faint, fontSize: 11)),
+                                  TextStyle(color: Pal.faint, fontSize: 11)),
                         ]),
                       if (m.content.isNotEmpty)
                         ...renderMarkdown(m.content, store),
                       if (m.editedAt != null)
-                        const Text('(editado)',
-                            style: TextStyle(color: Pal.faint, fontSize: 10.5)),
+                        Text('(editado)',
+                            style: TextStyle(color: Pal.faint, fontSize: 11)),
                       if (m.stickerId != null) _sticker(),
                       ...m.attachments.map(_attachment),
                       ...m.embeds.map(_embed),
@@ -623,13 +842,15 @@ class _MessageTile extends StatelessWidget {
                 top: 0,
                 child: Container(
                   decoration: BoxDecoration(
-                      color: Pal.bg0, borderRadius: BorderRadius.circular(6)),
+                      color: Pal.bg0,
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: Pal.borderDefault)),
                   child: Row(children: [
-                    SmallIconBtn(Icons.reply, 'Responder', onReply, size: 16),
+                    SmallIconBtn(LucideIcons.reply, 'Responder', onReply, size: 16),
                     if (onEdit != null)
-                      SmallIconBtn(Icons.edit, 'Editar', onEdit!, size: 16),
+                      SmallIconBtn(LucideIcons.pencil, 'Editar', onEdit!, size: 16),
                     if (onDelete != null)
-                      SmallIconBtn(Icons.delete_outline, 'Borrar', onDelete!,
+                      SmallIconBtn(LucideIcons.trash2, 'Borrar', onDelete!,
                           color: Pal.red, size: 16),
                   ]),
                 ),
@@ -645,16 +866,16 @@ class _MessageTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Row(children: [
-        const Icon(Icons.subdirectory_arrow_right, size: 14, color: Pal.faint),
+        Icon(LucideIcons.cornerDownRight, size: 14, color: Pal.faint),
         Text('${author?.username ?? replied.webhookName ?? '?'}: ',
-            style: const TextStyle(
-                color: Pal.accent, fontSize: 12, fontWeight: FontWeight.w600)),
+            style: TextStyle(
+                color: Pal.accent, fontSize: 12, fontWeight: FontWeight.w700)),
         Flexible(
           child: Text(
               replied.content.isEmpty ? '[adjunto]' : replied.content,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Pal.muted, fontSize: 12)),
+              style: TextStyle(color: Pal.muted, fontSize: 12)),
         ),
       ]),
     );
@@ -694,12 +915,12 @@ class _MessageTile extends StatelessWidget {
           decoration: BoxDecoration(
               color: Pal.bg0, borderRadius: BorderRadius.circular(8)),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.attach_file, size: 18, color: Pal.accent),
+            Icon(LucideIcons.paperclip, size: 18, color: Pal.accent),
             const SizedBox(width: 8),
-            Text(a.name, style: const TextStyle(color: Pal.link, fontSize: 13)),
+            Text(a.name, style: TextStyle(color: Pal.link, fontSize: 13)),
             const SizedBox(width: 8),
             Text('${(a.size / 1024).toStringAsFixed(0)} KB',
-                style: const TextStyle(color: Pal.faint, fontSize: 11)),
+                style: TextStyle(color: Pal.faint, fontSize: 11)),
           ]),
         ),
       ),
@@ -714,7 +935,7 @@ class _MessageTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: Pal.bg0,
         borderRadius: BorderRadius.circular(8),
-        border: const Border(left: BorderSide(color: Pal.accent, width: 4)),
+        border: Border(left: BorderSide(color: Pal.accent, width: 4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -727,20 +948,20 @@ class _MessageTile extends StatelessWidget {
                   : () => launchUrlString(e.url!,
                       mode: LaunchMode.externalApplication),
               child: Text(e.title!,
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: Pal.link, fontWeight: FontWeight.w700, fontSize: 14)),
             ),
           if (e.description != null)
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(e.description!,
-                  style: const TextStyle(color: Pal.muted, fontSize: 12.5)),
+                  style: TextStyle(color: Pal.muted, fontSize: 12)),
             ),
           if (e.image != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(5),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxHeight: 220),
                   child: Image.network(e.image!, fit: BoxFit.contain,

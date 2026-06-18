@@ -6,6 +6,26 @@ rtc:
   port_range_start: 50000
   port_range_end: 50100
   use_external_ip: true
+  # Fallback ICE por TCP: cuando la red del cliente bloquea el UDP a puertos
+  # altos (NAT restrictiva / firewall), ICE no encontraba camino y daba
+  # "Timed out waiting for PeerConnection". Con este puerto LiveKit ofrece un
+  # candidato TCP. ⚠️ Hay que abrir 7881/tcp en el firewall del VPS.
+  tcp_port: 7881
+
+# TURN embebido — el plan B definitivo cuando NI el UDP NI el TCP directo pasan
+# (firewalls que solo dejan salir 443/TLS). LiveKit entrega solo las credenciales
+# TURN al cliente; NO hay que recompilar la app. Para ACTIVARLO descomenta y:
+#   1) domain = el MISMO host del LIVEKIT_URL (wss://<domain>) del .env del VPS.
+#   2) certificado TLS válido de ese dominio (Let's Encrypt) montado en el
+#      contenedor (ver docker-compose.yml). Usa tls_port:5349 si el 443 ya lo
+#      ocupa el reverse-proxy de la landing (chat.aypapol.com).
+#   3) abre el puerto elegido (443/tcp o 5349/tcp) en el firewall del VPS.
+# turn:
+#   enabled: true
+#   domain: livekit.aypapol.com        # TODO: dominio real del SFU
+#   tls_port: 443                      # o 5349 si 443 está ocupado
+#   cert_file: /etc/livekit/tls/fullchain.pem
+#   key_file: /etc/livekit/tls/privkey.pem
 audio:
   # aro de "hablando" SENSIBLE (-30 dBFS, el default) y updates cada 150ms:
   # si alguien te oye, su aro debe prender. El aro PROPIO ni pasa por aquí

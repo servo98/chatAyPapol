@@ -18,6 +18,9 @@ Compression=lzma2/max
 SolidCompression=yes
 PrivilegesRequired=lowest
 CloseApplications=yes
+; ícono de marca ❯ para el Setup.exe y para Agregar/Quitar programas
+SetupIconFile=..\windows\runner\resources\app_icon.ico
+UninstallDisplayIcon={app}\chatpapol.exe
 ; silencioso desde el auto-updater: /SILENT /CLOSEAPPLICATIONS
 
 [Files]

@@ -33,9 +33,9 @@ class MemberList extends StatelessWidget {
   Widget _section(String label) => Padding(
         padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
         child: Text(label,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 11, fontWeight: FontWeight.w700,
-                color: Pal.faint, letterSpacing: .5)),
+                color: Pal.faint, letterSpacing: 1.2)),
       );
 
   Widget _memberTile(BuildContext context, User u, bool isOnline) {
@@ -51,7 +51,7 @@ class MemberList extends StatelessWidget {
       builder: (_, hover) => Container(
         decoration: BoxDecoration(
             color: hover ? Pal.bg3 : null,
-            borderRadius: BorderRadius.circular(6)),
+            borderRadius: BorderRadius.circular(5)),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         child: Opacity(
           opacity: isOnline ? 1 : .45,
@@ -62,17 +62,17 @@ class MemberList extends StatelessWidget {
               child: Text(u.username,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                      fontSize: 13.5, fontWeight: FontWeight.w600, color: color)),
+                      fontSize: 14, fontWeight: FontWeight.w700, color: color)),
             ),
             if (u.isBot)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
                     color: Pal.accent, borderRadius: BorderRadius.circular(3)),
-                child: const Text('BOT',
+                child: Text('BOT',
                     style: TextStyle(
-                        fontSize: 9, fontWeight: FontWeight.w800,
-                        color: Colors.white)),
+                        fontSize: 11, fontWeight: FontWeight.w800,
+                        color: Pal.greenInk)),
               ),
           ]),
         ),
@@ -92,11 +92,12 @@ class MemberList extends StatelessWidget {
       position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx, pos.dy),
       items: [
         if (store.canI(P.manageRoles))
-          const PopupMenuItem(value: 'roles', child: Text('🎭  Gestionar roles')),
+          const PopupMenuItem(value: 'roles', child: Text('●  gestionar roles')),
         if (store.canI(P.kickMembers))
-          const PopupMenuItem(value: 'kick', child: Text('👢  Expulsar')),
+          const PopupMenuItem(value: 'kick', child: Text('→  expulsar')),
         if (store.canI(P.banMembers))
-          const PopupMenuItem(value: 'ban', child: Text('🔨  Banear')),
+          PopupMenuItem(value: 'ban',
+              child: Text('✕  banear', style: TextStyle(color: Pal.red))),
       ],
     );
     if (choice == null || !context.mounted) return;
@@ -137,7 +138,7 @@ class MemberList extends StatelessWidget {
                     activeColor: Pal.accent,
                     title: Text(r.name,
                         style: TextStyle(
-                            fontSize: 13.5,
+                            fontSize: 14,
                             color: r.color != null
                                 ? Color(int.parse(r.color!.replaceFirst('#', '0xff')))
                                 : Pal.text)),

@@ -18,6 +18,8 @@ REPO="servo98/chatAyPapol"
 FLUTTER='C:\src\flutter\bin\flutter.bat'
 WIN_CLIENT='C:\Users\ferna\Documents\code\chatpapol\client'
 SIGNTOOL="/mnt/c/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x64/signtool.exe"
+RCEDIT="${CHATPAPOL_RCEDIT:-/mnt/c/Users/ferna/Downloads/chatpapol-toolchain/rcedit-x64.exe}"
+ICON="$PWD/windows/runner/resources/app_icon.ico"
 PFX="${CHATPAPOL_PFX:-/mnt/c/Users/ferna/Downloads/chatpapol-toolchain/chatpapol-signing.pfx}"
 PFX_PASS="${CHATPAPOL_PFX_PASS:-chatpapol}"
 PFX_WIN="$(wslpath -w "$PFX" 2>/dev/null || echo "$PFX")"
@@ -36,7 +38,21 @@ echo "▶ Publicando Windows v$VERSION"
 # 2) Sellar versión (igual que el CI). pub get + build con Flutter de WINDOWS
 #    (si se usó el Flutter de WSL, package_config.json queda con rutas Linux).
 echo "const appVersion = '$VERSION';" > lib/version.dart
-echo "▶ flutter pub get + build windows --release"
+# Si el lock se generó con el Flutter de LINUX, el Flutter de Windows resuelve
+# distinto (p.ej. `logger`) y el 1er `pub get` CAMBIA el lock dejando un
+# package_graph.json incoherente → "dependencies for 'logger' missing". El fix
+# de UNA pasada: pub get (reconcilia el lock a la resolución de Windows), BORRA
+# .dart_tool (tira el graph corrupto) y pub get otra vez (regenera limpio con el
+# lock ya coherente). Cada pub get arranca de .dart_tool limpio.
+rm -rf "$CLIENT_DIR/.dart_tool"
+echo "▶ flutter pub get (reconciliar lock) ..."
+# El 1er pub get puede CAMBIAR el lock (resolución Windows vs lock generado en
+# Linux) y dejar package_graph.json incoherente → sale NONZERO. Con set -e eso
+# abortaría el script ANTES del 2º. `|| true` lo tolera: ya cumplió su misión
+# (reconciliar el lock); el 2º (con .dart_tool limpio) regenera el graph bien.
+cmd.exe /c "cd /d $WIN_CLIENT && $FLUTTER pub get" || true
+rm -rf "$CLIENT_DIR/.dart_tool"
+echo "▶ flutter pub get (limpio) + build windows --release"
 cmd.exe /c "cd /d $WIN_CLIENT && $FLUTTER pub get"
 cmd.exe /c "cd /d $WIN_CLIENT && $FLUTTER build windows --release"
 
@@ -60,17 +76,34 @@ echo "▶ Paquete update: $(du -h "$ZIP" | cut -f1)"
 APP7Z="$CLIENT_DIR/packaging/out/app.7z"
 rm -f "$APP7Z"; ( cd "$BUNDLE" && 7z a -t7z -mx=5 "$APP7Z" . >/dev/null )
 SETUP="$CLIENT_DIR/packaging/out/ChatPapolSetup-$VERSION.exe"
-cat "$CLIENT_DIR/packaging/7zSD.sfx" "$CLIENT_DIR/packaging/sfx-config.txt" "$APP7Z" > "$SETUP"
+# El ícono del Setup vive en el STUB SFX (PE). Lo incrustamos en una COPIA del
+# stub ANTES de concatenar: rcedit no debe correr sobre el Setup final porque
+# borraría el overlay .7z pegado al final. No-op (Setup sin ícono) si falta rcedit.
+SFX="$CLIENT_DIR/packaging/7zSD.sfx"
+if [ -f "$RCEDIT" ]; then
+  SFX="$CLIENT_DIR/packaging/out/7zSD-icon.sfx"
+  cp "$CLIENT_DIR/packaging/7zSD.sfx" "$SFX"
+  "$RCEDIT" "$(wslpath -w "$SFX")" --set-icon "$(wslpath -w "$ICON")"
+  echo "  ícono ChatPapol incrustado en el stub SFX"
+else
+  echo "  (sin rcedit: Setup sin ícono propio)"
+fi
+cat "$SFX" "$CLIENT_DIR/packaging/sfx-config.txt" "$APP7Z" > "$SETUP"
 rm -f "$APP7Z"
 echo "▶ Instalador: $(du -h "$SETUP" | cut -f1)"
 sign "$(wslpath -w "$SETUP")"
+
+# Copia con nombre FIJO (sin versión): permite que la landing use un link
+# permanente .../releases/latest/download/ChatPapolSetup.exe (HTML puro, sin JS).
+SETUP_LATEST="$CLIENT_DIR/packaging/out/ChatPapolSetup.exe"
+cp "$SETUP" "$SETUP_LATEST"
 
 # 6) Subir al release (espera a que el CI lo cree).
 echo "▶ Esperando release v$VERSION…"
 for i in $(seq 1 90); do
   gh release view "v$VERSION" --repo "$REPO" >/dev/null 2>&1 && break || sleep 5
 done
-echo "▶ Subiendo Setup + zip"
-gh release upload "v$VERSION" "$SETUP" "$ZIP" --repo "$REPO" --clobber
+echo "▶ Subiendo Setup (versionado + fijo) + zip"
+gh release upload "v$VERSION" "$SETUP" "$SETUP_LATEST" "$ZIP" --repo "$REPO" --clobber
 git checkout lib/version.dart 2>/dev/null || true
 echo "✓ Listo: Windows v$VERSION (Setup firmado + zip) publicado"

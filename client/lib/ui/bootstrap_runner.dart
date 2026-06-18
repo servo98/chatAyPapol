@@ -30,7 +30,7 @@ class BootstrapRunner extends StatefulWidget {
 }
 
 class _BootstrapRunnerState extends State<BootstrapRunner> {
-  String _status = 'Preparando…';
+  String _status = 'preparando…';
   double? _progress;
   String? _error;
 
@@ -57,7 +57,7 @@ class _BootstrapRunnerState extends State<BootstrapRunner> {
         final u = await Updater.check(widget.api!) ?? widget.update!;
         final dir = await Bootstrap.downloadAndExtract(
             widget.api!.fileUrl(u.url), u.sha256, onProgress: _set);
-        _set('Reiniciando…', 1);
+        _set('reiniciando…', 1);
         await Future.delayed(const Duration(milliseconds: 500));
         await Bootstrap.applyAndRestart(dir); // hace exit(0)
       }
@@ -69,7 +69,7 @@ class _BootstrapRunnerState extends State<BootstrapRunner> {
   @override
   Widget build(BuildContext context) {
     return BootstrapScreen(
-      title: widget.install ? 'Instalando ChatPapol' : 'Actualizando ChatPapol',
+      title: widget.install ? 'instalando ChatPapol' : 'actualizando ChatPapol',
       status: _status,
       progress: _progress,
       error: _error,

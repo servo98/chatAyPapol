@@ -10,9 +10,15 @@ services:
       - "3210:3210"
     volumes:
       - ./data:/app/data
+    # El SFU corre en host networking: el backend (bridge) lo alcanza por el host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       # URL del SFU que usan LOS CLIENTES (pública si juegan por internet)
       LIVEKIT_URL: ${LIVEKIT_URL:-ws://localhost:7880}
+      # URL del SFU que usa EL BACKEND para reconciliar presencia (RoomService API).
+      # Como livekit está en host networking, desde el contenedor es el host:7880.
+      LIVEKIT_API_URL: ${LIVEKIT_API_URL:-http://host.docker.internal:7880}
       LIVEKIT_KEY: ${LIVEKIT_KEY:-devkey}
       LIVEKIT_SECRET: ${LIVEKIT_SECRET:-devsecret-devsecret-devsecret-32}
       GITHUB_REPO: servo98/chatAyPapol
@@ -20,8 +26,13 @@ services:
   livekit:
     image: livekit/livekit-server:latest
     restart: unless-stopped
-    # host networking: el rango UDP 50000-50100 de WebRTC sin mapear puerto a puerto
+    # host networking: el rango UDP 50000-50100 de WebRTC sin mapear puerto a puerto.
+    # Abre en el FIREWALL del VPS: UDP 50000-50100 (ya), TCP 7881 (fallback ICE-TCP,
+    # ver livekit.yaml), y si activas el TURN: 443/tcp o 5349/tcp.
     network_mode: host
     command: --config /etc/livekit.yaml
     volumes:
       - ./server/livekit.yaml:/etc/livekit.yaml:ro
+      # Para el TURN-TLS: monta aquí el cert del dominio del SFU y descomenta el
+      # bloque 'turn:' de livekit.yaml.
+      # - /etc/letsencrypt/live/livekit.aypapol.com:/etc/livekit/tls:ro

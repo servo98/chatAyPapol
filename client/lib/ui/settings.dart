@@ -1,28 +1,38 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import '../models.dart';
 import '../perms.dart';
+import '../sfx.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../updater.dart';
 import '../version.dart';
+import '../webrtc_apm.dart';
 import 'totp.dart';
 import '../voice.dart';
+import 'appearance.dart';
 import 'bootstrap_runner.dart';
+import 'notifs_panel.dart';
+import 'sound_lab.dart';
+import 'voice_fx_ui.dart';
 import 'widgets.dart';
 
 void openSettings(BuildContext context, AppStore store, VoiceManager voice) {
+  SfxService.instance.play(UiSound.modalOpen);
   showDialog(
     context: context,
     builder: (_) => Dialog(
       insetPadding: const EdgeInsets.all(40),
       child: SettingsScreen(store: store, voice: voice),
     ),
-  );
+  ).then((_) => SfxService.instance.play(UiSound.modalClose));
 }
 
 class SettingsScreen extends StatefulWidget {
@@ -41,16 +51,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final isAdmin = store.canI(P.administrator);
     final tabs = <(String, String, IconData)>[
-      ('cuenta', 'Mi cuenta', Icons.person),
-      ('voz', 'Voz y micrófono', Icons.mic),
-      if (store.canI(P.manageRoles)) ('roles', 'Roles', Icons.theater_comedy),
-      if (store.canI(P.createInvites)) ('invites', 'Invitaciones', Icons.mail),
-      if (store.canI(P.manageExpressions)) ('stickers', 'Stickers', Icons.emoji_emotions),
-      if (store.canI(P.manageExpressions)) ('sounds', 'Soundboard', Icons.music_note),
-      if (isAdmin) ('automod', 'AutoMod', Icons.shield),
-      if (store.canI(P.manageWebhooks)) ('webhooks', 'Webhooks', Icons.webhook),
-      if (isAdmin) ('bots', 'Bots', Icons.smart_toy),
-      ('updates', 'Actualizaciones', Icons.system_update_alt),
+      ('cuenta', 'Mi cuenta', LucideIcons.user),
+      ('voz', 'Voz y micrófono', LucideIcons.mic),
+      ('fx', 'Efectos de voz', LucideIcons.sparkles),
+      ('apariencia', 'Apariencia', LucideIcons.palette),
+      ('notifs', 'Notificaciones', LucideIcons.bell),
+      if (store.canI(P.manageRoles)) ('roles', 'Roles', LucideIcons.venetianMask),
+      if (store.canI(P.createInvites)) ('invites', 'Invitaciones', LucideIcons.mail),
+      if (store.canI(P.manageExpressions)) ('stickers', 'Stickers', LucideIcons.smile),
+      if (store.canI(P.manageExpressions)) ('sounds', 'Soundboard', LucideIcons.music),
+      if (isAdmin) ('automod', 'AutoMod', LucideIcons.shield),
+      if (store.canI(P.manageWebhooks)) ('webhooks', 'Webhooks', LucideIcons.webhook),
+      if (isAdmin) ('bots', 'Bots', LucideIcons.bot),
+      if (store.isSoundLabOwner) ('sfx', 'Sound Lab', LucideIcons.music2),
+      ('updates', 'Actualizaciones', LucideIcons.download),
     ];
     return SizedBox(
       width: 860,
@@ -69,12 +83,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: tabs.map((t) {
                       final selected = tab == t.$1;
                       return InkWell(
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(5),
                         onTap: () => setState(() => tab = t.$1),
                         child: Container(
                           decoration: BoxDecoration(
                               color: selected ? Pal.bg3 : null,
-                              borderRadius: BorderRadius.circular(6)),
+                              borderRadius: BorderRadius.circular(5)),
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 8),
                           margin: const EdgeInsets.only(bottom: 2),
@@ -99,15 +113,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.all(12),
                   child: Column(children: [
                     Text('ChatPapol v$appVersion',
-                        style: const TextStyle(color: Pal.faint, fontSize: 11)),
+                        style: TextStyle(color: Pal.faint, fontSize: 11)),
                     const SizedBox(height: 8),
                     TextButton.icon(
                       onPressed: () async {
                         Navigator.pop(context);
                         await store.logout();
                       },
-                      icon: const Icon(Icons.logout, size: 15, color: Pal.red),
-                      label: const Text('Cerrar sesión',
+                      icon: Icon(LucideIcons.logOut, size: 15, color: Pal.red),
+                      label: Text('Cerrar sesión',
                           style: TextStyle(color: Pal.red, fontSize: 12.5)),
                     ),
                   ]),
@@ -119,19 +133,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 8, right: 8),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close, color: Pal.muted),
-                    ),
+                // Banda propia para la X (con borde inferior): la separa
+                // claramente del header del panel para que no choque con el
+                // botón de acción ni con los textos de abajo.
+                Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(top: 6, right: 8, bottom: 6),
+                  decoration: BoxDecoration(
+                      border: Border(
+                          bottom: BorderSide(color: Pal.borderDefault))),
+                  child: IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(LucideIcons.x, color: Pal.muted),
+                    tooltip: 'Cerrar',
                   ),
                 ),
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                    padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
                     child: _panel(),
                   ),
                 ),
@@ -146,6 +165,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _panel() => switch (tab) {
         'cuenta' => _AccountPanel(store),
         'voz' => _VoicePanel(widget.voice),
+        'fx' => const VoiceFxSettings(),
+        'apariencia' => const AppearancePanel(),
+        'notifs' => NotificationsPanel(store),
         'roles' => _RolesPanel(store),
         'invites' => _InvitesPanel(store),
         'stickers' => _ExpressionsPanel(store, stickers: true),
@@ -153,6 +175,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'automod' => _AutomodPanel(store),
         'webhooks' => _WebhooksPanel(store),
         'bots' => _BotsPanel(store),
+        'sfx' => SoundLabPanel(store),
         'updates' => _UpdatesPanel(store),
         _ => const SizedBox.shrink(),
       };
@@ -163,16 +186,74 @@ Widget _title(String t) => Padding(
       child: Text(t, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
     );
 
+// Decodifica, escala el lado mayor a ≤256px y reencoda JPEG q85. Corre en un
+// isolate (compute) para no congelar la UI. No guardamos la imagen raw: el avatar
+// queda en ~10-25KB → ahorra espacio y nunca topa el límite de 2MB del server.
+// Si no se puede decodificar, devuelve el original (que el server validará).
+Uint8List _resizeAvatarBytes(Uint8List input) {
+  final decoded = img.decodeImage(input);
+  if (decoded == null) return input;
+  final maxSide =
+      decoded.width > decoded.height ? decoded.width : decoded.height;
+  final scaled = maxSide > 256
+      ? img.copyResize(decoded,
+          width: decoded.width >= decoded.height ? 256 : null,
+          height: decoded.height > decoded.width ? 256 : null)
+      : decoded;
+  return Uint8List.fromList(img.encodeJpg(scaled, quality: 85));
+}
+
 // ───────────────────────── Mi cuenta ─────────────────────────
-class _AccountPanel extends StatelessWidget {
+class _AccountPanel extends StatefulWidget {
   final AppStore store;
   const _AccountPanel(this.store);
+  @override
+  State<_AccountPanel> createState() => _AccountPanelState();
+}
+
+class _AccountPanelState extends State<_AccountPanel> {
+  bool _uploadingAvatar = false;
+  AppStore get store => widget.store;
+
+  Future<void> _changeAvatar() async {
+    final r = await FilePicker.pickFiles(type: FileType.image, withData: true);
+    final f = r?.files.firstOrNull;
+    if (f?.bytes == null) return;
+    setState(() => _uploadingAvatar = true);
+    try {
+      final small = await compute(_resizeAvatarBytes, f!.bytes!);
+      await store.api.upload('/api/avatar', small, 'avatar.jpg');
+      // El server emite MEMBER_UPDATE → store.me se actualiza y el avatar cambia
+      // solo. Confirmamos con feedback al usuario.
+      if (mounted) showSuccess(context, 'Avatar actualizado');
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _uploadingAvatar = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _title('Mi cuenta'),
       Row(children: [
-        Avatar(store.me, store, size: 72),
+        Stack(alignment: Alignment.center, children: [
+          Avatar(store.me, store, size: 72),
+          if (_uploadingAvatar)
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                  color: Pal.bg0.withValues(alpha: .6),
+                  shape: BoxShape.circle),
+              child: const Center(
+                  child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2))),
+            ),
+        ]),
         const SizedBox(width: 16),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(store.me?.username ?? '',
@@ -180,18 +261,11 @@ class _AccountPanel extends StatelessWidget {
           const SizedBox(height: 8),
           Row(children: [
             OutlinedButton(
-              onPressed: () async {
-                final r = await FilePicker.pickFiles(
-                    type: FileType.image, withData: true);
-                final f = r?.files.firstOrNull;
-                if (f?.bytes == null) return;
-                try {
-                  await store.api.upload('/api/avatar', f!.bytes!, f.name);
-                } catch (e) {
-                  if (context.mounted) showError(context, e);
-                }
-              },
-              child: const Text('Cambiar avatar', style: TextStyle(fontSize: 12.5)),
+              onPressed: _uploadingAvatar ? null : _changeAvatar,
+              child: _uploadingAvatar
+                  ? const Text('Subiendo…', style: TextStyle(fontSize: 12.5))
+                  : const Text('Cambiar avatar',
+                      style: TextStyle(fontSize: 12.5)),
             ),
             const SizedBox(width: 8),
             OutlinedButton(
@@ -285,7 +359,7 @@ class _AccountPanel extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(err!,
-                      style: const TextStyle(color: Pal.red, fontSize: 12.5)),
+                      style: TextStyle(color: Pal.red, fontSize: 12.5)),
                 ),
             ]),
           ),
@@ -328,14 +402,19 @@ class _VoicePanelState extends State<_VoicePanel> {
   VoiceManager get voice => widget.voice;
 
   List<lk.MediaDevice> inputs = [];
+  List<lk.MediaDevice> outputs = [];
   StreamSubscription<List<lk.MediaDevice>>? _devSub;
 
   // Prueba de micro: track local SIN sala (o el publicado si ya hay voz).
   lk.LocalAudioTrack? _testTrack;
   lk.AudioVisualizer? _vis;
   lk.EventsListener<lk.AudioVisualizerEvent>? _visListener;
+  // trackId del capturador 48k dedicado usado para el test SIN canal (bombea
+  // audio → el monitor suena; una pista suelta no pasaría por el procesador).
+  String? _customTestId;
   bool testing = false;
   double level = 0;
+  bool _recDiag = false; // grabando diagnóstico de micro (.wav)
   // Guard de operaciones en vuelo: evita doble click en "Probar micrófono"
   // y cambios de opciones solapados.
   bool _busy = false;
@@ -344,8 +423,9 @@ class _VoicePanelState extends State<_VoicePanel> {
   // el prompt de permisos); la continuación compara y libera lo que creó.
   int _gen = 0;
 
-  static const _label = TextStyle(
-      fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700);
+  static final _label = TextStyle(
+      fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700,
+      letterSpacing: 1.3);
 
   @override
   void initState() {
@@ -373,8 +453,14 @@ class _VoicePanelState extends State<_VoicePanel> {
   }
 
   Future<void> _loadDevices() async {
-    final devs = await lk.Hardware.instance.audioInputs();
-    if (mounted) setState(() => inputs = devs);
+    final ins = await lk.Hardware.instance.audioInputs();
+    final outs = await lk.Hardware.instance.audioOutputs();
+    if (mounted) {
+      setState(() {
+        inputs = ins;
+        outputs = outs;
+      });
+    }
   }
 
   /// Crea (si hace falta) el track de prueba y su visualizer. Si la época
@@ -386,6 +472,21 @@ class _VoicePanelState extends State<_VoicePanel> {
     lk.AudioTrack? track = voice.micTrack;
     lk.LocalAudioTrack? created;
     if (track == null) {
+      // Sin canal: una pista suelta NO pasa por el APM si no se publica → el
+      // monitor "escucharme" no suena. Usamos el capturador 48k dedicado (igual
+      // que --diag-mic48k): bombea audio → ProcessCustom48 → monitor. Solo
+      // Windows; pide auriculares (sin AEC). Sin medidor de barras en este modo.
+      final tid = await WebrtcApm.createCustomAudioTrack();
+      if (gen != _gen || !mounted) {
+        if (tid != null) await WebrtcApm.stopCustomMicCapture(tid);
+        return false;
+      }
+      if (tid != null) {
+        await WebrtcApm.startCustomMicCapture(tid);
+        _customTestId = tid;
+        return true; // el monitor lo enciende _startTest (VoiceMonitor.set(true))
+      }
+      // Plataforma/build sin capturador custom → pista normal (solo medidor).
       created = await lk.LocalAudioTrack.create(voice.micOptions);
       if (gen != _gen || !mounted) {
         await created.stop();
@@ -425,7 +526,12 @@ class _VoicePanelState extends State<_VoicePanel> {
     final gen = ++_gen;
     try {
       final ok = await _acquireTest(gen);
-      if (ok && mounted) setState(() => testing = true);
+      if (ok && mounted) {
+        setState(() => testing = true);
+        // El test ENCIENDE el monitor automáticamente: probar = oírte (con
+        // auriculares). Instala el post-procesador → suena aunque RNNoise/FX off.
+        await VoiceMonitor.instance.set(true);
+      }
     } catch (e) {
       await _releaseTest();
       if (mounted) {
@@ -437,15 +543,37 @@ class _VoicePanelState extends State<_VoicePanel> {
     }
   }
 
+  // [diag] Graba 6s del micro (crudo + procesado) en el modo ACTUAL (normal o
+  // 48k, en canal o no) para diagnosticar. Escribe diag-raw.wav/diag-out.wav.
+  Future<void> _recordDiag() async {
+    if (_recDiag) return;
+    setState(() => _recDiag = true);
+    const dir = r'C:\Users\ferna\Downloads\chatpapol-toolchain';
+    try {
+      await WebrtcApm.startMicDump(dir);
+      await Future.delayed(const Duration(seconds: 6));
+      await WebrtcApm.stopMicDump();
+    } catch (_) {}
+    if (mounted) setState(() => _recDiag = false);
+  }
+
   Future<void> _stopTest() async {
     _gen++; // cancela arranques/reinicios en vuelo
     testing = false;
     level = 0;
     if (mounted) setState(() {});
+    await VoiceMonitor.instance.set(false); // apaga el "escucharme" del test
     await _releaseTest();
   }
 
   Future<void> _releaseTest() async {
+    final cid = _customTestId;
+    _customTestId = null;
+    if (cid != null) {
+      try {
+        await WebrtcApm.stopCustomMicCapture(cid);
+      } catch (_) {}
+    }
     final vis = _vis;
     _vis = null;
     _visListener?.dispose();
@@ -511,7 +639,7 @@ class _VoicePanelState extends State<_VoicePanel> {
             : null;
         return ListView(children: [
           _title('Voz y micrófono'),
-          const Text('DISPOSITIVO DE ENTRADA', style: _label),
+          Text('DISPOSITIVO DE ENTRADA', style: _label),
           const SizedBox(height: 6),
           DropdownButtonFormField<String?>(
             // FormField solo lee initialValue en su initState: el primer build
@@ -521,7 +649,7 @@ class _VoicePanelState extends State<_VoicePanel> {
             key: ValueKey<String?>(value),
             initialValue: value,
             dropdownColor: Pal.bg0,
-            style: const TextStyle(fontSize: 13.5, color: Pal.text),
+            style: TextStyle(fontSize: 13.5, color: Pal.text),
             items: [
               const DropdownMenuItem<String?>(
                   value: null, child: Text('Predeterminado del sistema')),
@@ -538,12 +666,49 @@ class _VoicePanelState extends State<_VoicePanel> {
             },
           ),
           const SizedBox(height: 20),
-          const Text('PROBAR MICRÓFONO', style: _label),
+          // ── DISPOSITIVO DE SALIDA (altavoces/auriculares) ──
+          Text('DISPOSITIVO DE SALIDA', style: _label),
+          const SizedBox(height: 6),
+          Builder(builder: (ctx) {
+            final outVal = outputs.any((d) => d.deviceId == voice.outputDeviceId)
+                ? voice.outputDeviceId
+                : null;
+            return DropdownButtonFormField<String?>(
+              key: ValueKey<String?>('out_$outVal'),
+              initialValue: outVal,
+              dropdownColor: Pal.bg0,
+              style: TextStyle(fontSize: 13.5, color: Pal.text),
+              items: [
+                const DropdownMenuItem<String?>(
+                    value: null, child: Text('Predeterminado del sistema')),
+                ...outputs.map((d) => DropdownMenuItem<String?>(
+                      value: d.deviceId,
+                      child: Text(d.label.isEmpty ? d.deviceId : d.label,
+                          overflow: TextOverflow.ellipsis),
+                    )),
+              ],
+              onChanged: (id) async {
+                final dev = outputs.where((d) => d.deviceId == id).firstOrNull;
+                await voice.setOutputDevice(dev);
+              },
+            );
+          }),
+          const SizedBox(height: 6),
+          Text('Por dónde oyes a los demás. El monitor "escucharme" usa '
+              'el dispositivo PREDETERMINADO de Windows.',
+              style: TextStyle(color: Pal.faint, fontSize: 12)),
+          const SizedBox(height: 20),
+          Text('PROBAR MICRÓFONO', style: _label),
+          const SizedBox(height: 4),
+          Text(
+              'Al probar, te OYES a ti mismo (ya procesado) en tus altavoces. '
+              'Usa AURICULARES para evitar eco.',
+              style: TextStyle(color: Pal.faint, fontSize: 11.5)),
           const SizedBox(height: 8),
           Row(children: [
             ElevatedButton.icon(
               onPressed: testing ? _stopTest : _startTest,
-              icon: Icon(testing ? Icons.stop : Icons.graphic_eq, size: 16),
+              icon: Icon(testing ? LucideIcons.square : LucideIcons.activity, size: 16),
               label: Text(testing ? 'Detener' : 'Probar micrófono'),
             ),
             const SizedBox(width: 14),
@@ -568,25 +733,78 @@ class _VoicePanelState extends State<_VoicePanel> {
           const SizedBox(height: 6),
           Text(
               testing
-                  ? 'Habla: si la barra verde se mueve, se te escucha.'
+                  ? 'Habla con AURICULARES: deberías oírte a ti mismo.'
                   : voice.connected
                       ? 'Mide el micro que ya está publicado en el canal de voz.'
-                      : 'Crea una captura local sin entrar a ningún canal.',
-              style: const TextStyle(color: Pal.faint, fontSize: 12)),
-          const SizedBox(height: 20),
-          const Text('PROCESADO DE VOZ', style: _label),
-          SwitchListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            activeTrackColor: Pal.accent,
-            value: voice.noiseSuppression,
-            title: const Text('Supresión de ruido',
-                style: TextStyle(fontSize: 13.5)),
-            subtitle: const Text('Filtra ventiladores, teclado y ruido de fondo.',
-                style: TextStyle(fontSize: 11, color: Pal.faint)),
-            onChanged: (v) =>
-                _applyMicChange(() => voice.setNoiseSuppression(v)),
+                      : 'Te oyes a ti mismo sin entrar a ningún canal (auriculares).',
+              style: TextStyle(color: Pal.faint, fontSize: 12)),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _recDiag ? null : _recordDiag,
+            icon: Icon(_recDiag ? LucideIcons.loaderCircle : LucideIcons.fileAudio2,
+                size: 15),
+            label: Text(_recDiag ? 'Grabando 6s…' : 'Grabar diagnóstico (6s)'),
           ),
+          Text(
+              'Graba tu micro (crudo + procesado) 6s en el modo actual → '
+              'Downloads\\chatpapol-toolchain\\diag-raw.wav / diag-out.wav.',
+              style: TextStyle(color: Pal.faint, fontSize: 11)),
+          const SizedBox(height: 20),
+          Text('PROCESADO DE VOZ', style: _label),
+          const SizedBox(height: 8),
+          // UN control de ruido (reemplaza los toggles sueltos "Supresión de
+          // ruido" + "RNNoise" que confundían): maneja RNNoise (16k) y el
+          // supresor espectral (48k) a la vez. El código elige el algoritmo.
+          Text('Reducir ruido de fondo', style: const TextStyle(fontSize: 13.5)),
+          const SizedBox(height: 2),
+          Text(
+              'Filtra ventilador, teclado y ruido MIENTRAS hablas. Estándar para '
+              'casi todo; Fuerte para entornos ruidosos.',
+              style: TextStyle(fontSize: 11, color: Pal.faint)),
+          const SizedBox(height: 8),
+          Builder(builder: (_) {
+            final nl = !voice.rnnoise ? 0 : (voice.nsLevel >= 2 ? 2 : 1);
+            return Row(
+              children: [
+                for (final o in const <(int, String)>[
+                  (0, 'Off'),
+                  (1, 'Estándar'),
+                  (2, 'Fuerte')
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () {
+                        voice.setRnnoise(o.$1 > 0);
+                        voice.setNsLevel(o.$1);
+                        voice.setNoiseSuppression(false); // RNNoise reemplaza al clásico
+                        setState(() {});
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: nl == o.$1
+                              ? Pal.accentDim.withValues(alpha: .15)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                              color: nl == o.$1 ? Pal.accent : Pal.borderDefault),
+                        ),
+                        child: Text(o.$2,
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                color: nl == o.$1 ? Pal.accent : Pal.muted,
+                                fontWeight: nl == o.$1
+                                    ? FontWeight.w700
+                                    : FontWeight.w500)),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          }),
+          const SizedBox(height: 14),
           SwitchListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
@@ -594,7 +812,7 @@ class _VoicePanelState extends State<_VoicePanel> {
             value: voice.echoCancellation,
             title: const Text('Cancelación de eco',
                 style: TextStyle(fontSize: 13.5)),
-            subtitle: const Text('Evita que se cuele el audio de tus altavoces.',
+            subtitle: Text('Evita que se cuele el audio de tus altavoces.',
                 style: TextStyle(fontSize: 11, color: Pal.faint)),
             onChanged: (v) =>
                 _applyMicChange(() => voice.setEchoCancellation(v)),
@@ -606,15 +824,50 @@ class _VoicePanelState extends State<_VoicePanel> {
             value: voice.autoGainControl,
             title: const Text('Ganancia automática (AGC)',
                 style: TextStyle(fontSize: 13.5)),
-            subtitle: const Text('Nivela el volumen de tu voz automáticamente.',
+            subtitle: Text('Nivela el volumen de tu voz automáticamente.',
                 style: TextStyle(fontSize: 11, color: Pal.faint)),
             onChanged: (v) =>
                 _applyMicChange(() => voice.setAutoGainControl(v)),
           ),
-          const SizedBox(height: 12),
-          const Text('VOLUMEN DE SALIDA', style: _label),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            activeTrackColor: Pal.accent,
+            value: voice.fullband48k,
+            title: const Text('Micro fullband 48 kHz (experimental)',
+                style: TextStyle(fontSize: 13.5)),
+            subtitle: Text(
+                'Voz a 48 kHz sin recorte a 16k. EXPERIMENTAL: puede sonar roto '
+                'en algunos equipos y NO cancela eco (usa AURICULARES). Déjalo OFF '
+                'si quieres audio estable. Se aplica al reconectar.',
+                style: TextStyle(fontSize: 11, color: Pal.faint)),
+            onChanged: (v) => voice.setFullband48k(v),
+          ),
+          const SizedBox(height: 14),
+          Text('VOLUMEN DE ENTRADA (boost del micro)', style: _label),
           Row(children: [
-            const Icon(Icons.volume_down, size: 18, color: Pal.muted),
+            Icon(LucideIcons.mic, size: 18, color: Pal.muted),
+            Expanded(
+              child: Slider(
+                value: voice.inputGain.clamp(0.5, 3.0),
+                min: 0.5,
+                max: 3.0,
+                divisions: 25,
+                label: '${(voice.inputGain * 100).round()}%',
+                onChanged: (v) => setState(() => voice.setInputGain(v)),
+              ),
+            ),
+            SizedBox(
+              width: 44,
+              child: Text('${(voice.inputGain * 100).round()}%',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 12, color: Pal.muted)),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          Text('VOLUMEN DE SALIDA', style: _label),
+          Row(children: [
+            Icon(LucideIcons.volume1, size: 18, color: Pal.muted),
             Expanded(
               child: Slider(
                 value: voice.outputVolume,
@@ -622,19 +875,27 @@ class _VoicePanelState extends State<_VoicePanel> {
                 onChanged: (v) => voice.setOutputVolume(v),
               ),
             ),
-            const Icon(Icons.volume_up, size: 18, color: Pal.muted),
+            Icon(LucideIcons.volume2, size: 18, color: Pal.muted),
             SizedBox(
               width: 42,
               child: Text('${(voice.outputVolume * 100).round()}%',
                   textAlign: TextAlign.right,
-                  style: const TextStyle(fontSize: 12.5, color: Pal.muted)),
+                  style: TextStyle(fontSize: 12.5, color: Pal.muted)),
             ),
           ]),
-          const Text(
+          Text(
               'Atenúa lo que oyes de los demás. El volumen de captura del micro '
               'no se puede ajustar por software en escritorio: usa la ganancia '
               'automática o el volumen de micrófono del sistema.',
               style: TextStyle(color: Pal.faint, fontSize: 12)),
+          const SizedBox(height: 12),
+          Text('CRÉDITOS DE AUDIO', style: _label),
+          Text(
+              'Ambientes de sala (CC0 · freesound.org): Lluvia — idomusics · '
+              'Mar — INNORECORDS · Viento — florianreichelt · Fogata — Sauron974 · '
+              'Goteo de cueva — Sclolex. Zumbido sci-fi: sintético propio. '
+              '¡Gracias a los autores!',
+              style: TextStyle(color: Pal.faint, fontSize: 11)),
         ]);
       },
     );
@@ -677,7 +938,7 @@ class _RolesPanelState extends State<_RolesPanel> {
                     {'name': name, 'permissions': 0});
                 setState(() => selectedId = r['id']);
               },
-              icon: const Icon(Icons.add, size: 16),
+              icon: const Icon(LucideIcons.plus, size: 16),
               label: const Text('Crear rol'),
             ),
           ]),
@@ -693,9 +954,9 @@ class _RolesPanelState extends State<_RolesPanel> {
                               horizontal: 10, vertical: 8),
                           decoration: BoxDecoration(
                               color: selectedId == r.id ? Pal.bg3 : null,
-                              borderRadius: BorderRadius.circular(6)),
+                              borderRadius: BorderRadius.circular(5)),
                           child: Row(children: [
-                            Icon(Icons.circle, size: 10,
+                            Icon(LucideIcons.circle, size: 10,
                                 color: r.color != null
                                     ? Color(int.parse(
                                         r.color!.replaceFirst('#', '0xff')))
@@ -713,7 +974,7 @@ class _RolesPanelState extends State<_RolesPanel> {
               const VerticalDivider(),
               Expanded(
                 child: sel == null
-                    ? const Center(
+                    ? Center(
                         child: Text('Elige un rol',
                             style: TextStyle(color: Pal.muted)))
                     : _roleEditor(sel),
@@ -733,22 +994,22 @@ class _RolesPanelState extends State<_RolesPanel> {
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
         ),
         if (!role.isEveryone) ...[
-          SmallIconBtn(Icons.edit, 'Renombrar', () async {
+          SmallIconBtn(LucideIcons.pencil, 'Renombrar', () async {
             final name = await promptText(context, 'Renombrar rol',
                 initial: role.name, action: 'Guardar');
             if (name != null && name.isNotEmpty) {
               store.api.patch('/api/roles/${role.id}', {'name': name});
             }
           }),
-          SmallIconBtn(Icons.arrow_upward, 'Subir jerarquía', () {
+          SmallIconBtn(LucideIcons.arrowUp, 'Subir jerarquía', () {
             store.api.patch('/api/roles/${role.id}',
                 {'position': role.position + 1});
           }),
-          SmallIconBtn(Icons.arrow_downward, 'Bajar jerarquía', () {
+          SmallIconBtn(LucideIcons.arrowDown, 'Bajar jerarquía', () {
             store.api.patch('/api/roles/${role.id}',
                 {'position': role.position - 1});
           }),
-          SmallIconBtn(Icons.delete_outline, 'Borrar rol', () async {
+          SmallIconBtn(LucideIcons.trash2, 'Borrar rol', () async {
             if (await confirm(context, '¿Borrar "${role.name}"?', '')) {
               setState(() => selectedId = null);
               store.api.delete('/api/roles/${role.id}');
@@ -757,15 +1018,16 @@ class _RolesPanelState extends State<_RolesPanel> {
         ],
       ]),
       const SizedBox(height: 10),
-      const Text('COLOR',
-          style: TextStyle(fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700)),
+      Text('COLOR',
+          style: TextStyle(fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700,
+              letterSpacing: 1.3)),
       const SizedBox(height: 6),
       Wrap(
         spacing: 6,
         children: swatches.map((c) => InkWell(
               onTap: () => store.api.patch('/api/roles/${role.id}', {'color': c}),
               child: Container(
-                width: 26, height: 26,
+                width: 24, height: 24,
                 decoration: BoxDecoration(
                   color: c != null
                       ? Color(int.parse(c.replaceFirst('#', '0xff')))
@@ -776,14 +1038,15 @@ class _RolesPanelState extends State<_RolesPanel> {
                       : null,
                 ),
                 child: c == null
-                    ? const Icon(Icons.block, size: 14, color: Pal.faint)
+                    ? Icon(LucideIcons.ban, size: 14, color: Pal.faint)
                     : null,
               ),
             )).toList(),
       ),
       const SizedBox(height: 16),
-      const Text('PERMISOS',
-          style: TextStyle(fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700)),
+      Text('PERMISOS',
+          style: TextStyle(fontSize: 11, color: Pal.faint, fontWeight: FontWeight.w700,
+              letterSpacing: 1.3)),
       ...permLabels.entries.map((e) {
         final has = (role.permissions & e.key) != 0;
         return SwitchListTile(
@@ -795,7 +1058,7 @@ class _RolesPanelState extends State<_RolesPanel> {
           subtitle: e.value.$2.isEmpty
               ? null
               : Text(e.value.$2,
-                  style: const TextStyle(fontSize: 11, color: Pal.faint)),
+                  style: TextStyle(fontSize: 11, color: Pal.faint)),
           onChanged: (v) {
             final next = v
                 ? role.permissions | e.key
@@ -840,7 +1103,7 @@ class _InvitesPanelState extends State<_InvitesPanel> {
             await widget.store.api.post('/api/invites', {'max_uses': 0});
             _load();
           },
-          icon: const Icon(Icons.add, size: 16),
+          icon: const Icon(LucideIcons.plus, size: 16),
           label: const Text('Nueva'),
         ),
       ]),
@@ -848,19 +1111,19 @@ class _InvitesPanelState extends State<_InvitesPanel> {
         child: ListView(
           children: invites.map((i) => ListTile(
                 dense: true,
-                leading: const Icon(Icons.mail_outline, color: Pal.accent, size: 18),
+                leading: Icon(LucideIcons.mail, color: Pal.accent, size: 18),
                 title: SelectableText(i['code'],
-                    style: const TextStyle(
-                        fontFamily: 'monospace', fontSize: 14,
+                    style: TextStyle(
+                        fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback, fontSize: 14,
                         fontWeight: FontWeight.w700)),
                 subtitle: Text(
                     'Usos: ${i['uses']}${i['max_uses'] > 0 ? '/${i['max_uses']}' : ' (∞)'}',
-                    style: const TextStyle(fontSize: 11.5, color: Pal.faint)),
+                    style: TextStyle(fontSize: 11.5, color: Pal.faint)),
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  SmallIconBtn(Icons.copy, 'Copiar', () {
+                  SmallIconBtn(LucideIcons.copy, 'Copiar', () {
                     Clipboard.setData(ClipboardData(text: i['code']));
                   }),
-                  SmallIconBtn(Icons.delete_outline, 'Revocar', () async {
+                  SmallIconBtn(LucideIcons.trash2, 'Revocar', () async {
                     await widget.store.api.delete('/api/invites/${i['code']}');
                     _load();
                   }, color: Pal.red),
@@ -889,7 +1152,7 @@ class _ExpressionsPanel extends StatelessWidget {
             const Spacer(),
             ElevatedButton.icon(
               onPressed: () => _upload(context),
-              icon: const Icon(Icons.upload, size: 16),
+              icon: const Icon(LucideIcons.upload, size: 16),
               label: Text(stickers ? 'Subir sticker' : 'Subir sonido'),
             ),
           ]),
@@ -897,7 +1160,7 @@ class _ExpressionsPanel extends StatelessWidget {
               stickers
                   ? 'PNG/GIF/WebP, máx 2 MB.'
                   : 'MP3/OGG/WAV, máx 1 MB. Todos en el canal de voz lo oyen.',
-              style: const TextStyle(color: Pal.faint, fontSize: 12)),
+              style: TextStyle(color: Pal.faint, fontSize: 12)),
           const SizedBox(height: 12),
           Expanded(
             child: stickers
@@ -918,7 +1181,7 @@ class _ExpressionsPanel extends StatelessWidget {
                           ),
                           Positioned(
                             right: 2, top: 2,
-                            child: SmallIconBtn(Icons.close, 'Borrar ${s.name}',
+                            child: SmallIconBtn(LucideIcons.x, 'Borrar ${s.name}',
                                 () => store.api.delete('/api/stickers/${s.id}'),
                                 color: Pal.red, size: 14),
                           ),
@@ -927,10 +1190,11 @@ class _ExpressionsPanel extends StatelessWidget {
                 : ListView(
                     children: store.sounds.map((s) => ListTile(
                           dense: true,
-                          leading: Text(s.emoji ?? '🔊',
-                              style: const TextStyle(fontSize: 18)),
+                          leading: Text(s.emoji ?? '♪',
+                              style: TextStyle(
+                                  fontSize: 18, color: Pal.accent)),
                           title: Text(s.name, style: const TextStyle(fontSize: 13.5)),
-                          trailing: SmallIconBtn(Icons.delete_outline, 'Borrar',
+                          trailing: SmallIconBtn(LucideIcons.trash2, 'Borrar',
                               () => store.api.delete('/api/sounds/${s.id}'),
                               color: Pal.red),
                         )).toList(),
@@ -1039,10 +1303,10 @@ class _AutomodPanelState extends State<_AutomodPanel> {
         const Spacer(),
         ElevatedButton.icon(
             onPressed: _create,
-            icon: const Icon(Icons.add, size: 16),
+            icon: const Icon(LucideIcons.plus, size: 16),
             label: const Text('Nueva regla')),
       ]),
-      const Text('Los administradores están exentos de los filtros.',
+      Text('Los administradores están exentos de los filtros.',
           style: TextStyle(color: Pal.faint, fontSize: 12)),
       const SizedBox(height: 8),
       Expanded(
@@ -1051,16 +1315,16 @@ class _AutomodPanelState extends State<_AutomodPanel> {
                 dense: true,
                 leading: Icon(
                     r['type'] == 'links'
-                        ? Icons.link_off
+                        ? LucideIcons.unlink
                         : r['type'] == 'regex'
-                            ? Icons.code
-                            : Icons.block,
+                            ? LucideIcons.code
+                            : LucideIcons.ban,
                     size: 18,
                     color: r['enabled'] == 1 ? Pal.accent : Pal.faint),
                 title: Text(r['name'], style: const TextStyle(fontSize: 13.5)),
                 subtitle: Text(r['pattern'],
                     maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11.5, color: Pal.faint)),
+                    style: TextStyle(fontSize: 11.5, color: Pal.faint)),
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                   Switch(
                     value: r['enabled'] == 1,
@@ -1071,7 +1335,7 @@ class _AutomodPanelState extends State<_AutomodPanel> {
                       _load();
                     },
                   ),
-                  SmallIconBtn(Icons.delete_outline, 'Borrar', () async {
+                  SmallIconBtn(LucideIcons.trash2, 'Borrar', () async {
                     await widget.store.api.delete('/api/automod/${r['id']}');
                     _load();
                   }, color: Pal.red),
@@ -1125,11 +1389,11 @@ class _WebhooksPanelState extends State<_WebhooksPanel> {
                       {'name': name});
                   _load();
                 },
-          icon: const Icon(Icons.add, size: 16),
+          icon: const Icon(LucideIcons.plus, size: 16),
           label: const Text('Crear'),
         ),
       ]),
-      const Text('POST {content, username?, avatar_url?} a la URL → mensaje en el canal.',
+      Text('POST {content, username?, avatar_url?} a la URL → mensaje en el canal.',
           style: TextStyle(color: Pal.faint, fontSize: 12)),
       const SizedBox(height: 8),
       Expanded(
@@ -1139,19 +1403,19 @@ class _WebhooksPanelState extends State<_WebhooksPanel> {
                 '${store.api.base}/api/webhooks/${h['id']}/${h['token']}';
             return ListTile(
               dense: true,
-              leading: const Icon(Icons.webhook, color: Pal.accent, size: 18),
+              leading: Icon(LucideIcons.webhook, color: Pal.accent, size: 18),
               title: Text(
                   '${h['name']}  →  #${store.channels[h['channel_id']]?.name ?? '?'}',
                   style: const TextStyle(fontSize: 13.5)),
               subtitle: Text(url,
                   maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: 11, color: Pal.faint, fontFamily: 'monospace')),
+                  style: TextStyle(
+                      fontSize: 11, color: Pal.faint, fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback)),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                SmallIconBtn(Icons.copy, 'Copiar URL', () {
+                SmallIconBtn(LucideIcons.copy, 'Copiar URL', () {
                   Clipboard.setData(ClipboardData(text: url));
                 }),
-                SmallIconBtn(Icons.delete_outline, 'Borrar', () async {
+                SmallIconBtn(LucideIcons.trash2, 'Borrar', () async {
                   await store.api.delete('/api/webhooks/${h['id']}');
                   _load();
                 }, color: Pal.red),
@@ -1202,11 +1466,11 @@ class _BotsPanelState extends State<_BotsPanel> {
               if (context.mounted) showError(context, e);
             }
           },
-          icon: const Icon(Icons.add, size: 16),
+          icon: const Icon(LucideIcons.plus, size: 16),
           label: const Text('Crear bot'),
         ),
       ]),
-      const Text(
+      Text(
           'El bot usa su token en la misma API y gateway. Ejemplo en examples/dice-bot.ts.',
           style: TextStyle(color: Pal.faint, fontSize: 12)),
       const SizedBox(height: 8),
@@ -1214,17 +1478,17 @@ class _BotsPanelState extends State<_BotsPanel> {
         child: ListView(
           children: bots.map((b) => ListTile(
                 dense: true,
-                leading: const Icon(Icons.smart_toy, color: Pal.accent, size: 18),
+                leading: Icon(LucideIcons.bot, color: Pal.accent, size: 18),
                 title: Text(b['username'], style: const TextStyle(fontSize: 13.5)),
                 subtitle: Text('token: ${b['token']}',
                     maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 11, color: Pal.faint, fontFamily: 'monospace')),
+                    style: TextStyle(
+                        fontSize: 11, color: Pal.faint, fontFamily: Pal.fontMono, fontFamilyFallback: Pal.monoFallback)),
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  SmallIconBtn(Icons.copy, 'Copiar token', () {
+                  SmallIconBtn(LucideIcons.copy, 'Copiar token', () {
                     Clipboard.setData(ClipboardData(text: b['token']));
                   }),
-                  SmallIconBtn(Icons.delete_outline, 'Borrar bot', () async {
+                  SmallIconBtn(LucideIcons.trash2, 'Borrar bot', () async {
                     await widget.store.api.delete('/api/bots/${b['id']}');
                     _load();
                   }, color: Pal.red),
@@ -1267,29 +1531,30 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _title('Actualizaciones'),
       Text('Versión instalada: v$appVersion',
-          style: const TextStyle(color: Pal.muted, fontSize: 13.5)),
+          style: TextStyle(color: Pal.muted, fontSize: 13.5)),
       const SizedBox(height: 16),
       if (!checked)
         const CircularProgressIndicator(strokeWidth: 2)
       else if (available == null)
-        const Row(children: [
-          Icon(Icons.check_circle, color: Pal.green, size: 18),
+        Row(children: [
+          Icon(LucideIcons.checkCircle, color: Pal.green, size: 18),
           SizedBox(width: 8),
-          Text('Estás al día ✨', style: TextStyle(fontSize: 14)),
+          Text('✔ estás al día', style: TextStyle(fontSize: 14, color: Pal.green)),
         ])
       else ...[
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-              color: Pal.bg0, borderRadius: BorderRadius.circular(10)),
+              color: Pal.bg0, borderRadius: BorderRadius.circular(8)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('🎉 Nueva versión: v${available!.version}',
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            Text('❯ nueva versión: v${available!.version}',
+                style: TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w700, color: Pal.accent)),
             if (available!.notes.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(available!.notes,
-                    style: const TextStyle(color: Pal.muted, fontSize: 12.5)),
+                    style: TextStyle(color: Pal.muted, fontSize: 12.5)),
               ),
             const SizedBox(height: 12),
             ElevatedButton.icon(
@@ -1299,7 +1564,7 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
                       Navigator.of(context).pop(); // cerrar Ajustes
                       startUpdate(context, widget.store.api, available!);
                     },
-              icon: const Icon(Icons.download, size: 16),
+              icon: const Icon(LucideIcons.download, size: 16),
               label: Text(applying
                   ? 'Descargando…'
                   : 'Actualizar y reiniciar'),
@@ -1309,7 +1574,7 @@ class _UpdatesPanelState extends State<_UpdatesPanel> {
       ],
       const Spacer(),
       if (widget.store.canI(P.administrator))
-        const Text(
+        Text(
             'Publicar release: POST /api/updates/:platform con el instalador '
             '(ver client/packaging/README.md).',
             style: TextStyle(color: Pal.faint, fontSize: 11.5)),

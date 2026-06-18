@@ -34,11 +34,15 @@ List<Widget> renderMarkdown(String content, AppStore store, {double fontSize = 1
         width: double.infinity,
         decoration: BoxDecoration(
           color: Pal.bg0,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.white.withValues(alpha: .06)),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Pal.borderDefault),
         ),
         child: SelectableText(code.trimRight(),
-            style: TextStyle(fontFamily: 'monospace', fontSize: fontSize - 1.5, color: Pal.text)),
+            style: TextStyle(
+                fontFamily: Pal.fontMono,
+                fontFamilyFallback: Pal.monoFallback,
+                fontSize: fontSize - 1.5,
+                color: Pal.text)),
       ));
     } else {
       blocks.addAll(_renderLines(parts[i], store, base));
@@ -61,9 +65,9 @@ List<Widget> _renderLines(String text, AppStore store, TextStyle base) {
     if (line.startsWith('> ') || line == '>') {
       flush();
       out.add(Container(
-        margin: const EdgeInsets.symmetric(vertical: 2),
-        padding: const EdgeInsets.only(left: 10),
-        decoration: const BoxDecoration(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.only(left: 12),
+        decoration: BoxDecoration(
             border: Border(left: BorderSide(color: Pal.faint, width: 3))),
         child: SelectableText.rich(TextSpan(
             children: _inline(line.length > 1 ? line.substring(2) : '', store,
@@ -100,7 +104,8 @@ final List<_Pat> _patterns = [
   _Pat(r'`([^`]+)`', (m, s, st) => TextSpan(
       text: ' ${m[1]} ',
       style: st.copyWith(
-          fontFamily: 'monospace',
+          fontFamily: Pal.fontMono,
+          fontFamilyFallback: Pal.monoFallback,
           fontSize: (st.fontSize ?? 14) - 1,
           backgroundColor: Pal.bg0))),
   _Pat(_urlRe.pattern, (m, s, st) {
@@ -120,7 +125,7 @@ final List<_Pat> _patterns = [
         text: '@$name',
         style: st.copyWith(
             color: mentionsMe ? Pal.yellow : Pal.accent,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             backgroundColor: (mentionsMe ? Pal.yellow : Pal.accent).withValues(alpha: .12)));
   }),
 ];
@@ -167,7 +172,7 @@ class _SpoilerState extends State<_Spoiler> {
         padding: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
             color: revealed ? Pal.bg0 : Pal.bg0.withValues(alpha: .95),
-            borderRadius: BorderRadius.circular(4)),
+            borderRadius: BorderRadius.circular(5)),
         child: Text(widget.text,
             style: revealed
                 ? widget.style

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
@@ -7,12 +8,48 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart' as m;
 import 'store.dart';
+import 'sfx.dart';
+import 'ambience.dart';
+import 'audio/user_eq.dart';
+import 'audio/voice_fx.dart';
+import 'webrtc_apm.dart';
+
+/// Un screenshare remoto visible: track de video + quién lo comparte.
+/// Se usa para el grid y para el modo pantalla completa.
+class ScreenShare {
+  final VideoTrack track;
+  final String identity;
+  final String? name;
+  const ScreenShare(
+      {required this.track, required this.identity, this.name});
+}
 
 /// livekit no trae preset de screenshare a 60fps; 1080p60 fluido necesita
 /// más bitrate que el preset de 30fps (4Mbps) para no verse borroso.
 const _share1080FPS60 = VideoParameters(
   dimensions: VideoDimensionsPresets.h1080_169,
   encoding: VideoEncoding(maxBitrate: 8000 * 1000, maxFramerate: 60),
+);
+
+/// Publicación del MICRO: voz clara pero económica. dtx/red ON (ahorra ancho
+/// de banda en silencios y resiste pérdida de paquetes), 96kbps. Va por
+/// RoomOptions.defaultAudioPublishOptions porque setMicrophoneEnabled en
+/// livekit 2.8.0 NO acepta audioPublishOptions (solo audioCaptureOptions).
+const _micPublishOptions = AudioPublishOptions(
+  dtx: true,
+  red: true,
+  encoding: AudioEncoding.presetMusicHighQuality, // 96kbps
+);
+
+/// Publicación del AUDIO DEL SISTEMA (screenshare): ALTA FIDELIDAD ESTÉREO
+/// FIJA. dtx:false y red:false (no recortar en "silencios" musicales ni meter
+/// redundancia que enturbie), 128kbps estéreo. NO se puede setear por
+/// RoomOptions (eso también afectaría al micro): se publica el track a mano
+/// con estas opciones en startShare. Esto arregla el "se oye lejano".
+const _sharePublishOptions = AudioPublishOptions(
+  dtx: false,
+  red: false,
+  encoding: AudioEncoding.presetMusicHighQualityStereo, // 128kbps estéreo
 );
 
 VideoParameters _shareParamsFor(int fps) => switch (fps) {
@@ -33,7 +70,25 @@ class VoiceManager extends ChangeNotifier {
   late final Future<void> _prefsReady;
   VoiceManager(this.store) {
     store.onSoundPlay = _playSound;
+    store.onAmbienceChange = _onAmbienceChange;
+    store.onReconnected = _reannounceVoice;
+    // Empuja la cadena de efectos al procesador nativo cada vez que cambia.
+    VoiceFxEngine.instance.addListener(_onVoiceFxChanged);
     _prefsReady = _loadPrefs();
+  }
+
+  // Debounce del push de la cadena de efectos al nativo (coalesce drags).
+  Timer? _fxPushTimer;
+  void _onVoiceFxChanged() {
+    _fxPushTimer?.cancel();
+    _fxPushTimer = Timer(const Duration(milliseconds: 150), _pushVoiceFx);
+  }
+
+  /// Envía el estado actual de los efectos (enabled + cadena) al post-procesador
+  /// nativo del fork flutter_webrtc. No-op si el build no lo soporta.
+  Future<void> _pushVoiceFx() async {
+    final e = VoiceFxEngine.instance;
+    await WebrtcApm.setVoiceFx(e.enabled, e.nativeChainSpec());
   }
 
   Room? room;
@@ -55,15 +110,36 @@ class VoiceManager extends ChangeNotifier {
 
   // Opciones de micrófono persistidas (ajustes de "Voz y micrófono").
   String? micDeviceId;
+  // Dispositivo de SALIDA (altavoces/auriculares) por el que se oye a los demás.
+  // null = predeterminado del sistema. Persistido y reaplicado en cada join.
+  String? outputDeviceId;
   bool noiseSuppression = true;
   bool echoCancellation = true;
   bool autoGainControl = true;
+  // RNNoise (IA, CPU): supresor de ruido extra del micro, encima del NS clásico.
+  // El APM es global del factory → se aplica una vez (no por track).
+  // Default ON: limpia ruido DURANTE el habla (a diferencia del gate, que solo
+  // corta silencios) en el path 16k. En fullband48k actúa como gate, no como IA.
+  bool rnnoise = true;
+  // [chatpapol audio] Supresor de ruido ESPECTRAL propio (Wiener+MCRA) del path
+  // 48k: 0=off, 1=estándar, 2=fuerte. Reemplaza al viejo gate/AGC del 48k.
+  int nsLevel = 1;
+  // Boost de captura (volumen de entrada) del path 48k: 0..3 (1.0 = sin cambio).
+  double inputGain = 1.0;
   // Volumen de SALIDA (playout de tracks remotos). NO hay ganancia de captura:
   // ver setOutputVolume.
   double outputVolume = 1.0;
   // Volumen POR USUARIO (identity → 0.0..2.0; 1.0 = normal). Persistido en
   // local: si te encuentras a la misma persona en otro canal, se respeta.
   final userVolumes = <String, double>{};
+  // Volumen del AUDIO DEL SCREENSHARE por usuario (identity → 0.0..2.0),
+  // SEPARADO del volumen del micro. Persistido en local igual que userVolumes.
+  final shareVolumes = <String, double>{};
+
+  // EQ POR USUARIO (identity → UserEqSettings). LOCAL: solo el dueño lo oye.
+  // Solo se persiste/aplica en Windows (la ruta custom de playout es waveOut,
+  // no implementada en Linux). En Linux userEqs queda vacío siempre.
+  final userEqs = <String, UserEqSettings>{};
 
   bool get connected => room != null && channelId != null;
 
@@ -73,6 +149,27 @@ class VoiceManager extends ChangeNotifier {
         noiseSuppression: noiseSuppression,
         echoCancellation: echoCancellation,
         autoGainControl: autoGainControl,
+      );
+
+  // ───────── micro CUSTOM 48 kHz (calidad Discord, sin APM) ─────────
+  // Cuando está ON, el micro se publica por una pista kCustom alimentada por un
+  // capturador nativo a 48k (ver webrtc_apm.dart / fork) EN VEZ de
+  // setMicrophoneEnabled. Sin APM no hay AEC → AURICULARES (opt-in en ajustes).
+  bool fullband48k = false;
+  // Pista custom publicada (si el modo está activo y estamos en sala).
+  LocalAudioTrack? _customMicTrack;
+  // trackId nativo del capturador en marcha (para start/stopCustomMicCapture).
+  String? _customMicNativeId;
+
+  /// Opciones de captura del track CUSTOM: stopAudioCaptureOnMute:false es CLAVE
+  /// — el mute de livekit por defecto llama stop()→mediaStreamTrack.stop() y eso
+  /// destruiría la fuente kCustom (no hay getUserMedia que la recree). Sin APM no
+  /// tiene sentido NS/AEC/AGC (van off; el procesado va a 48k fuera del APM).
+  AudioCaptureOptions get _customMicOptions => const AudioCaptureOptions(
+        noiseSuppression: false,
+        echoCancellation: false,
+        autoGainControl: false,
+        stopAudioCaptureOnMute: false,
       );
 
   /// Track de micro publicado en la sala actual (o null si no hay).
@@ -86,9 +183,14 @@ class VoiceManager extends ChangeNotifier {
   Future<void> _loadPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     micDeviceId = prefs.getString('mic_device_id');
+    outputDeviceId = prefs.getString('output_device_id');
     noiseSuppression = prefs.getBool('mic_noise_suppression') ?? true;
     echoCancellation = prefs.getBool('mic_echo_cancellation') ?? true;
     autoGainControl = prefs.getBool('mic_auto_gain') ?? true;
+    rnnoise = prefs.getBool('mic_rnnoise') ?? true;
+    nsLevel = prefs.getInt('mic_ns_level') ?? 1;
+    inputGain = prefs.getDouble('mic_input_gain') ?? 1.0;
+    fullband48k = prefs.getBool('mic_fullband_48k') ?? false;
     outputVolume = prefs.getDouble('voice_output_volume') ?? 1.0;
     try {
       final raw = prefs.getString('voice_user_volumes');
@@ -97,6 +199,27 @@ class VoiceManager extends ChangeNotifier {
             (k, v) => userVolumes[k] = (v as num).toDouble().clamp(0.0, 2.0));
       }
     } catch (_) {}
+    try {
+      final raw = prefs.getString('voice_share_volumes');
+      if (raw != null) {
+        (jsonDecode(raw) as Map<String, dynamic>).forEach(
+            (k, v) => shareVolumes[k] = (v as num).toDouble().clamp(0.0, 2.0));
+      }
+    } catch (_) {}
+    // EQ por usuario: solo relevante en Windows (salida custom waveOut).
+    if (Platform.isWindows) {
+      try {
+        final raw = prefs.getString('voice_user_eq');
+        if (raw != null) {
+          (jsonDecode(raw) as Map<String, dynamic>).forEach((k, v) {
+            if (v is Map) {
+              final eq = UserEqSettings.fromJson(v);
+              if (!eq.isFlat) userEqs[k] = eq;
+            }
+          });
+        }
+      } catch (_) {}
+    }
     notifyListeners();
   }
 
@@ -114,6 +237,98 @@ class VoiceManager extends ChangeNotifier {
 
   double userVolume(String identity) => userVolumes[identity] ?? 1.0;
 
+  /// Volumen del AUDIO DEL SCREENSHARE de [identity] (0.0..2.0). Independiente
+  /// del volumen del micro de esa persona. Se guarda en local y se aplica ya.
+  Future<void> setShareVolume(String identity, double v) async {
+    v = v.clamp(0.0, 2.0);
+    (v - 1.0).abs() < 0.01
+        ? shareVolumes.remove(identity)
+        : shareVolumes[identity] = v;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('voice_share_volumes', jsonEncode(shareVolumes));
+    _applyOutputVolumeAll();
+    notifyListeners();
+  }
+
+  double shareVolume(String identity) => shareVolumes[identity] ?? 1.0;
+
+  // ───────── EQ POR USUARIO ─────────
+
+  UserEqSettings userEq(String identity) =>
+      userEqs[identity] ?? const UserEqSettings();
+
+  /// Aplica y persiste el EQ para [identity]. Si el EQ es plano (isFlat),
+  /// lo borra del mapa y quita el sink nativo (restaura playout WebRTC normal).
+  /// No-op en plataformas distintas de Windows.
+  Future<void> setUserEq(String identity, UserEqSettings eq) async {
+    if (!Platform.isWindows) return;
+    if (eq.isFlat) {
+      userEqs.remove(identity);
+    } else {
+      userEqs[identity] = eq;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      'voice_user_eq',
+      jsonEncode(userEqs.map((k, v) => MapEntry(k, v.toJson()))),
+    );
+    await _applyEqForIdentity(identity);
+    notifyListeners();
+  }
+
+  /// Empuja el estado de EQ actual al nativo para todos los tracks de [identity]
+  /// con fuente de micrófono. Si el EQ es plano, quita el sink y restaura el
+  /// playout. Si es no-plano, instala/actualiza el sink.
+  ///
+  /// SEGURIDAD: Solo se llama desde Windows (check en setUserEq).
+  /// Si setUserEq no se llama nunca (EQ nunca activo), esta función nunca
+  /// se ejecuta y el playout de WebRTC queda intacto.
+  Future<void> _applyEqForIdentity(String identity) async {
+    if (!Platform.isWindows) return;
+    final r = room;
+    if (r == null) return;
+    final participant = r.remoteParticipants[identity];
+    if (participant == null) return;
+
+    final eq = userEq(identity);
+    final gain = (outputVolume * userVolume(identity)).clamp(0.0, 2.0);
+
+    for (final pub in participant.audioTrackPublications) {
+      // Solo la pista del MICRO (no el audio del screenshare).
+      if (pub.source != TrackSource.microphone) continue;
+      final t = pub.track;
+      if (t is! RemoteAudioTrack) continue;
+
+      final trackId = t.mediaStreamTrack.id;
+      if (eq.isFlat) {
+        // Plano → quitar sink y restaurar playout normal de WebRTC.
+        await WebrtcApm.clearUserEq(trackId, gain);
+      } else {
+        // No-plano → instalar/actualizar sink (nativo hace AddSink + SetVolume(0)
+        // la primera vez; en llamadas sucesivas solo actualiza los parámetros).
+        await WebrtcApm.setUserEq(trackId, eq.gains, gain);
+      }
+    }
+  }
+
+  /// Limpia todos los sinks de EQ activos al salir del canal.
+  Future<void> _clearAllEqSinks() async {
+    if (!Platform.isWindows) return;
+    final r = room;
+    if (r == null) return;
+    for (final identity in userEqs.keys.toList()) {
+      final participant = r.remoteParticipants[identity];
+      if (participant == null) continue;
+      final gain = (outputVolume * userVolume(identity)).clamp(0.0, 2.0);
+      for (final pub in participant.audioTrackPublications) {
+        if (pub.source != TrackSource.microphone) continue;
+        final t = pub.track;
+        if (t is! RemoteAudioTrack) continue;
+        await WebrtcApm.clearUserEq(t.mediaStreamTrack.id, gain);
+      }
+    }
+  }
+
   Future<void> _saveMicPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     micDeviceId == null
@@ -122,6 +337,34 @@ class VoiceManager extends ChangeNotifier {
     await prefs.setBool('mic_noise_suppression', noiseSuppression);
     await prefs.setBool('mic_echo_cancellation', echoCancellation);
     await prefs.setBool('mic_auto_gain', autoGainControl);
+    await prefs.setBool('mic_rnnoise', rnnoise);
+    await prefs.setInt('mic_ns_level', nsLevel);
+    await prefs.setDouble('mic_input_gain', inputGain);
+  }
+
+  /// Activa/desactiva RNNoise. El APM es global del factory → NO reinicia el
+  /// track (a diferencia de los flags clásicos). Persiste y aplica de inmediato.
+  Future<void> setRnnoise(bool v) async {
+    rnnoise = v;
+    await _saveMicPrefs();
+    await WebrtcApm.setRnnoise(v);
+    notifyListeners();
+  }
+
+  /// Nivel del supresor espectral del path 48k (0/1/2). Persiste y aplica en vivo.
+  Future<void> setNsLevel(int v) async {
+    nsLevel = v.clamp(0, 2);
+    await _saveMicPrefs();
+    await WebrtcApm.setNsLevel(nsLevel);
+    notifyListeners();
+  }
+
+  /// Boost de captura del path 48k (0..3). Persiste y aplica en vivo.
+  Future<void> setInputGain(double v) async {
+    inputGain = v.clamp(0.0, 3.0);
+    await _saveMicPrefs();
+    await WebrtcApm.setInputGain(inputGain);
+    notifyListeners();
   }
 
   /// Cambia el dispositivo de entrada (null = predeterminado del sistema).
@@ -133,16 +376,57 @@ class VoiceManager extends ChangeNotifier {
       } catch (_) {}
     }
     await _saveMicPrefs();
+    if (fullband48k && _customMicTrack != null) {
+      // micro custom: el deviceId va al capturador nativo, no a getUserMedia.
+      // Recrea la pista con el nuevo device (no hay replaceTrack para kCustom).
+      await _unpublishCustomMic();
+      await _publishCustomMic();
+      notifyListeners();
+      return;
+    }
     await applyMicOptions();
     notifyListeners();
+  }
+
+  /// Cambia el dispositivo de SALIDA (null = predeterminado del sistema). Aplica
+  /// el playout de los tracks remotos a ese dispositivo y lo persiste.
+  Future<void> setOutputDevice(MediaDevice? device) async {
+    outputDeviceId = device?.deviceId;
+    final prefs = await SharedPreferences.getInstance();
+    outputDeviceId == null
+        ? await prefs.remove('output_device_id')
+        : await prefs.setString('output_device_id', outputDeviceId!);
+    if (device != null) {
+      try {
+        await Hardware.instance.selectAudioOutput(device); // solo desktop
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  /// Reaplica el dispositivo de salida guardado (en cada join: el playout se
+  /// resetea al predeterminado al crear la sala).
+  Future<void> _applyOutputDevice() async {
+    final id = outputDeviceId;
+    if (id == null) return;
+    try {
+      final outs = await Hardware.instance.audioOutputs();
+      MediaDevice? dev;
+      for (final d in outs) {
+        if (d.deviceId == id) { dev = d; break; }
+      }
+      if (dev != null) await Hardware.instance.selectAudioOutput(dev);
+    } catch (_) {}
   }
 
   Future<void> setNoiseSuppression(bool v) =>
       _setFlag(() => noiseSuppression = v);
   Future<void> setEchoCancellation(bool v) =>
       _setFlag(() => echoCancellation = v);
-  Future<void> setAutoGainControl(bool v) =>
-      _setFlag(() => autoGainControl = v);
+  Future<void> setAutoGainControl(bool v) async {
+    await WebrtcApm.setAgc48(v); // AGC del path 48k (no reinicia el track)
+    await _setFlag(() => autoGainControl = v); // AGC del APM (16k) — reinicia track
+  }
 
   Future<void> _setFlag(void Function() apply) async {
     apply();
@@ -163,6 +447,9 @@ class VoiceManager extends ChangeNotifier {
   /// "muteado" (livekit hace este mismo guard en LocalAudioTrack.setDeviceId).
   /// En ese caso se difiere hasta el siguiente des-mute.
   Future<void> applyMicOptions() async {
+    // El micro CUSTOM 48k no usa getUserMedia: restartTrack lo destruiría. El
+    // cambio de device se maneja recreando la pista en setMicDevice.
+    if (fullband48k && _customMicTrack != null) return;
     final t = micTrack;
     if (t == null) return;
     if (t.muted) {
@@ -171,6 +458,139 @@ class VoiceManager extends ChangeNotifier {
     }
     try {
       await t.restartTrack(micOptions);
+    } catch (_) {}
+  }
+
+  // ───────── publicación del micro CUSTOM 48 kHz ─────────
+
+  /// Publica el micro CUSTOM a 48 kHz en la sala actual: crea la pista kCustom
+  /// en el nativo (Helper.createCustomAudioStream → MediaStream real, sin APM),
+  /// la envuelve en un LocalAudioTrack de livekit, arranca el capturador nativo
+  /// a 48k y publica con las mismas opciones que el micro normal. Devuelve false
+  /// (y no toca nada) si el build no soporta el modo: el llamador hace fallback.
+  Future<bool> _publishCustomMic() async {
+    final lp = room?.localParticipant;
+    if (lp == null) return false;
+    try {
+      // MediaStream real ya registrado en el nativo (resuelve el fromMap que no
+      // existe en la API pública: usamos el helper del fork).
+      final stream = await rtc.Helper.createCustomAudioStream();
+      final tracks = stream.getAudioTracks();
+      if (tracks.isEmpty) return false;
+      final nativeTrack = tracks.first;
+      _customMicNativeId = nativeTrack.id;
+
+      // Envuelve la pista nativa en un LocalAudioTrack de livekit (constructor
+      // @internal: source, stream, track, options) — livekit_client 2.8.0.
+      // ignore: invalid_use_of_internal_member
+      final lkTrack = LocalAudioTrack(
+        TrackSource.microphone,
+        stream,
+        nativeTrack,
+        _customMicOptions,
+      );
+
+      // Arranca el capturador nativo a 48k ANTES de publicar (para que ya fluya
+      // PCM). deviceId = entrada elegida en ajustes.
+      await WebrtcApm.startCustomMicCapture(_customMicNativeId!,
+          deviceId: micDeviceId ?? '');
+
+      // Estado de mute inicial: si entramos muteados, deshabilita la pista.
+      if (muted) {
+        try {
+          nativeTrack.enabled = false;
+        } catch (_) {}
+      }
+
+      await lp.publishAudioTrack(lkTrack, publishOptions: _micPublishOptions);
+      _customMicTrack = lkTrack;
+      return true;
+    } catch (e) {
+      debugPrint('[voice] custom mic 48k falló: $e — fallback a micro normal');
+      if (_customMicNativeId != null) {
+        await WebrtcApm.stopCustomMicCapture(_customMicNativeId!);
+      }
+      _customMicNativeId = null;
+      _customMicTrack = null;
+      return false;
+    }
+  }
+
+  /// Quita la pista custom de la sala y para el capturador nativo. No re-publica
+  /// el micro normal (eso lo decide el llamador).
+  Future<void> _unpublishCustomMic() async {
+    final lp = room?.localParticipant;
+    final t = _customMicTrack;
+    if (lp != null && t != null) {
+      try {
+        final pub = lp.getTrackPublicationBySource(TrackSource.microphone);
+        if (pub != null && identical(pub.track, t)) {
+          await lp.removePublishedTrack(pub.sid);
+        }
+      } catch (_) {}
+    }
+    if (_customMicNativeId != null) {
+      await WebrtcApm.stopCustomMicCapture(_customMicNativeId!);
+    }
+    try {
+      await t?.stop();
+    } catch (_) {}
+    _customMicTrack = null;
+    _customMicNativeId = null;
+  }
+
+  /// Activa/desactiva el modo micro 48 kHz. Persiste y, si estamos en sala,
+  /// re-publica el micro por la ruta correspondiente. Vuelve al micro normal si
+  /// el build no soporta el modo custom.
+  Future<void> setFullband48k(bool v) async {
+    if (fullband48k == v) return;
+    fullband48k = v;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('mic_fullband_48k', v);
+    if (room?.localParticipant != null) {
+      if (v) {
+        // Despublica el micro NORMAL del todo: setMicrophoneEnabled(false) solo
+        // MUTEA (stopMicTrackOnMute=false por defecto) → quedarían DOS pistas de
+        // micrófono publicadas y el SFU podría reenviar la muteada (otros no te
+        // oyen). Hay que quitar la publicación normal ANTES de crear la custom,
+        // si no getTrackPublicationBySource(microphone) sería ambiguo al
+        // despublicar luego la custom.
+        final lp = room?.localParticipant;
+        try {
+          await lp?.setMicrophoneEnabled(false);
+        } catch (_) {}
+        try {
+          final pub = lp?.getTrackPublicationBySource(TrackSource.microphone);
+          if (pub != null) await lp?.removePublishedTrack(pub.sid);
+        } catch (_) {}
+        final ok = await _publishCustomMic();
+        if (!ok) {
+          fullband48k = false; // no soportado → revertir
+          await prefs.setBool('mic_fullband_48k', false);
+          try {
+            await room?.localParticipant?.setMicrophoneEnabled(!muted,
+                audioCaptureOptions: micOptions);
+          } catch (_) {}
+        }
+      } else {
+        await _unpublishCustomMic();
+        try {
+          await room?.localParticipant
+              ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
+        } catch (_) {}
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Aplica el mute al micro CUSTOM sin destruir la fuente kCustom: alterna
+  /// enabled (el fork lo respeta a nivel RTP). NUNCA mute(stopOnMute) ni
+  /// restartTrack en la pista custom: ambos llaman a getUserMedia/stop().
+  Future<void> _applyCustomMute() async {
+    final t = _customMicTrack;
+    if (t == null) return;
+    try {
+      muted ? await t.disable() : await t.enable();
     } catch (_) {}
   }
 
@@ -188,12 +608,33 @@ class VoiceManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _applyOutputVolume(Track t, String identity) {
+  /// Aplica el volumen de salida a UNA publicación de audio remota,
+  /// distinguiendo la fuente: el audio del SCREENSHARE usa shareVolume(identity)
+  /// y el MICRO usa userVolume(identity) — son dos sliders distintos.
+  ///
+  /// Si el track de micro tiene EQ activo (Windows), NO llama setVolume de
+  /// WebRTC (el track tiene SetVolume(0) puesto por el nativo). En su lugar
+  /// reenvía el gain al sink nativo para que el slider siga funcionando.
+  void _applyOutputVolume(RemoteTrackPublication pub, String identity) {
+    final t = pub.track;
     if (t is! RemoteAudioTrack) return;
+    final perUser = pub.source == TrackSource.screenShareAudio
+        ? shareVolume(identity)
+        : userVolume(identity);
+    final gain = (outputVolume * perUser).clamp(0.0, 2.0);
+
+    // Track de micro con EQ activo en Windows: el volumen va al sink nativo,
+    // NO a WebRTC (que tiene SetVolume(0) desde que se instaló el sink).
+    if (Platform.isWindows &&
+        pub.source == TrackSource.microphone &&
+        !userEq(identity).isFlat) {
+      final eq = userEq(identity);
+      WebrtcApm.setUserEq(t.mediaStreamTrack.id, eq.gains, gain);
+      return;
+    }
+
     try {
-      rtc.Helper.setVolume(
-          (outputVolume * userVolume(identity)).clamp(0.0, 2.0),
-          t.mediaStreamTrack);
+      rtc.Helper.setVolume(gain, t.mediaStreamTrack);
     } catch (_) {}
   }
 
@@ -202,14 +643,14 @@ class VoiceManager extends ChangeNotifier {
     if (r == null) return;
     for (final p in r.remoteParticipants.values) {
       for (final pub in p.audioTrackPublications) {
-        final t = pub.track;
-        if (t != null) _applyOutputVolume(t, p.identity);
+        if (pub.track != null) _applyOutputVolume(pub, p.identity);
       }
     }
   }
 
   Future<void> join(String chId) async {
     if (channelId == chId) return;
+    debugPrint('[voice] join canal=$chId — leave previo');
     await leave();
     connecting = true;
     notifyListeners();
@@ -217,23 +658,19 @@ class VoiceManager extends ChangeNotifier {
       // las opciones de captura (NS/AEC/AGC, micDeviceId) deben reflejar lo
       // guardado YA en el primer publish, no los defaults: espera a las prefs.
       await _prefsReady;
+      debugPrint('[voice] pidiendo voice-token');
       final t = await store.api.post('/api/channels/$chId/voice-token');
       final r = Room(
         roomOptions: RoomOptions(
           adaptiveStream: true,
           dynacast: true,
           defaultAudioCaptureOptions: micOptions,
-          // Bitrate de PUBLICACIÓN del micro. Sin esto la voz va al default de
-          // livekit (presetMusic, 48k) y suena más "apagada". 64k = el default
-          // por canal de voz de Discord (nuestra vara de medir). Mono a
-          // propósito: el estéreo duplica bitrate/latencia sin mejorar la voz.
-          // RED = paquetes Opus redundantes (lo que más sube la nitidez ante
-          // pérdida); DTX corta el envío en silencio.
-          defaultAudioPublishOptions: const AudioPublishOptions(
-            encoding: AudioEncoding(maxBitrate: 64000),
-            dtx: true,
-            red: true,
-          ),
+          // publicación del micro (dtx/red ON): setMicrophoneEnabled no acepta
+          // publish options en 2.8.0, así que se gobierna desde aquí. El audio
+          // del screenshare NO usa este default (se publica a mano en startShare
+          // con opciones de alta fidelidad estéreo). Bitrate definido en
+          // _micPublishOptions (ver nota de 64k Discord-parity vs 96k).
+          defaultAudioPublishOptions: _micPublishOptions,
           // captureScreenAudio va por llamada en startShare (opt-in): el
           // loopback de audio en Windows puede crashear el capturador nativo
           // maxFrameRate explícito SIEMPRE: si queda null, livekit manda
@@ -249,7 +686,9 @@ class VoiceManager extends ChangeNotifier {
               const VideoPublishOptions(simulcast: false),
         ),
       );
+      debugPrint('[voice] conectando a LiveKit…');
       await r.connect(t['url'], t['token']);
+      debugPrint('[voice] conectado; montando listeners');
       room = r;
       channelId = chId;
       _listener = r.createListener()
@@ -276,28 +715,102 @@ class VoiceManager extends ChangeNotifier {
         })
         ..on<RoomDisconnectedEvent>((_) => _cleanup())
         ..on<TrackSubscribedEvent>((e) {
-          _applyOutputVolume(e.track, e.participant.identity);
+          _applyOutputVolume(e.publication, e.participant.identity);
+          // Re-armar el sink de EQ si este participante tenía uno activo.
+          // Cubre el caso de reconexión/re-suscripción de track.
+          if (Platform.isWindows &&
+              e.publication.source == TrackSource.microphone &&
+              !userEq(e.participant.identity).isFlat) {
+            _applyEqForIdentity(e.participant.identity);
+          }
           notifyListeners();
         })
-        ..on<TrackUnsubscribedEvent>((_) => notifyListeners())
+        ..on<TrackUnsubscribedEvent>((e) {
+          // Si el track que se va tenía un sink de EQ, limpiarlo para no dejar
+          // sinks colgados apuntando a un track destruido.
+          if (Platform.isWindows &&
+              e.publication.source == TrackSource.microphone) {
+            final identity = e.participant.identity;
+            if (!userEq(identity).isFlat) {
+              final t = e.track;
+              if (t is RemoteAudioTrack) {
+                final gain =
+                    (outputVolume * userVolume(identity)).clamp(0.0, 2.0);
+                WebrtcApm.clearUserEq(t.mediaStreamTrack.id, gain);
+              }
+            }
+          }
+          notifyListeners();
+        })
         ..on<ParticipantConnectedEvent>((_) => notifyListeners())
         ..on<ParticipantDisconnectedEvent>((_) => notifyListeners());
       try {
-        await r.localParticipant
-            ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
+        if (fullband48k) {
+          debugPrint('[voice] publicando micro CUSTOM 48k (mute=$muted)');
+          final ok = await _publishCustomMic();
+          if (!ok) {
+            // build sin soporte 48k → micro normal
+            fullband48k = false;
+            await r.localParticipant
+                ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
+          }
+        } else {
+          debugPrint('[voice] publicando micro (mute=$muted)');
+          await r.localParticipant
+              ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
+        }
       } catch (_) {/* sin permiso SPEAK: solo escucha */}
+      // Post-procesado nativo del micro. ⚠️ SIEMPRE instalamos el procesador
+      // (aunque RNNoise esté OFF): si no se instala, en el path 16k NUNCA se
+      // llama a Process() → ni el monitor "escucharme" ni la supresión de ruido
+      // ni los efectos corren (bug: "no me escucho / no cambia nada" con RNNoise
+      // off). setRnnoise instala el proc (NUNCA null → no crashea) y el on/off
+      // vive en su flag interno; Process() hace passthrough cuando todo está off.
+      debugPrint('[voice] instalando post-procesador (rnnoise=$rnnoise)');
+      await WebrtcApm.setRnnoise(rnnoise);
+      await WebrtcApm.setNsLevel(nsLevel);
+      await WebrtcApm.setInputGain(inputGain);
+      await WebrtcApm.setAgc48(autoGainControl); // auto-nivelado del path 48k
+      if (VoiceFxEngine.instance.enabled) {
+        debugPrint('[voice] aplicando voicefx');
+        await _pushVoiceFx();
+      }
+      // reaplica el dispositivo de salida elegido (el playout se resetea al
+      // predeterminado al crear la sala)
+      await _applyOutputDevice();
+      debugPrint('[voice] join OK');
+      SfxService.instance.play(UiSound.connected); // entré a voz
       _startSelfSpeaking();
       store.gateway.send('VOICE_JOIN', {'channel_id': chId, 'mute': muted, 'deaf': deafened});
+      // si el canal ya tenía un ambiente sonando, engánchate sincronizado
+      _applyCurrentAmbience();
     } finally {
       connecting = false;
       notifyListeners();
     }
   }
 
+  /// Tras un READY (reconexión del gateway / reinicio del backend) re-anuncia
+  /// VOICE_JOIN si seguimos en una sala: el server reconstruye su voiceState con
+  /// nuestra presencia. Sin esto, el server nos cree fuera del canal y descarta
+  /// en SILENCIO AMBIENCE_*/moderación (el síntoma: "tengo permiso pero no me
+  /// deja activar el ambiente"). channelId/room siguen vivos porque LiveKit no
+  /// se cae cuando el WS del gateway se reconecta.
+  void _reannounceVoice() {
+    final cid = channelId;
+    if (cid == null || room == null) return;
+    debugPrint('[voice] READY: re-anunciando VOICE_JOIN (canal=$cid)');
+    store.gateway.send('VOICE_JOIN', {'channel_id': cid, 'mute': muted, 'deaf': deafened});
+    if (sharing) store.gateway.send('VOICE_STATE', {'streaming': true});
+  }
+
   Future<void> leave() async {
     if (room == null) return;
+    SfxService.instance.play(UiSound.disconnected); // salí de voz
     store.gateway.send('VOICE_LEAVE', null);
     final r = room;
+    // Limpiar sinks de EQ ANTES de _cleanup (que pone room=null).
+    await _clearAllEqSinks();
     _cleanup();
     await r?.disconnect();
     await r?.dispose();
@@ -342,37 +855,64 @@ class VoiceManager extends ChangeNotifier {
     channelId = null;
     sharing = false;
     _micOptionsPending = false;
+    // suelta refs de la pista custom (el track ya se va con la sala al disconnect)
+    _customMicTrack = null;
+    _customMicNativeId = null;
     speaking.clear();
+    AmbienceService.instance.stop(); // al salir del canal, calla su ambiente
+    // apaga el monitor "escucharme" al salir (si no, reaparecería al reentrar)
+    VoiceMonitor.instance.set(false);
     notifyListeners();
   }
 
-  Future<void> toggleMute() async {
+  Future<void> toggleMute({bool fromDeafen = false}) async {
     muted = !muted;
+    // si el usuario togglea el micro a mano, deja de ser "cerrado por ensordecer"
+    // para no re-silenciarlo al desensordecer.
+    if (!fromDeafen) _mutedByDeafen = false;
     try {
-      // las opciones solo aplican si es la primera publicación del micro
-      await room?.localParticipant
-          ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
-      if (!muted && _micOptionsPending) {
-        // hubo cambios de opciones mientras estaba muteado: aplícalos ahora
-        _micOptionsPending = false;
-        await applyMicOptions();
+      if (fullband48k && _customMicTrack != null) {
+        // micro custom: mute por enabled (no destruye la fuente kCustom)
+        await _applyCustomMute();
+      } else {
+        // las opciones solo aplican si es la primera publicación del micro
+        await room?.localParticipant
+            ?.setMicrophoneEnabled(!muted, audioCaptureOptions: micOptions);
+        if (!muted && _micOptionsPending) {
+          // hubo cambios de opciones mientras estaba muteado: aplícalos ahora
+          _micOptionsPending = false;
+          await applyMicOptions();
+        }
       }
     } catch (_) {}
+    // SFX solo si el usuario lo hizo a mano (no cuando el mute viene del deafen,
+    // que ya suena con su propio selfDeafen).
+    if (!fromDeafen) {
+      SfxService.instance.play(muted ? UiSound.selfMute : UiSound.selfUnmute);
+    }
     store.gateway.send('VOICE_STATE', {'mute': muted});
     notifyListeners();
   }
 
   Future<void> toggleDeafen() async {
     deafened = !deafened;
+    // SfxService.muted sigue a deafened para callar todos los avisos mientras
+    // estás sordo. Orden cuidado para que el propio aviso de (des)ensordecer SÍ
+    // suene: al des-ensordecer abrimos el SFX ANTES de reproducir el undeafen;
+    // al ensordecer reproducimos el deafen ANTES de silenciar.
+    if (!deafened) SfxService.instance.muted = false;
+    SfxService.instance
+        .play(deafened ? UiSound.selfDeafen : UiSound.selfUndeafen);
+    if (deafened) SfxService.instance.muted = true;
     if (deafened) {
       // al ensordecer, cierra el micro si estaba abierto y recuerda que fuimos
       // nosotros, para poder restaurarlo al desensordecer.
-      if (!muted) { _mutedByDeafen = true; await toggleMute(); }
+      if (!muted) { _mutedByDeafen = true; await toggleMute(fromDeafen: true); }
     } else if (_mutedByDeafen) {
       // al desensordecer, reabre el micro solo si lo cerró el ensordecer
       // (si el usuario lo había silenciado a mano, lo dejamos como estaba).
       _mutedByDeafen = false;
-      await toggleMute();
+      await toggleMute(fromDeafen: true);
     }
     // silencia/reactiva todos los streams de audio remotos
     final r = room;
@@ -388,6 +928,9 @@ class VoiceManager extends ChangeNotifier {
       }
     }
     store.gateway.send('VOICE_STATE', {'deaf': deafened});
+    // ensordecer = no oír NADA, tampoco el ambiente; al desensordecer reengancha
+    // sincronizado.
+    _applyCurrentAmbience();
     notifyListeners();
   }
 
@@ -414,30 +957,57 @@ class VoiceManager extends ChangeNotifier {
   /// 15, 30 o 60 (1080p en todos).
   Future<void> startShare(rtc.DesktopCapturerSource source,
       {bool withAudio = false, int fps = 60}) async {
+    final lp = room?.localParticipant;
+    if (lp == null) return;
     // el plugin solo captura fuentes de la ÚLTIMA enumeración (getSources
     // limpia la lista nativa) y el selector enumera ventanas al final: hay que
     // re-enumerar el tipo elegido aquí o getDisplayMedia da "source not found"
     await rtc.desktopCapturer.getSources(types: [source.type]);
-    await room?.localParticipant?.setScreenShareEnabled(
-      true,
-      // OJO: livekit revisa este PARÁMETRO (no el campo de las opciones)
-      // para crear y publicar el track de audio del sistema (loopback)
+    // captureOptions con el fix de crash de Windows intacto: maxFrameRate
+    // SIEMPRE explícito (null → fastfail en ParseConstraints del plugin C++).
+    final captureOptions = ScreenShareCaptureOptions(
+      sourceId: source.id,
       captureScreenAudio: withAudio,
-      screenShareCaptureOptions: ScreenShareCaptureOptions(
-        sourceId: source.id,
-        captureScreenAudio: withAudio,
-        // null aquí mata el proceso en Windows (mandatory frameRate:null →
-        // fastfail en ParseConstraints del plugin C++); ver RoomOptions.
-        maxFrameRate: fps.toDouble(),
-        params: _shareParamsFor(fps),
-      ),
+      maxFrameRate: fps.toDouble(),
+      params: _shareParamsFor(fps),
     );
+    if (withAudio) {
+      // ALTA FIDELIDAD: setScreenShareEnabled(captureScreenAudio:true) publica
+      // el audio del sistema con AudioPublishOptions por defecto (48kbps mono,
+      // dtx/red ON) → "se oye lejano". livekit 2.8.0 no deja pasar opciones de
+      // publicación del audio del screenshare ni por parámetro ni post-publish
+      // sin re-publicar, así que se publican AMBOS tracks a mano:
+      // createScreenShareTracksWithAudio captura video+audio en UNA sola
+      // getDisplayMedia (en loopback no se pueden separar) usando el MISMO
+      // captureOptions (fix de crash preservado), y aquí se publica el audio
+      // con _sharePublishOptions (128kbps estéreo, dtx/red OFF).
+      final tracks =
+          await LocalVideoTrack.createScreenShareTracksWithAudio(captureOptions);
+      for (final t in tracks) {
+        if (t is LocalVideoTrack) {
+          await lp.publishVideoTrack(t,
+              publishOptions: const VideoPublishOptions(simulcast: false));
+        } else if (t is LocalAudioTrack) {
+          await lp.publishAudioTrack(t, publishOptions: _sharePublishOptions);
+        }
+      }
+    } else {
+      // sin audio: ruta probada de siempre (un solo track de video).
+      await lp.setScreenShareEnabled(
+        true,
+        captureScreenAudio: false,
+        screenShareCaptureOptions: captureOptions,
+      );
+    }
     sharing = true;
     store.gateway.send('VOICE_STATE', {'streaming': true});
     notifyListeners();
   }
 
   Future<void> stopShare() async {
+    // setScreenShareEnabled(false) quita el track de video Y busca/quita el de
+    // screenShareAudio por source, así que esto cierra también el audio que
+    // publicamos a mano en startShare (mismo source = screenShareAudio).
     await room?.localParticipant?.setScreenShareEnabled(false);
     sharing = false;
     store.gateway.send('VOICE_STATE', {'streaming': false});
@@ -453,6 +1023,60 @@ class VoiceManager extends ChangeNotifier {
   void _playSound(m.Sound sound, String chId) {
     if (deafened || channelId != chId) return;
     _player.play(UrlSource(store.api.fileUrl(sound.url)));
+  }
+
+  // ───────── ambiente de sala (cama compartida, sin WebRTC) ─────────
+
+  /// Aplica al reproductor local el ambiente del canal en el que estoy. Lo llama
+  /// el store cuando llega un AMBIENCE_STATE de mi canal, y join/leave/deafen.
+  void _onAmbienceChange(String chId, m.AmbienceState? state) {
+    if (chId != channelId) return; // solo me importa mi canal actual
+    AmbienceService.instance.apply(state, active: !deafened);
+  }
+
+  void _applyCurrentAmbience() {
+    final cid = channelId;
+    if (cid == null) {
+      AmbienceService.instance.stop();
+      return;
+    }
+    AmbienceService.instance.apply(store.ambienceIn(cid), active: !deafened);
+  }
+
+  /// Activa/cambia el ambiente de la sala (lo oye TODO el canal). Requiere estar
+  /// en el canal; el server valida permiso (CONTROL_AMBIENCE).
+  Future<void> setAmbience(String ambienceId, {bool loop = true}) async {
+    final cid = channelId;
+    if (cid == null) {
+      debugPrint('[ambience] setAmbience($ambienceId) ignorado: no estoy en voz');
+      return;
+    }
+    debugPrint('[ambience] setAmbience($ambienceId) → AMBIENCE_SET canal=$cid');
+    store.gateway.send('AMBIENCE_SET',
+        {'channel_id': cid, 'ambience_id': ambienceId, 'loop': loop});
+  }
+
+  /// Activa/desactiva el loop del ambiente actual para toda la sala.
+  Future<void> setAmbienceLoop(bool loop) async {
+    final cid = channelId;
+    if (cid == null) return;
+    store.gateway.send('AMBIENCE_LOOP', {'channel_id': cid, 'loop': loop});
+  }
+
+  /// Apaga el ambiente de la sala para todos.
+  Future<void> stopAmbience() async {
+    final cid = channelId;
+    if (cid == null) return;
+    store.gateway.send('AMBIENCE_STOP', {'channel_id': cid});
+  }
+
+  /// Pausa/reanuda el ambiente para todos (sincronizado).
+  Future<void> toggleAmbiencePause() async {
+    final cid = channelId;
+    if (cid == null) return;
+    final st = store.ambienceIn(cid);
+    if (st == null) return;
+    store.gateway.send('AMBIENCE_PAUSE', {'channel_id': cid, 'paused': !st.paused});
   }
 
   /// Tracks de video (screenshare) visibles en la sala.
@@ -473,9 +1097,32 @@ class VoiceManager extends ChangeNotifier {
     return tracks;
   }
 
+  /// Screenshares REMOTOS visibles, con quién comparte (para fullscreen y para
+  /// el slider de volumen del screenshare). Filtra por source para distinguir
+  /// el screenshare de una cámara.
+  List<ScreenShare> get screenShares {
+    final r = room;
+    if (r == null) return [];
+    final out = <ScreenShare>[];
+    for (final p in r.remoteParticipants.values) {
+      for (final pub in p.videoTrackPublications) {
+        final t = pub.track;
+        if (t != null &&
+            pub.subscribed &&
+            pub.source == TrackSource.screenShareVideo) {
+          out.add(ScreenShare(
+              track: t, identity: p.identity, name: p.name.isEmpty ? null : p.name));
+        }
+      }
+    }
+    return out;
+  }
+
   @override
   void dispose() {
     leave();
+    _fxPushTimer?.cancel();
+    VoiceFxEngine.instance.removeListener(_onVoiceFxChanged);
     _player.dispose();
     super.dispose();
   }

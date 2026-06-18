@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { db, seed, FILES_DIR } from "./db";
 import { DEFAULT_EVERYONE } from "./perms";
 import { userFromToken } from "./auth";
-import { websocket, type WSData } from "./gateway";
+import { websocket, type WSData, startVoiceReconciler } from "./gateway";
 import { authRoutes } from "./routes/auth";
 import { chatRoutes } from "./routes/chat";
 import { adminRoutes, publicUpdates } from "./routes/admin";
@@ -62,5 +62,9 @@ const server = Bun.serve<WSData, {}>({
   },
   websocket,
 });
+
+// Reconcilia la presencia de voz con LiveKit (sana el caso "reinicié el backend y
+// los oigo pero no salen en la UI"). No-op si el SFU no es alcanzable.
+startVoiceReconciler();
 
 console.log(`⚡ chatpapol server en http://localhost:${server.port} (gateway: /gateway)`);

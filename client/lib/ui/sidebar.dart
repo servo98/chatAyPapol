@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models.dart';
 import '../perms.dart';
 import '../store.dart';
@@ -70,8 +71,8 @@ class _SidebarState extends State<Sidebar> {
                 builder: (ctx) => AlertDialog(
                   title: const Text('Invitación creada', style: TextStyle(fontSize: 17)),
                   content: SelectableText(r['code'],
-                      style: const TextStyle(
-                          fontSize: 26, fontWeight: FontWeight.w700, color: Pal.accent)),
+                      style: TextStyle(
+                          fontSize: 24, fontWeight: FontWeight.w700, color: Pal.accent)),
                   actions: [
                     TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Listo'))
                   ],
@@ -98,33 +99,43 @@ class _SidebarState extends State<Sidebar> {
       },
       itemBuilder: (_) => [
         if (store.canI(P.createInvites))
-          const PopupMenuItem(value: 'invite', child: Text('📨  Invitar gente')),
+          const PopupMenuItem(value: 'invite', child: Text('❯  invitar gente')),
         if (store.canI(P.manageChannels)) ...const [
-          PopupMenuItem(value: 'text', child: Text('#  Crear canal de texto')),
-          PopupMenuItem(value: 'voice', child: Text('🔊  Crear canal de voz')),
-          PopupMenuItem(value: 'category', child: Text('📁  Crear categoría')),
+          PopupMenuItem(value: 'text', child: Text('#  crear canal de texto')),
+          PopupMenuItem(value: 'voice', child: Text('♪  crear canal de voz')),
+          PopupMenuItem(value: 'category', child: Text('▸  crear categoría')),
         ],
-        const PopupMenuItem(value: 'settings', child: Text('⚙️  Ajustes')),
+        const PopupMenuItem(value: 'settings', child: Text('⚙  ajustes')),
       ],
       child: Container(
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: Colors.black.withValues(alpha: .3))),
+          border: Border(bottom: BorderSide(color: Pal.borderSubtle)),
         ),
         child: Row(
           children: [
-            const Icon(Icons.forum_rounded, color: Pal.accent, size: 20),
-            const SizedBox(width: 8),
-            const Expanded(
-              child: Text('ChatPapol',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+            Text('❯',
+                style: TextStyle(
+                    color: Pal.accent, fontSize: 18, fontWeight: FontWeight.w700,
+                    height: 1)),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  children: [
+                    TextSpan(text: 'Chat', style: TextStyle(color: Pal.accent)),
+                    TextSpan(text: 'Papol', style: TextStyle(color: Pal.text)),
+                  ],
+                ),
+              ),
             ),
-            Icon(Icons.expand_more, color: Pal.muted, size: 18),
+            Icon(LucideIcons.chevronDown, color: Pal.muted, size: 18),
             if (!store.wsConnected)
-              const Padding(
-                padding: EdgeInsets.only(left: 6),
-                child: Icon(Icons.wifi_off, color: Pal.yellow, size: 15),
+              Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Icon(LucideIcons.wifiOff, color: Pal.yellow, size: 15),
               ),
           ],
         ),
@@ -141,23 +152,23 @@ class _SidebarState extends State<Sidebar> {
           padding: const EdgeInsets.fromLTRB(8, 14, 8, 4),
           child: Row(
             children: [
-              Icon(isCollapsed ? Icons.chevron_right : Icons.expand_more,
+              Icon(isCollapsed ? LucideIcons.chevronRight : LucideIcons.chevronDown,
                   size: 13, color: Pal.faint),
               const SizedBox(width: 2),
               Expanded(
                 child: Text(cat.name.toUpperCase(),
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 11, fontWeight: FontWeight.w700,
-                        color: Pal.faint, letterSpacing: .5)),
+                        color: Pal.faint, letterSpacing: 1.2)),
               ),
               if (hover && store.canI(P.manageChannels)) ...[
-                SmallIconBtn(Icons.add, 'Crear canal aquí', () async {
+                SmallIconBtn(LucideIcons.plus, 'Crear canal aquí', () async {
                   final name = await promptText(ctx, 'Canal en ${cat.name}', hint: 'nombre');
                   if (name == null || name.isEmpty) return;
                   store.api.post('/api/channels',
                       {'name': name, 'type': 'text', 'category_id': cat.id});
                 }, size: 14),
-                SmallIconBtn(Icons.delete_outline, 'Borrar categoría', () async {
+                SmallIconBtn(LucideIcons.trash2, 'Borrar categoría', () async {
                   if (await confirm(ctx, '¿Borrar "${cat.name}"?',
                       'Los canales quedan sin categoría.')) {
                     store.api.delete('/api/categories/${cat.id}');
@@ -174,6 +185,7 @@ class _SidebarState extends State<Sidebar> {
   Widget _channelTile(Channel ch) {
     final selected = store.selectedChannelId == ch.id;
     final hasUnread = store.unread.contains(ch.id);
+    final hasMention = store.mentionedChannels.contains(ch.id);
     final voiceUsers = ch.isVoice ? store.voiceUsersIn(ch.id) : const <VoiceState>[];
     return Column(
       children: [
@@ -186,10 +198,16 @@ class _SidebarState extends State<Sidebar> {
                   : hover
                       ? Pal.bg3
                       : null,
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(5),
+              // barra de acento verde con glow en el canal activo
+              border: selected
+                  ? Border(
+                      left: BorderSide(color: Pal.accent, width: 3))
+                  : null,
+              boxShadow: selected ? Pal.glowGreenSm : null,
             ),
             child: InkWell(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(5),
               onTap: () {
                 store.selectChannel(ch.id);
                 if (ch.isVoice) voice.join(ch.id);
@@ -198,9 +216,23 @@ class _SidebarState extends State<Sidebar> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 child: Row(
                   children: [
-                    Icon(ch.isVoice ? Icons.volume_up_rounded : Icons.tag,
-                        size: 17,
-                        color: selected || hasUnread ? Pal.text : Pal.faint),
+                    ch.isVoice
+                        ? Icon(LucideIcons.volume2,
+                            size: 17,
+                            color: selected
+                                ? Pal.accent
+                                : hasUnread ? Pal.text : Pal.faint)
+                        : SizedBox(
+                            width: 17,
+                            child: Text('#',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1,
+                                    color: selected
+                                        ? Pal.accent
+                                        : hasUnread ? Pal.text : Pal.faint))),
                     const SizedBox(width: 7),
                     Expanded(
                       child: Text(ch.name,
@@ -208,18 +240,36 @@ class _SidebarState extends State<Sidebar> {
                           style: TextStyle(
                               fontSize: 14,
                               fontWeight: hasUnread ? FontWeight.w700 : FontWeight.w500,
-                              color: selected || hasUnread ? Pal.text : Pal.muted)),
+                              color: selected
+                                  ? Pal.text
+                                  : hasUnread ? Pal.text : Pal.muted)),
                     ),
-                    if (hasUnread)
+                    // ping rojo de mención tiene prioridad sobre el unread normal
+                    if (hasMention)
                       Container(
-                          width: 8, height: 8,
-                          decoration: const BoxDecoration(
+                          width: 9,
+                          height: 9,
+                          decoration: BoxDecoration(
+                            color: Pal.red,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                  color: Pal.red.withValues(alpha: .6),
+                                  blurRadius: 5,
+                                  spreadRadius: 1),
+                            ],
+                          ))
+                    else if (hasUnread)
+                      Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
                               color: Pal.text, shape: BoxShape.circle)),
                     if (hover && store.canI(P.manageRoles))
-                      SmallIconBtn(Icons.settings, 'Permisos del canal',
+                      SmallIconBtn(LucideIcons.settings, 'Permisos del canal',
                           () => openChannelPerms(ctx, store, ch), size: 14),
                     if (hover && store.canI(P.manageChannels))
-                      SmallIconBtn(Icons.delete_outline, 'Borrar canal', () async {
+                      SmallIconBtn(LucideIcons.trash2, 'Borrar canal', () async {
                         if (await confirm(ctx, '¿Borrar #${ch.name}?',
                             'Se borran todos sus mensajes. No hay vuelta atrás.')) {
                           store.api.delete('/api/channels/${ch.id}');
@@ -231,10 +281,11 @@ class _SidebarState extends State<Sidebar> {
             ),
           ),
         ),
-        // usuarios conectados al canal de voz
+        // usuarios conectados al canal de voz (con aire para no pegarse al canal)
+        if (voiceUsers.isNotEmpty) const SizedBox(height: 3),
         for (final vs in voiceUsers)
           Padding(
-            padding: const EdgeInsets.only(left: 34, right: 12, top: 1, bottom: 1),
+            padding: const EdgeInsets.only(left: 34, right: 12, top: 3, bottom: 3),
             child: Row(
               children: [
                 Avatar(store.users[vs.userId], store, size: 20),
@@ -249,10 +300,10 @@ class _SidebarState extends State<Sidebar> {
                               : Pal.muted)),
                 ),
                 if (vs.streaming)
-                  const Icon(Icons.screen_share, size: 13, color: Pal.green),
-                if (vs.mute) const Icon(Icons.mic_off, size: 13, color: Pal.faint),
+                  Icon(LucideIcons.screenShare, size: 13, color: Pal.green),
+                if (vs.mute) Icon(LucideIcons.micOff, size: 13, color: Pal.faint),
                 if (vs.deaf)
-                  const Icon(Icons.headset_off, size: 13, color: Pal.faint),
+                  Icon(LucideIcons.volumeX, size: 13, color: Pal.faint),
               ],
             ),
           ),
@@ -266,26 +317,26 @@ class _SidebarState extends State<Sidebar> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Pal.bg0.withValues(alpha: .6),
-        border: Border(top: BorderSide(color: Colors.black.withValues(alpha: .3))),
+        border: Border(top: BorderSide(color: Pal.borderSubtle)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.graphic_eq, color: Pal.green, size: 18),
+          Icon(LucideIcons.activity, color: Pal.green, size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Voz conectada',
+                Text('Voz conectada',
                     style: TextStyle(
-                        color: Pal.green, fontSize: 12.5, fontWeight: FontWeight.w700)),
+                        color: Pal.green, fontSize: 12, fontWeight: FontWeight.w700)),
                 Text(ch?.name ?? '',
-                    style: const TextStyle(color: Pal.muted, fontSize: 11.5),
+                    style: TextStyle(color: Pal.muted, fontSize: 11),
                     overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
-          SmallIconBtn(Icons.call_end, 'Desconectar', () => voice.leave(),
+          SmallIconBtn(LucideIcons.phoneOff, 'Desconectar', () => voice.leave(),
               color: Pal.red),
         ],
       ),
@@ -306,7 +357,7 @@ class _SidebarState extends State<Sidebar> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(me?.username ?? '',
-                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                     overflow: TextOverflow.ellipsis),
                 Text(store.wsConnected ? 'En línea' : 'Reconectando…',
                     style: TextStyle(
@@ -319,18 +370,18 @@ class _SidebarState extends State<Sidebar> {
             listenable: voice,
             builder: (_, __) => Row(children: [
               SmallIconBtn(
-                voice.muted ? Icons.mic_off : Icons.mic,
+                voice.muted ? LucideIcons.micOff : LucideIcons.mic,
                 voice.muted ? 'Activar micro' : 'Silenciar',
                 () => voice.toggleMute(),
                 color: voice.muted ? Pal.red : Pal.muted,
               ),
               SmallIconBtn(
-                voice.deafened ? Icons.headset_off : Icons.headset,
+                voice.deafened ? LucideIcons.volumeX : LucideIcons.headphones,
                 voice.deafened ? 'Activar sonido' : 'Ensordecer',
                 () => voice.toggleDeafen(),
                 color: voice.deafened ? Pal.red : Pal.muted,
               ),
-              SmallIconBtn(Icons.settings, 'Ajustes',
+              SmallIconBtn(LucideIcons.settings, 'Ajustes',
                   () => openSettings(context, store, voice)),
             ]),
           ),

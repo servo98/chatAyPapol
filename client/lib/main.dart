@@ -6,13 +6,20 @@ import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:window_manager/window_manager.dart';
 import 'api.dart';
 import 'config.dart';
+import 'crash_log.dart';
 import 'installer.dart';
+import 'notifications.dart';
+import 'sfx.dart';
+import 'ambience.dart';
+import 'audio/voice_fx.dart';
 import 'updater.dart';
 import 'version.dart';
+import 'webrtc_apm.dart';
 import 'store.dart';
 import 'theme.dart';
 import 'ui/bootstrap_runner.dart';
 import 'ui/bootstrap_screen.dart';
+import 'ui/crash_overlay.dart';
 import 'ui/login.dart';
 import 'ui/shell.dart';
 import 'ui/titlebar.dart';
@@ -243,8 +250,161 @@ Future<void> _diagUpdate() async {
   }
 }
 
+// [chatpapol diag] Ejercita la ruta nativa de RNNoise + voicefx SIN UI: crea un
+// track de audio (inicializa el factory → APM), activa RNNoise y luego los
+// efectos, registrando cada paso. Si crashea, la última línea de diag-voicefx.txt
+// (Dart) + native.log (C++) dicen dónde. Headless: se puede correr sin GUI.
+// [chatpapol 48k] Test AISLADO de la ruta de micro fullband: crea la pista
+// kCustom (sin APM → sin downsample a 16k), arranca el capturador WASAPI a 48k y
+// enciende el monitor "escucharme". Te oyes a ti mismo a 48k SIN entrar a ninguna
+// sala ni publicar nada por LiveKit. Si suena lleno/claro (no boxy) → la captura
+// 48k + escala + monitor funcionan. AURICULARES obligatorios (sin AEC). Solo
+// Windows tiene monitor (en Linux EmitMonitorLocked es no-op).
+Future<void> _diagMic48k(List<String> args) async {
+  // banderas opcionales: `rnn` activa RNNoise, `fx` activa un efecto de voz
+  // (pitch grave) — para oír el 48k con procesado, aislado de LiveKit.
+  final withRnn = args.contains('rnn');
+  final withFx = args.contains('fx');
+  final out =
+      File(r'C:\Users\ferna\Downloads\chatpapol-toolchain\diag-mic48k.txt');
+  Future<void> log(String s) async {
+    out.writeAsStringSync('$s\n', mode: FileMode.append);
+    // ignore: avoid_print
+    print(s);
+  }
+
+  out.writeAsStringSync('=== diag-mic48k v$appVersion (rnn=$withRnn fx=$withFx) ===\n');
+  try {
+    await log('PONTE LOS AURICULARES (sin AEC, si no habrá eco/acople).');
+    await log('1: monitor "escucharme" ON ...');
+    await WebrtcApm.setVoiceMonitor(true);
+
+    if (withRnn) {
+      await log('1b: RNNoise ON ...');
+      await WebrtcApm.setRnnoise(true);
+    }
+    if (withFx) {
+      await log('1c: efecto de voz ON (pitch grave) ...');
+      await WebrtcApm.setVoiceFx(true, '1.0;1.0;5,0,600=-7&601=0.8');
+    }
+
+    // [diag] supresor de ruido ESPECTRAL propio: `nsoff`=0, `fuerte`=2, def 1.
+    final nsLevel = args.contains('nsoff') ? 0 : (args.contains('fuerte') ? 2 : 1);
+    await WebrtcApm.setNsLevel(nsLevel);
+    final agc = !args.contains('agcoff');
+    await WebrtcApm.setAgc48(agc);
+    await log('1d: supresor espectral nivel=$nsLevel · AGC(auto-nivel)=$agc');
+
+    // [diag] graba crudo vs procesado a .wav para medir (sin adivinar).
+    const dumpDir = r'C:\Users\ferna\Downloads\chatpapol-toolchain';
+    await WebrtcApm.startMicDump(dumpDir);
+    await log('1e: grabando → $dumpDir\\diag-raw.wav (crudo) y diag-out.wav (procesado)');
+
+    await log('2: crear pista kCustom (sin APM/16k) ...');
+    final trackId = await WebrtcApm.createCustomAudioTrack();
+    if (trackId == null) {
+      await log('  ERROR: createCustomAudioTrack devolvió null (build sin soporte)');
+      await WebrtcApm.setVoiceMonitor(false);
+      exit(0);
+    }
+    await log('  trackId=$trackId');
+
+    await log('3: arrancar capturador de micro WASAPI 48k ...');
+    await WebrtcApm.startCustomMicCapture(trackId);
+    await log('  capturador arrancado (48k mono fullband)');
+
+    await log('');
+    await log('>>> HABLA AHORA: te oyes a TI MISMO a 48k durante 30s'
+        '${withRnn ? " + RNNoise" : ""}${withFx ? " + efecto" : ""}.');
+    await log('>>> ¿Limpio y a buen volumen, o roto/raro?');
+    await Future.delayed(const Duration(seconds: 30));
+
+    await log('4: parar capturador + escribir dumps + monitor/rnn/fx OFF ...');
+    await WebrtcApm.stopMicDump(); // escribe diag-raw.wav / diag-out.wav
+    await WebrtcApm.stopCustomMicCapture(trackId);
+    if (withFx) await WebrtcApm.setVoiceFx(false, '');
+    if (withRnn) await WebrtcApm.setRnnoise(false);
+    await WebrtcApm.setVoiceMonitor(false);
+    await log('  dumps escritos: diag-raw.wav (crudo) + diag-out.wav (procesado)');
+    await log('=== diag-mic48k FIN ok ===');
+  } catch (e, st) {
+    await log('EXCEPCIÓN: $e\n$st');
+  }
+  exit(0);
+}
+
+Future<void> _diagVoiceFx() async {
+  final out =
+      File(r'C:\Users\ferna\Downloads\chatpapol-toolchain\diag-voicefx.txt');
+  Future<void> log(String s) async =>
+      out.writeAsStringSync('$s\n', mode: FileMode.append);
+  out.writeAsStringSync('=== diag-voicefx v$appVersion ===\n');
+  try {
+    await log('1: crear LocalAudioTrack (init factory + APM) ...');
+    final t = await lk.LocalAudioTrack.create();
+    await log('  track OK');
+
+    await log('2: WebrtcApm.setRnnoise(true) ...');
+    await WebrtcApm.setRnnoise(true);
+    await log('  setRnnoise volvió (NO crasheó)');
+
+    await log('3: WebrtcApm.setVoiceFx(true, spec con efectos NUEVOS) ...');
+    // Cadena rica que ejerce los nodos nuevos: comp(9) + pitch(5) +
+    // biquad PEAKING(2,type=4,gainDb) + distortion(4) ADAA + bitcrush(10) +
+    // vibrato(11) + flanger(12). Si alguno crashea, no llega a FIN ok.
+    await WebrtcApm.setVoiceFx(true,
+        '1.0;1.0;'
+        '9,0,1000=-45&1002=4&1006=3|'
+        '5,0,600=-5&601=0.85|'
+        '2,0,300=4&301=3000&303=4|'
+        '4,0,500=6&501=0.5|'
+        '10,0,1100=6&1101=2|'
+        '11,0,1200=5&1201=20|'
+        '12,0,1300=0.4&1302=0.5');
+    await log('  setVoiceFx (cadena nueva) volvió (NO crasheó)');
+
+    await log('4: dejar correr 2s (procesado en hilo de audio) ...');
+    await Future.delayed(const Duration(seconds: 2));
+    await log('  sobrevivió al procesado');
+
+    await log('4b: monitor ON/OFF (escucharme) ...');
+    await WebrtcApm.setVoiceMonitor(true);
+    await Future.delayed(const Duration(seconds: 1));
+    await WebrtcApm.setVoiceMonitor(false);
+    await log('  monitor on/off OK (no crasheó)');
+
+    await log('5: apagar (setRnnoise/setVoiceFx false) ...');
+    await WebrtcApm.setVoiceFx(false, '');
+    await WebrtcApm.setRnnoise(false);
+    await log('  apagado OK');
+
+    await t.stop();
+    await t.dispose();
+    await log('=== diag-voicefx FIN ok (NO crasheó) ===');
+  } catch (e, st) {
+    await log('EXCEPCIÓN: $e\n$st');
+  }
+  exit(0);
+}
+
+/// Punto de entrada: TODO corre dentro de un runZonedGuarded para que ningún
+/// error asíncrono se pierda — el CrashLog lo captura, lo persiste a disco y
+/// levanta el banner copiable. La inicialización del binding va DENTRO de la
+/// misma zona que runApp (Flutter avisa si no coinciden).
 Future<void> main(List<String> args) async {
+  runZonedGuarded(() => _main(args), (error, stack) {
+    CrashLog.instance.reportError(error, stack, fatal: true);
+  });
+}
+
+Future<void> _main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Lo más temprano posible: engancha debugPrint + errores globales y abre el
+  // archivo de log (rota la sesión anterior y detecta si crasheó).
+  await CrashLog.instance.init();
+  CrashLog.instance.install();
+  // Tema (acento + claro/oscuro) elegido por el usuario, antes de cualquier UI.
+  await ThemeController.instance.load();
   if (args.contains('--diag')) {
     await _diag();
     return;
@@ -255,6 +415,20 @@ Future<void> main(List<String> args) async {
   }
   if (args.contains('--diag-update')) {
     await _diagUpdate();
+    return;
+  }
+  if (args.contains('--diag-voicefx')) {
+    await _diagVoiceFx();
+    return;
+  }
+  if (args.contains('--diag-mic48k')) {
+    await _diagMic48k(args);
+    return;
+  }
+  // Desinstalación (la invoca Windows con la UninstallString del registro):
+  // limpia registro + accesos directos y borra la carpeta. Headless, sin UI.
+  if (args.contains('--uninstall')) {
+    await Bootstrap.uninstall();
     return;
   }
   if (_desktop) {
@@ -283,16 +457,16 @@ Future<void> main(List<String> args) async {
   if (args.contains('--preview-install')) {
     runApp(const _BootstrapApp(
         child: BootstrapScreen(
-            title: 'Instalando ChatPapol',
-            status: 'Instalando…',
+            title: 'instalando ChatPapol',
+            status: 'instalando…',
             progress: 0.62)));
     return;
   }
   if (args.contains('--preview-update')) {
     runApp(const _BootstrapApp(
         child: BootstrapScreen(
-            title: 'Actualizando ChatPapol',
-            status: 'Descargando actualización…',
+            title: 'actualizando ChatPapol',
+            status: 'descargando actualización…',
             progress: 0.41)));
     return;
   }
@@ -305,10 +479,92 @@ Future<void> main(List<String> args) async {
     return;
   }
 
+  // App instalada corriendo desde su carpeta: asegura la entrada de
+  // "Desinstalar" (idempotente; auto-repara instalaciones viejas sin la clave).
+  if (Platform.isWindows && !Bootstrap.needsInstall()) {
+    unawaited(Bootstrap.ensureUninstallEntry());
+  }
+
+  await SfxService.instance.init();
+  await AmbienceService.instance.init();
+  await VoiceFxEngine.instance.init();
+  await NotificationService.instance.init();
   final store = AppStore();
   final voice = VoiceManager(store);
+  // Click en un toast del SO: traer la ventana al frente y abrir el canal.
+  NotificationService.instance.onOpenChannel = (chId) async {
+    try {
+      await windowManager.show();
+      await windowManager.focus();
+    } catch (_) {}
+    store.selectChannel(chId);
+  };
+  // Foco de ventana: solo notificamos por toast cuando la app NO está enfocada.
+  if (_desktop) {
+    try {
+      store.setWindowFocused(await windowManager.isFocused());
+    } catch (_) {}
+    // Interceptamos el cierre para desconectar la sala de voz ANTES de morir:
+    // si no, WebRTC nunca libera el dispositivo de salida y la sesión queda
+    // colgada en el Mezclador de volumen de Windows.
+    try {
+      await windowManager.setPreventClose(true);
+    } catch (_) {}
+    windowManager.addListener(_FocusListener(store, voice));
+  }
   store.tryRestore();
   runApp(ChatPapolApp(store: store, voice: voice));
+}
+
+/// Mantiene `store.windowFocused` al día y, al cerrar la ventana, desconecta la
+/// voz antes de destruirla (libera el dispositivo de audio → la sesión
+/// desaparece del Mezclador de volumen).
+class _FocusListener extends WindowListener {
+  final AppStore store;
+  final VoiceManager voice;
+  _FocusListener(this.store, this.voice);
+  @override
+  void onWindowClose() async {
+    // Desconectar la sala libera el dispositivo de audio. Con timeout: si la
+    // desconexión de WebRTC se cuelga, NO bloqueamos el cierre — destruimos la
+    // ventana igual y el runner nativo fuerza la salida del proceso.
+    try {
+      await voice.leave().timeout(const Duration(seconds: 2));
+    } catch (_) {}
+    // Marca el cierre como limpio: si la próxima sesión no ve este marcador,
+    // sabrá que la app murió de golpe (crash) y ofrecerá copiar esos logs.
+    CrashLog.instance.markCleanShutdown();
+    try {
+      await windowManager.setPreventClose(false);
+      await windowManager.destroy();
+    } catch (_) {}
+  }
+
+  @override
+  void onWindowFocus() => store.setWindowFocused(true);
+  @override
+  void onWindowBlur() => store.setWindowFocused(false);
+}
+
+/// Compone la barra de título propia encima del contenido de la app.
+/// El TitleBar va dentro de su PROPIO Overlay para que sus Tooltip encuentren
+/// un Overlay ancestro (se monta por encima del Navigator de la MaterialApp).
+/// El [child] (el Navigator) queda FUERA del Overlay para que se reconstruya
+/// con normalidad en cada rebuild.
+Widget _withTitleBar(Widget? child) {
+  final content = child ?? const SizedBox.shrink();
+  if (!_desktop) return CrashOverlay(child: content);
+  return CrashOverlay(
+    child: Column(children: [
+      SizedBox(
+        height: 36,
+        child: Overlay(initialEntries: [
+          OverlayEntry(builder: (_) => const TitleBar()),
+        ]),
+      ),
+      Expanded(child: content),
+    ]),
+  );
 }
 
 class _BootstrapApp extends StatelessWidget {
@@ -316,15 +572,15 @@ class _BootstrapApp extends StatelessWidget {
   const _BootstrapApp({required this.child});
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'ChatPapol',
-      debugShowCheckedModeBanner: false,
-      theme: buildTheme(),
-      builder: (ctx, c) => Column(children: [
-        if (_desktop) const TitleBar(),
-        Expanded(child: c ?? const SizedBox.shrink()),
-      ]),
-      home: child,
+    return ListenableBuilder(
+      listenable: ThemeController.instance,
+      builder: (ctx, _) => MaterialApp(
+        title: 'ChatPapol',
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(ThemeController.instance.palette),
+        builder: (ctx, c) => _withTitleBar(c),
+        home: child,
+      ),
     );
   }
 }
@@ -336,25 +592,25 @@ class ChatPapolApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'ChatPapol',
-      debugShowCheckedModeBanner: false,
-      theme: buildTheme(),
-      builder: (ctx, child) => Column(children: [
-        if (_desktop) const TitleBar(),
-        Expanded(child: child ?? const SizedBox.shrink()),
-      ]),
-      home: ListenableBuilder(
-        listenable: store,
-        builder: (ctx, _) {
-          if (store.restoring) {
-            return const Scaffold(
-                body: Center(child: CircularProgressIndicator(strokeWidth: 2)));
-          }
-          return store.loggedIn
-              ? Shell(store: store, voice: voice)
-              : LoginScreen(store: store);
-        },
+    return ListenableBuilder(
+      listenable: ThemeController.instance,
+      builder: (ctx, _) => MaterialApp(
+        title: 'ChatPapol',
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(ThemeController.instance.palette),
+        builder: (ctx, child) => _withTitleBar(child),
+        home: ListenableBuilder(
+          listenable: store,
+          builder: (ctx, _) {
+            if (store.restoring) {
+              return const Scaffold(
+                  body: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+            }
+            return store.loggedIn
+                ? Shell(store: store, voice: voice)
+                : LoginScreen(store: store);
+          },
+        ),
       ),
     );
   }

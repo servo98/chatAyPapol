@@ -1,11 +1,21 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 import 'config.dart';
 import 'gateway.dart';
 import 'models.dart';
+import 'notifications.dart';
 import 'perms.dart';
+import 'package:window_manager/window_manager.dart';
+import 'sfx.dart';
+
+/// Username del dueño: única cuenta que ve el Sound Lab (auth username-only).
+const _soundLabOwner = 'ferservo98';
+
+/// Modo de notificación por canal (estilo Discord).
+enum ChannelNotify { all, mentions, muted }
 
 /// Estado global de la app. Singleton creado en main.dart.
 class AppStore extends ChangeNotifier {
@@ -27,23 +37,54 @@ class AppStore extends ChangeNotifier {
   var commands = <BotCommand>[];
   final online = <String>{};
   final voiceStates = <String, VoiceState>{};
+  // Ambiente actual por canal de voz (cama de sonido compartida). channelId -> estado.
+  final ambienceStates = <String, AmbienceState>{};
   String everyoneRoleId = 'everyone';
 
   String? selectedChannelId;
   final messages = <String, List<Message>>{};
   final _hasMore = <String, bool>{};
   final unread = <String>{};
+  // Canales con una MENCIÓN sin leer (a mí o @everyone). Distinto de `unread`:
+  // se pinta más fuerte. Se limpia en selectChannel().
+  final mentionedChannels = <String>{};
   final typing = <String, Map<String, int>>{}; // channelId -> userId -> expiry
+
+  // ---------- preferencias de notificaciones ----------
+  /// Maestro global: si está en false, no se muestra ningún toast del SO.
+  bool notificationsEnabled = true;
+  /// No molestar: calla el sonido in-app y el toast (no toca `unread`).
+  bool dnd = false;
+  /// ¿La ventana de la app tiene el foco? Lo mantiene main.dart (WindowListener).
+  /// Solo notificamos por toast del SO cuando la ventana NO está enfocada.
+  bool windowFocused = true;
+  /// Modo de notificación por canal. Default: ChannelNotify.mentions.
+  final _channelNotify = <String, ChannelNotify>{};
   int _lastTypingSent = 0;
   Timer? _typingCleaner;
 
   /// El VoiceManager se cuelga aquí para reproducir soundboard y reaccionar a eventos.
   void Function(Sound sound, String channelId)? onSoundPlay;
 
+  /// El VoiceManager se cuelga aquí para reproducir/sincronizar el ambiente del
+  /// canal en el que estoy. [state] null = el ambiente de ese canal se apagó.
+  void Function(String channelId, AmbienceState? state)? onAmbienceChange;
+
+  /// El VoiceManager se cuelga aquí para re-anunciar VOICE_JOIN tras un READY
+  /// (reconexión del gateway / reinicio del backend): si no, el server pierde
+  /// nuestro voiceState y descarta en silencio AMBIENCE_*/moderación.
+  void Function()? onReconnected;
+
+  AmbienceState? ambienceIn(String channelId) => ambienceStates[channelId];
+
   Channel? get selectedChannel => channels[selectedChannelId];
   bool get loggedIn => me != null;
 
+  /// Solo el dueño ve el Sound Lab.
+  bool get isSoundLabOwner => me?.username == _soundLabOwner;
+
   AppStore() {
+    _loadNotifPrefs();
     gateway.onEvent = _handleEvent;
     gateway.onStatus = (c) {
       if (wsConnected != c) {
@@ -211,10 +252,66 @@ class AppStore extends ChangeNotifier {
         .toList();
   }
 
+  // ---------- preferencias de notificaciones ----------
+  Future<void> _loadNotifPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    notificationsEnabled = prefs.getBool('notifs_enabled') ?? true;
+    dnd = prefs.getBool('dnd') ?? false;
+    final raw = prefs.getString('channel_notify');
+    if (raw != null) {
+      try {
+        final map = jsonDecode(raw) as Map<String, dynamic>;
+        map.forEach((k, v) {
+          final mode = ChannelNotify.values
+              .where((m) => m.name == v)
+              .firstOrNull;
+          if (mode != null) _channelNotify[k] = mode;
+        });
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  ChannelNotify channelNotifyMode(String channelId) =>
+      _channelNotify[channelId] ?? ChannelNotify.mentions;
+
+  Future<void> setChannelNotify(String channelId, ChannelNotify mode) async {
+    if (mode == ChannelNotify.mentions) {
+      _channelNotify.remove(channelId); // el default no se persiste
+    } else {
+      _channelNotify[channelId] = mode;
+    }
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('channel_notify',
+        jsonEncode(_channelNotify.map((k, v) => MapEntry(k, v.name))));
+  }
+
+  Future<void> setNotificationsEnabled(bool v) async {
+    notificationsEnabled = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('notifs_enabled', v);
+  }
+
+  Future<void> setDnd(bool v) async {
+    dnd = v;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('dnd', v);
+  }
+
+  void setWindowFocused(bool v) {
+    if (windowFocused == v) return;
+    windowFocused = v;
+    notifyListeners();
+  }
+
   // ---------- mensajes ----------
   Future<void> selectChannel(String id) async {
     selectedChannelId = id;
     unread.remove(id);
+    mentionedChannels.remove(id);
     notifyListeners();
     if (!messages.containsKey(id) && channels[id]?.isVoice != true) {
       await loadMessages(id);
@@ -242,17 +339,82 @@ class AppStore extends ChangeNotifier {
     }
   }
 
+  /// ¿El texto me menciona? Mismo patrón que md.dart: @everyone o @miUsuario.
+  bool _mentionsMe(String content) {
+    final name = me?.username;
+    if (name == null) return false;
+    for (final m in RegExp(r'@(everyone|[a-zA-Z0-9_.]{2,32})').allMatches(content)) {
+      final who = m.group(1);
+      if (who == 'everyone' || who == name) return true;
+    }
+    return false;
+  }
+
+  /// Muestra el toast del SO y parpadea la barra de tareas, pero SOLO si la
+  /// ventana no tiene foco AHORA (consulta el estado real; el cache
+  /// windowFocused puede estar desactualizado si el evento de blur no llegó).
+  Future<void> _notifyOS(Message m) async {
+    bool focused;
+    try {
+      focused = await windowManager.isFocused();
+    } catch (_) {
+      focused = windowFocused; // fallback al cache si la consulta falla
+    }
+    if (focused) return;
+    final author = users[m.authorId]?.username ?? 'Alguien';
+    final chName = channels[m.channelId]?.name ?? 'canal';
+    var body = m.content.trim();
+    if (body.length > 140) body = '${body.substring(0, 140)}…';
+    await NotificationService.instance.show(
+      title: '$author en #$chName',
+      body: body,
+      channelId: m.channelId,
+    );
+    await NotificationService.instance.flashTaskbar();
+  }
+
   // ---------- eventos del gateway ----------
   void _handleEvent(String t, dynamic d) {
     switch (t) {
       case 'READY':
         _applyReady(d);
+        // (re)conexión del gateway: el server pudo perder nuestro voiceState
+        // (reinicio del backend). El voice se re-anuncia para no quedar mudo
+        // ante el server (ambiente/moderación se descartaban en silencio).
+        onReconnected?.call();
         break;
       case 'MESSAGE_CREATE':
         final m = Message.fromJson(d);
         messages[m.channelId]?.add(m);
         (typing[m.channelId] ?? {}).remove(m.authorId);
-        if (m.channelId != selectedChannelId) unread.add(m.channelId);
+        // Mis propios mensajes nunca notifican.
+        if (m.authorId != me?.id) {
+          final mode = channelNotifyMode(m.channelId);
+          final isMention = _mentionsMe(m.content);
+          final nonActive = m.channelId != selectedChannelId;
+          // Badge de no leído: incluso en 'muted' (se ve tenue).
+          if (nonActive) unread.add(m.channelId);
+          if (isMention && nonActive) mentionedChannels.add(m.channelId);
+          // Sonido in-app: respeta DND y el modo del canal. En 'mentions' los
+          // mensajes normales NO suenan (solo el badge de no leído).
+          if (!dnd && mode != ChannelNotify.muted) {
+            if (isMention) {
+              SfxService.instance.play(UiSound.mention);
+            } else if (mode == ChannelNotify.all && nonActive) {
+              SfxService.instance.play(UiSound.messageReceived);
+            }
+          }
+          // Toast del SO + parpadeo de la barra de tareas: SOLO con la ventana
+          // sin foco. Se decide con el foco REAL del SO (no el cache
+          // windowFocused, que quedaba en true si el evento de blur no llegaba →
+          // suprimía el toast aunque estuvieras en otra app). Ver _notifyOS.
+          if (notificationsEnabled &&
+              !dnd &&
+              mode != ChannelNotify.muted &&
+              (isMention || mode == ChannelNotify.all)) {
+            unawaited(_notifyOS(m));
+          }
+        }
         break;
       case 'MESSAGE_UPDATE':
         final m = Message.fromJson(d);
@@ -274,7 +436,11 @@ class AppStore extends ChangeNotifier {
         break;
       case 'MEMBER_JOIN':
       case 'MEMBER_UPDATE':
-        users[d['id']] = User.fromJson(d);
+        final mu = User.fromJson(d);
+        users[mu.id] = mu;
+        // Si soy yo, actualizar también `me` (Settings, etc. leen store.me):
+        // sin esto, cambiar mi avatar/nombre no se reflejaba en la UI.
+        if (mu.id == me?.id) me = mu;
         break;
       case 'MEMBER_REMOVE':
         users.remove(d['user_id']);
@@ -324,15 +490,42 @@ class AppStore extends ChangeNotifier {
         overwrites[d['channel_id']]?.removeWhere((o) => o.targetId == d['target_id']);
         break;
       case 'VOICE_STATE':
-        if (d['channel_id'] == null) {
-          voiceStates.remove(d['user_id']);
+        final uid = d['user_id'] as String;
+        final prev = voiceStates[uid]?.channelId; // canal previo del usuario
+        final next = d['channel_id'] as String?;  // canal nuevo (null = salió)
+        if (next == null) {
+          voiceStates.remove(uid);
         } else {
-          voiceStates[d['user_id']] = VoiceState.fromJson(d);
+          voiceStates[uid] = VoiceState.fromJson(d);
+        }
+        // SFX: solo por OTROS usuarios, y solo respecto al canal en el que YO
+        // estoy. Mi propio canal de voz = el voiceState de mi id.
+        if (uid != me?.id) {
+          final myChannel = voiceStates[me?.id]?.channelId;
+          if (myChannel != null) {
+            final enteredMine = next == myChannel && prev != myChannel;
+            final leftMine = prev == myChannel && next != myChannel;
+            if (enteredMine) {
+              SfxService.instance.play(UiSound.voiceUserJoin);
+            } else if (leftMine) {
+              SfxService.instance.play(UiSound.voiceUserLeave);
+            }
+          }
         }
         break;
       case 'SOUND_PLAY':
         final snd = Sound.fromJson(d['sound']);
         onSoundPlay?.call(snd, d['channel_id']);
+        break;
+      case 'AMBIENCE_STATE':
+        final cid = d['channel_id'] as String;
+        final aid = d['ambience_id'] as String?;
+        if (aid == null) {
+          ambienceStates.remove(cid);
+        } else {
+          ambienceStates[cid] = AmbienceState.fromJson(d);
+        }
+        onAmbienceChange?.call(cid, ambienceStates[cid]);
         break;
       case 'STICKER_CREATE':
         stickers = [...stickers, Sticker.fromJson(d)]..sort((a, b) => a.name.compareTo(b.name));
@@ -385,6 +578,16 @@ class AppStore extends ChangeNotifier {
       ..clear()
       ..addEntries((d['voice_states'] as List)
           .map((v) => MapEntry(v['user_id'] as String, VoiceState.fromJson(v))));
+    // Ambientes activos por canal (para sincronizar al (re)conectar). Avisamos al
+    // VoiceManager por cada uno: él aplica solo el del canal en el que esté.
+    ambienceStates.clear();
+    for (final a in (d['ambience_states'] as List? ?? const [])) {
+      final s = AmbienceState.fromJson(a);
+      ambienceStates[s.channelId] = s;
+    }
+    for (final s in ambienceStates.values) {
+      onAmbienceChange?.call(s.channelId, s);
+    }
 
     // selección inicial: primer canal de texto visible
     if (selectedChannelId == null || channels[selectedChannelId] == null) {

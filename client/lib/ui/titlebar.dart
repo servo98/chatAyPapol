@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:window_manager/window_manager.dart';
 import '../theme.dart';
 
@@ -44,32 +45,45 @@ class _TitleBarState extends State<TitleBar> with WindowListener {
     return Material(
       color: Pal.bg0,
       child: SizedBox(
-        height: 34,
+        height: 36,
         child: Row(children: [
           Expanded(
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
               onDoubleTap: _toggleMax,
               child: DragToMoveArea(
-                child: Row(children: const [
-                  SizedBox(width: 12),
-                  Icon(Icons.forum_rounded, color: Pal.accent, size: 15),
+                child: Row(children: [
+                  const SizedBox(width: 12),
+                  Text('❯',
+                      style: TextStyle(
+                          fontSize: 14,
+                          height: 1,
+                          fontWeight: FontWeight.w700,
+                          color: Pal.accent)),
                   SizedBox(width: 8),
-                  Text('ChatPapol',
+                  Text.rich(
+                    TextSpan(
                       style: TextStyle(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w700,
-                          color: Pal.muted)),
+                          color: Pal.muted),
+                      children: [
+                        TextSpan(text: 'Chat',
+                            style: TextStyle(color: Pal.accent)),
+                        TextSpan(text: 'Papol'),
+                      ],
+                    ),
+                  ),
                 ]),
               ),
             ),
           ),
-          _WinBtn(Icons.horizontal_rule, 'Minimizar',
+          _WinBtn(LucideIcons.minus, 'Minimizar',
               () => windowManager.minimize()),
-          _WinBtn(maximized ? Icons.filter_none : Icons.crop_square,
+          _WinBtn(maximized ? LucideIcons.copy : LucideIcons.square,
               maximized ? 'Restaurar' : 'Maximizar', _toggleMax,
-              iconSize: maximized ? 13 : 15),
-          _WinBtn(Icons.close, 'Cerrar', () => windowManager.close(),
+              iconSize: maximized ? 14 : 16),
+          _WinBtn(LucideIcons.x, 'Cerrar', () => windowManager.close(),
               hoverColor: Pal.red),
         ]),
       ),
@@ -81,18 +95,22 @@ class _WinBtn extends StatelessWidget {
   final IconData icon;
   final String tip;
   final VoidCallback onTap;
-  final Color hoverColor;
+  final Color? hoverColor;
   final double iconSize;
   const _WinBtn(this.icon, this.tip, this.onTap,
-      {this.hoverColor = Pal.bg4, this.iconSize = 15});
+      {this.hoverColor, this.iconSize = 16});
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tip,
+    // Sin Tooltip visual: la cajita de Material bajo los botones de ventana
+    // (en el borde de la pantalla) se ve fuera de lugar. Mantenemos solo la
+    // etiqueta de accesibilidad (lectores de pantalla) vía Semantics.
+    return Semantics(
+      label: tip,
+      button: true,
       child: InkWell(
         onTap: onTap,
-        hoverColor: hoverColor,
+        hoverColor: hoverColor ?? Pal.bg4,
         child: SizedBox(
           width: 46,
           height: double.infinity,

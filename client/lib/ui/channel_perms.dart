@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../models.dart';
 import '../perms.dart';
 import '../store.dart';
@@ -72,14 +73,14 @@ class _ChannelPermsEditorState extends State<_ChannelPermsEditor> {
         Padding(
           padding: const EdgeInsets.all(16),
           child: Row(children: [
-            const Icon(Icons.lock_outline, color: Pal.accent, size: 20),
+            Icon(LucideIcons.lock, color: Pal.accent, size: 20),
             const SizedBox(width: 8),
             Text('Permisos de #${widget.channel.name}',
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             const Spacer(),
             IconButton(
                 onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close, color: Pal.muted)),
+                icon: Icon(LucideIcons.x, color: Pal.muted)),
           ]),
         ),
         Expanded(
@@ -116,7 +117,7 @@ class _ChannelPermsEditorState extends State<_ChannelPermsEditor> {
                                         : Pal.text)),
                           ),
                           if (hasOw)
-                            const Icon(Icons.circle, size: 6, color: Pal.accent),
+                            Icon(LucideIcons.circle, size: 6, color: Pal.accent),
                         ]),
                       ),
                     );
@@ -144,10 +145,10 @@ class _ChannelPermsEditorState extends State<_ChannelPermsEditor> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(label, style: const TextStyle(fontSize: 13.5)),
+                              Text(label, style: const TextStyle(fontSize: 13)),
                               if (desc.isNotEmpty)
                                 Text(desc,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         fontSize: 11, color: Pal.faint)),
                             ],
                           ),
@@ -176,8 +177,8 @@ class _ChannelPermsEditorState extends State<_ChannelPermsEditor> {
           decoration: BoxDecoration(
             color: active ? activeColor : Pal.bg0,
             borderRadius: BorderRadius.horizontal(
-              left: s == -1 ? const Radius.circular(6) : Radius.zero,
-              right: s == 1 ? const Radius.circular(6) : Radius.zero,
+              left: s == -1 ? const Radius.circular(5) : Radius.zero,
+              right: s == 1 ? const Radius.circular(5) : Radius.zero,
             ),
           ),
           child: Icon(icon, size: 15, color: active ? Colors.white : Pal.faint),
@@ -186,9 +187,9 @@ class _ChannelPermsEditorState extends State<_ChannelPermsEditor> {
     }
 
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      btn(Icons.close, -1, Pal.red),
-      btn(Icons.remove, 0, Pal.bg4),
-      btn(Icons.check, 1, Pal.green),
+      btn(LucideIcons.x, -1, Pal.red),
+      btn(LucideIcons.minus, 0, Pal.bg4),
+      btn(LucideIcons.check, 1, Pal.green),
     ]);
   }
 }

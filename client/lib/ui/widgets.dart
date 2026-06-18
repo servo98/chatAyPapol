@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import '../models.dart';
+import '../sfx.dart';
 import '../store.dart';
 import '../theme.dart';
 
+// Paleta secundaria aypapol (sin blurple de Discord): verde, cian, magenta,
+// ámbar, morado rolcito, teal facturas. Tinta oscura encima para legibilidad.
 const avatarColors = [
-  Color(0xFF8B7CF7), Color(0xFF5BC8AF), Color(0xFFF2A65A),
-  Color(0xFFE36FA0), Color(0xFF6FA8FF), Color(0xFFFFC857),
+  Color(0xFF2CE60F), Color(0xFF22D3EE), Color(0xFFFF2E9A),
+  Color(0xFFFFB627), Color(0xFFB06CFF), Color(0xFF38E0A6),
 ];
 
 class Avatar extends StatelessWidget {
@@ -33,7 +36,7 @@ class Avatar extends StatelessWidget {
             child: Text(
               (u?.username ?? '?').substring(0, 1).toUpperCase(),
               style: TextStyle(
-                  color: Colors.white,
+                  color: Pal.greenInk,
                   fontSize: size * .42,
                   fontWeight: FontWeight.w700),
             ));
@@ -87,7 +90,7 @@ class SmallIconBtn extends StatelessWidget {
   Widget build(BuildContext context) => Tooltip(
         message: tip,
         child: InkWell(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(5),
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.all(4),
@@ -116,17 +119,29 @@ bool sameDay(int a, int b) {
 }
 
 void showError(BuildContext context, Object e) {
+  SfxService.instance.play(UiSound.error);
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text(e.toString(), style: const TextStyle(color: Pal.red)),
+    content: Text(e.toString(), style: TextStyle(color: Pal.red)),
+  ));
+}
+
+/// Feedback positivo: snackbar verde + sonido de éxito. Para acciones que antes
+/// no daban señal (p.ej. "Avatar actualizado").
+void showSuccess(BuildContext context, String msg) {
+  SfxService.instance.play(UiSound.success);
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    content: Text(msg, style: TextStyle(color: Pal.green)),
+    duration: const Duration(seconds: 2),
   ));
 }
 
 Future<bool> confirm(BuildContext context, String title, String body) async {
+  SfxService.instance.play(UiSound.modalOpen);
   final r = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(title, style: const TextStyle(fontSize: 17)),
-      content: Text(body, style: const TextStyle(color: Pal.muted)),
+      content: Text(body, style: TextStyle(color: Pal.muted)),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
         ElevatedButton(
@@ -137,13 +152,15 @@ Future<bool> confirm(BuildContext context, String title, String body) async {
       ],
     ),
   );
+  SfxService.instance.play((r ?? false) ? UiSound.confirm : UiSound.modalClose);
   return r ?? false;
 }
 
 Future<String?> promptText(BuildContext context, String title,
-    {String hint = '', String initial = '', String action = 'Crear'}) {
+    {String hint = '', String initial = '', String action = 'Crear'}) async {
+  SfxService.instance.play(UiSound.modalOpen);
   final ctrl = TextEditingController(text: initial);
-  return showDialog<String>(
+  final r = await showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(title, style: const TextStyle(fontSize: 17)),
@@ -165,4 +182,6 @@ Future<String?> promptText(BuildContext context, String title,
       ],
     ),
   );
+  SfxService.instance.play(UiSound.modalClose);
+  return r;
 }

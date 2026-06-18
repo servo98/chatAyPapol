@@ -140,3 +140,24 @@ class BotCommand {
   BotCommand.fromJson(Map<String, dynamic> j)
       : botId = j['bot_id'], name = j['name'], description = j['description'] ?? '';
 }
+
+/// Ambiente actual de un canal de voz (cama de sonido compartida). El clip vive
+/// BUNDLEADO en el cliente; el server solo coordina id + cuándo arrancó para que
+/// todos suenen sincronizados. Ver [AmbienceService] y server/src/gateway.ts.
+class AmbienceState {
+  final String channelId;
+  final String ambienceId;
+  final int startedAt; // ms del reloj del server (origen del loop)
+  final bool paused;
+  final bool loop; // si la cama se repite (cama de fondo => normalmente true)
+  final int? pausedAt; // ms del server al pausar (posición congelada)
+  final String? byUser; // quién activó el ambiente (para "activado por …")
+  AmbienceState.fromJson(Map<String, dynamic> j)
+      : channelId = j['channel_id'],
+        ambienceId = j['ambience_id'],
+        startedAt = j['started_at'] ?? 0,
+        paused = j['paused'] ?? false,
+        loop = j['loop'] ?? true,
+        pausedAt = j['paused_at'],
+        byUser = j['by_user'];
+}

@@ -227,10 +227,19 @@ const GITHUB_REPO = process.env.GITHUB_REPO ?? "";
 const ASSET_EXT: Record<string, RegExp> = {
   windows: /windows.*\.zip$/i, linux: /\.AppImage$/i, macos: /\.(dmg|pkg)$/i,
 };
+// Instaladores de PRIMERA instalación (para la landing / descarga directa).
+// Distinto de ASSET_EXT, que apunta al .zip del auto-update in-app: aquí
+// queremos el Setup.exe / AppImage / dmg que descarga un usuario nuevo.
+const INSTALLER_EXT: Record<string, RegExp> = {
+  windows: /Setup.*\.exe$/i, linux: /\.AppImage$/i, macos: /\.(dmg|pkg)$/i,
+};
 let ghCache: { at: number; data: any } | null = null;
+let ghListCache: { at: number; data: any[] } | null = null;
 
-async function githubRelease(platform: string) {
-  if (!GITHUB_REPO || !ASSET_EXT[platform]) return null;
+// Último release crudo de GitHub, cacheado 5 min (compartido por /updates,
+// /download y /releases para no multiplicar llamadas a la API de GitHub).
+async function rawLatestRelease(): Promise<any | null> {
+  if (!GITHUB_REPO) return null;
   try {
     if (!ghCache || Date.now() - ghCache.at > 5 * 60_000) {
       const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
@@ -240,19 +249,48 @@ async function githubRelease(platform: string) {
       if (!res.ok) return null;
       ghCache = { at: Date.now(), data: await res.json() };
     }
-    const rel = ghCache.data;
-    const asset = (rel.assets ?? []).find((a: any) => ASSET_EXT[platform].test(a.name));
-    if (!asset) return null;
-    return {
-      version: String(rel.tag_name ?? "").replace(/^v/, ""),
-      url: asset.browser_download_url, // checksum no disponible vía API: el cliente lo omite
-      sha256: "",
-      notes: String(rel.name ?? rel.body ?? "").slice(0, 500),
-      source: "github",
-    };
+    return ghCache.data;
   } catch {
     return null;
   }
+}
+
+// Lista de los últimos releases (para enlistar versiones en la landing).
+async function rawReleaseList(): Promise<any[]> {
+  if (!GITHUB_REPO) return [];
+  try {
+    if (!ghListCache || Date.now() - ghListCache.at > 5 * 60_000) {
+      const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=10`, {
+        headers: { "user-agent": "chatpapol", accept: "application/vnd.github+json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      ghListCache = { at: Date.now(), data: Array.isArray(data) ? data : [] };
+    }
+    return ghListCache.data;
+  } catch {
+    return [];
+  }
+}
+
+function installerUrl(rel: any, re: RegExp): string | null {
+  return (rel?.assets ?? []).find((a: any) => re.test(a.name))?.browser_download_url ?? null;
+}
+
+async function githubRelease(platform: string) {
+  if (!ASSET_EXT[platform]) return null;
+  const rel = await rawLatestRelease();
+  if (!rel) return null;
+  const asset = (rel.assets ?? []).find((a: any) => ASSET_EXT[platform].test(a.name));
+  if (!asset) return null;
+  return {
+    version: String(rel.tag_name ?? "").replace(/^v/, ""),
+    url: asset.browser_download_url, // checksum no disponible vía API: el cliente lo omite
+    sha256: "",
+    notes: String(rel.name ?? rel.body ?? "").slice(0, 500),
+    source: "github",
+  };
 }
 
 // Consultar la última versión es público (no hace falta sesión para actualizarse).
@@ -261,6 +299,36 @@ publicUpdates.get("/updates/:platform", async (c) => {
   const manifest = await Bun.file(releasesPath).json().catch(() => ({}));
   const rel = manifest[c.req.param("platform")] ?? await githubRelease(c.req.param("platform"));
   return rel ? c.json(rel) : c.json({ error: "Sin releases para esa plataforma" }, 404);
+});
+
+// Descarga directa del INSTALADOR (primera instalación) para la landing.
+// 302 → asset del último release; funciona con el nombre versionado actual
+// (no espera a un asset de nombre fijo). Uso en la landing:
+//   <a href="https://chat.aypapol.com/api/download/windows">Descargar</a>
+publicUpdates.get("/download/:platform", async (c) => {
+  const re = INSTALLER_EXT[c.req.param("platform")];
+  if (!re) return c.json({ error: "Plataforma inválida" }, 400);
+  const url = installerUrl(await rawLatestRelease(), re);
+  if (!url) return c.json({ error: "Sin instalador para esa plataforma" }, 404);
+  return c.redirect(url, 302);
+});
+
+// Lista de versiones (último ↓ a más viejas) con notas y enlaces de descarga
+// por plataforma — para mostrar versiones/changelog en la landing.
+publicUpdates.get("/releases", async (c) => {
+  const list = (await rawReleaseList()).filter((r) => !r.draft);
+  return c.json(list.map((rel) => ({
+    version: String(rel.tag_name ?? "").replace(/^v/, ""),
+    name: rel.name ?? rel.tag_name ?? "",
+    notes: String(rel.body ?? "").slice(0, 4000),
+    published_at: rel.published_at ?? null,
+    prerelease: !!rel.prerelease,
+    downloads: {
+      windows: installerUrl(rel, INSTALLER_EXT.windows),
+      linux: installerUrl(rel, INSTALLER_EXT.linux),
+      macos: installerUrl(rel, INSTALLER_EXT.macos),
+    },
+  })));
 });
 
 adminRoutes.post("/updates/:platform", async (c) => {

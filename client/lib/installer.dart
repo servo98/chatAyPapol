@@ -4,6 +4,9 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
+import 'crash_log.dart';
+import 'version.dart';
+
 /// Instalación y actualización propias (sin Inno), estilo Discord.
 ///
 /// Modelo en Windows:
@@ -15,6 +18,7 @@ import 'package:path/path.dart' as p;
 ///    cerrarse la app, reemplaza los archivos y la relanza.
 class Bootstrap {
   static const appName = 'ChatPapol';
+  static const publisher = 'aypapol';
 
   static bool isSetupArg(List<String> args) => args.contains('--setup');
 
@@ -36,13 +40,19 @@ class Bootstrap {
   static String get _exeDir => p.dirname(Platform.resolvedExecutable);
   static String get _exeName => p.basename(Platform.resolvedExecutable);
 
+  static String get _desktopLnk => p.join(
+      Platform.environment['USERPROFILE'] ?? 'C:\\', 'Desktop', '$appName.lnk');
+  static String get _startMenuLnk => p.join(
+      Platform.environment['APPDATA'] ?? 'C:\\',
+      'Microsoft', 'Windows', 'Start Menu', 'Programs', '$appName.lnk');
+
   // ---------------- primera instalación ----------------
   static Future<void> install({
     required void Function(String status, double? progress) onProgress,
   }) async {
     final src = Directory(_exeDir);
     final dst = Directory(installDir);
-    onProgress('Preparando…', null);
+    onProgress('preparando…', null);
     if (await dst.exists()) {
       try { await dst.delete(recursive: true); } catch (_) {}
     }
@@ -60,20 +70,21 @@ class Bootstrap {
       onProgress('Instalando…', files.isEmpty ? null : done / files.length);
     }
 
-    onProgress('Creando accesos directos…', 1);
-    await _createShortcuts(p.join(dst.path, _exeName));
+    onProgress('creando accesos directos…', 1);
+    final installedExe = p.join(dst.path, _exeName);
+    await _createShortcuts(installedExe);
+    // Registra "Desinstalar" apuntando al exe YA instalado (aquí
+    // resolvedExecutable es el binario temporal del Setup, no sirve).
+    await ensureUninstallEntry(exePath: installedExe);
 
-    onProgress('Abriendo ChatPapol…', 1);
+    onProgress('abriendo ChatPapol…', 1);
     await Process.start(p.join(dst.path, _exeName), const [],
         mode: ProcessStartMode.detached, workingDirectory: dst.path);
   }
 
   static Future<void> _createShortcuts(String exePath) async {
-    final desktop = p.join(
-        Platform.environment['USERPROFILE'] ?? 'C:\\', 'Desktop', '$appName.lnk');
-    final startMenu = p.join(
-        Platform.environment['APPDATA'] ?? 'C:\\',
-        'Microsoft', 'Windows', 'Start Menu', 'Programs', '$appName.lnk');
+    final desktop = _desktopLnk;
+    final startMenu = _startMenuLnk;
     final ps = '''
 \$ws = New-Object -ComObject WScript.Shell
 foreach (\$lnk in @('$desktop','$startMenu')) {
@@ -90,6 +101,84 @@ foreach (\$lnk in @('$desktop','$startMenu')) {
     } catch (_) {/* accesos directos son best-effort */}
   }
 
+  // ---------------- registro de desinstalación ----------------
+  /// Escribe (o actualiza) la entrada "Desinstalar" por-usuario para que
+  /// ChatPapol salga en *Aplicaciones y características* con un uninstaller.
+  /// Idempotente y barato: se llama en CADA arranque de la app INSTALADA, así
+  /// las instalaciones viejas (sin esta clave) se auto-reparan al actualizar.
+  ///
+  /// Vía PowerShell (Set-ItemProperty): `reg import` reporta éxito pero NO
+  /// escribe nada de forma fiable, y `reg add` se traba con las comillas de la
+  /// UninstallString. PowerShell con strings de comilla simple es literal y
+  /// robusto (mismo mecanismo que [_createShortcuts]). [exePath] permite apuntar
+  /// al exe YA instalado durante la instalación (cuando resolvedExecutable aún
+  /// es el binario temporal). Best-effort: nunca lanza.
+  static Future<void> ensureUninstallEntry({String? exePath}) async {
+    if (!Platform.isWindows) return;
+    try {
+      final exe = exePath ?? Platform.resolvedExecutable;
+      String q(String s) => s.replaceAll("'", "''"); // escape comilla simple PS
+      final ps = '''
+\$k = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$appName'
+New-Item -Path \$k -Force | Out-Null
+Set-ItemProperty -Path \$k -Name DisplayName -Value '${q(appName)}'
+Set-ItemProperty -Path \$k -Name DisplayVersion -Value '${q(appVersion)}'
+Set-ItemProperty -Path \$k -Name DisplayIcon -Value '${q(exe)}'
+Set-ItemProperty -Path \$k -Name Publisher -Value '${q(publisher)}'
+Set-ItemProperty -Path \$k -Name InstallLocation -Value '${q(installDir)}'
+Set-ItemProperty -Path \$k -Name UninstallString -Value '"${q(exe)}" --uninstall'
+Set-ItemProperty -Path \$k -Name NoModify -Type DWord -Value 1
+Set-ItemProperty -Path \$k -Name NoRepair -Type DWord -Value 1
+''';
+      await Process.run('powershell.exe',
+          ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', ps]);
+    } catch (_) {/* registrar es best-effort: la app funciona igual */}
+  }
+
+  /// Desinstala ChatPapol (lo invoca Windows con la UninstallString
+  /// `"<exe>" --uninstall`): borra la clave de registro y los accesos directos,
+  /// y programa el borrado de la carpeta de instalación tras salir (un exe en
+  /// uso no puede autoborrarse). NO toca los datos de usuario (ajustes/logs en
+  /// %APPDATA%\dev.papol). Hace exit(0) al final.
+  static Future<void> uninstall() async {
+    if (!Platform.isWindows) {
+      exit(0);
+    }
+    // 1) clave de registro (PowerShell: consistente con el registro)
+    try {
+      await Process.run('powershell.exe', [
+        '-NoProfile', '-WindowStyle', 'Hidden', '-Command',
+        "Remove-Item -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\$appName' -Recurse -Force -ErrorAction SilentlyContinue"
+      ]);
+    } catch (_) {}
+    // 2) accesos directos
+    for (final lnk in [_desktopLnk, _startMenuLnk]) {
+      try {
+        final f = File(lnk);
+        if (await f.exists()) await f.delete();
+      } catch (_) {}
+    }
+    // 3) carpeta de instalación: la borra un PowerShell OCULTO y desligado que
+    //    espera ~3s a que este proceso cierre (un exe en uso no se autoborra).
+    //    Antes usaba `cmd /c ping ...` como sleep, pero abría una ventana de
+    //    consola visible con el ping. -WindowStyle Hidden no muestra nada. CWD
+    //    fuera de la carpeta para no bloquearla.
+    try {
+      final dir = installDir;
+      await Process.start(
+        'powershell.exe',
+        [
+          '-NoProfile', '-WindowStyle', 'Hidden', '-Command',
+          "Start-Sleep -Seconds 3; "
+              "Remove-Item -LiteralPath '$dir' -Recurse -Force -ErrorAction SilentlyContinue"
+        ],
+        mode: ProcessStartMode.detached,
+        workingDirectory: Platform.environment['TEMP'] ?? 'C:\\',
+      );
+    } catch (_) {}
+    exit(0);
+  }
+
   // ---------------- actualización ----------------
   /// Descarga el zip de la versión nueva con progreso, lo verifica y lo extrae
   /// a una carpeta temporal. Devuelve esa carpeta.
@@ -98,7 +187,7 @@ foreach (\$lnk in @('$desktop','$startMenu')) {
     String sha256hex, {
     required void Function(String status, double? progress) onProgress,
   }) async {
-    onProgress('Descargando actualización…', 0);
+    onProgress('descargando actualización…', 0);
     final req = http.Request('GET', Uri.parse(url));
     final res = await req.send();
     if (res.statusCode != 200) {
@@ -110,7 +199,7 @@ foreach (\$lnk in @('$desktop','$startMenu')) {
     await for (final chunk in res.stream) {
       bytes.addAll(chunk);
       received += chunk.length;
-      onProgress('Descargando actualización…',
+      onProgress('descargando actualización…',
           total > 0 ? received / total : null);
     }
     if (sha256hex.isNotEmpty &&
@@ -118,7 +207,7 @@ foreach (\$lnk in @('$desktop','$startMenu')) {
       throw Exception('Checksum inválido: descarga corrupta');
     }
 
-    onProgress('Instalando…', null);
+    onProgress('instalando…', null);
     final tmp = await Directory.systemTemp.createTemp('chatpapol-update-');
     final archive = ZipDecoder().decodeBytes(bytes);
     for (final entry in archive) {
@@ -191,6 +280,9 @@ foreach (\$lnk in @('$desktop','$startMenu')) {
       try {
         await newFiles.delete(recursive: true);
       } catch (_) {}
+      // Cierre INTENCIONAL por update: marca el log como limpio para que el
+      // detector de crashes NO muestre el banner de error al reabrir.
+      CrashLog.instance.markCleanShutdown();
       await Process.start(exe, const [],
           mode: ProcessStartMode.detached, workingDirectory: target);
       exit(0);

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "sounds": {
+    "messageReceived": "sfx/messageReceived.wav",
+    "mention": "sfx/mention.wav",
+    "voiceUserJoin": "sfx/voiceUserJoin.wav",
+    "voiceUserLeave": "sfx/voiceUserLeave.wav",
+    "selfMute": "sfx/selfMute.wav",
+    "selfUnmute": "sfx/selfUnmute.wav",
+    "selfDeafen": "sfx/selfDeafen.wav",
+    "selfUndeafen": "sfx/selfUndeafen.wav",
+    "connected": "sfx/connected.wav",
+    "disconnected": "sfx/disconnected.wav",
+    "error": "sfx/error.wav",
+    "success": "sfx/success.wav",
+    "modalOpen": "sfx/modalOpen.wav",
+    "modalClose": "sfx/modalClose.wav",
+    "confirm": "sfx/confirm.wav"
+  }
+}
