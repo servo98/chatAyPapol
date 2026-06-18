@@ -27,13 +27,21 @@ import 'widgets.dart';
 
 void openSettings(BuildContext context, AppStore store, VoiceManager voice) {
   SfxService.instance.play(UiSound.modalOpen);
-  showDialog(
-    context: context,
-    builder: (_) => Dialog(
-      insetPadding: const EdgeInsets.all(40),
-      child: SettingsScreen(store: store, voice: voice),
-    ),
-  ).then((_) => SfxService.instance.play(UiSound.modalClose));
+  final screen = SettingsScreen(store: store, voice: voice);
+  // Móvil: ruta a pantalla completa. Escritorio: diálogo centrado.
+  final closed = isMobile
+      ? Navigator.of(context).push<void>(MaterialPageRoute<void>(
+          fullscreenDialog: true,
+          builder: (_) => Scaffold(body: SafeArea(child: screen)),
+        ))
+      : showDialog<void>(
+          context: context,
+          builder: (_) => Dialog(
+            insetPadding: const EdgeInsets.all(40),
+            child: screen,
+          ),
+        );
+  closed.then((_) => SfxService.instance.play(UiSound.modalClose));
 }
 
 class SettingsScreen extends StatefulWidget {
@@ -67,14 +75,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (store.isSoundLabOwner) ('sfx', 'Sound Lab', LucideIcons.music2),
       ('updates', 'Actualizaciones', LucideIcons.download),
     ];
+    final phone = MediaQuery.sizeOf(context).width < 600;
     return SizedBox(
-      width: 860,
-      height: 600,
+      width: phone ? double.infinity : 860,
+      height: phone ? double.infinity : 600,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            width: 200,
+            width: phone ? 58 : 200,
             color: Pal.bg0,
             child: Column(
               children: [
@@ -93,39 +102,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 8),
                           margin: const EdgeInsets.only(bottom: 2),
-                          child: Row(children: [
-                            Icon(t.$3, size: 16,
-                                color: selected ? Pal.text : Pal.muted),
-                            const SizedBox(width: 10),
-                            Text(t.$2,
-                                style: TextStyle(
-                                    fontSize: 13.5,
-                                    fontWeight: selected
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                    color: selected ? Pal.text : Pal.muted)),
-                          ]),
+                          child: Row(
+                              mainAxisAlignment: phone
+                                  ? MainAxisAlignment.center
+                                  : MainAxisAlignment.start,
+                              children: [
+                                Icon(t.$3,
+                                    size: 16,
+                                    color: selected ? Pal.text : Pal.muted),
+                                if (!phone) const SizedBox(width: 10),
+                                if (!phone)
+                                  Expanded(
+                                    child: Text(t.$2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontSize: 13.5,
+                                            fontWeight: selected
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                            color: selected
+                                                ? Pal.text
+                                                : Pal.muted)),
+                                  ),
+                              ]),
                         ),
                       );
                     }).toList(),
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(children: [
-                    Text('ChatPapol v$appVersion',
-                        style: TextStyle(color: Pal.faint, fontSize: 11)),
-                    const SizedBox(height: 8),
-                    TextButton.icon(
-                      onPressed: () async {
-                        Navigator.pop(context);
-                        await store.logout();
-                      },
-                      icon: Icon(LucideIcons.logOut, size: 15, color: Pal.red),
-                      label: Text('Cerrar sesión',
-                          style: TextStyle(color: Pal.red, fontSize: 12.5)),
-                    ),
-                  ]),
+                  padding: EdgeInsets.all(phone ? 6 : 12),
+                  child: phone
+                      ? IconButton(
+                          onPressed: () async {
+                            Navigator.pop(context);
+                            await store.logout();
+                          },
+                          icon: Icon(LucideIcons.logOut,
+                              size: 18, color: Pal.red),
+                          tooltip: 'Cerrar sesión',
+                        )
+                      : Column(children: [
+                          Text('ChatPapol v$appVersion',
+                              style:
+                                  TextStyle(color: Pal.faint, fontSize: 11)),
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            onPressed: () async {
+                              Navigator.pop(context);
+                              await store.logout();
+                            },
+                            icon: Icon(LucideIcons.logOut,
+                                size: 15, color: Pal.red),
+                            label: Text('Cerrar sesión',
+                                style: TextStyle(
+                                    color: Pal.red, fontSize: 12.5)),
+                          ),
+                        ]),
                 ),
               ],
             ),

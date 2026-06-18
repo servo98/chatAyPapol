@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' as rtc;
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:window_manager/window_manager.dart';
@@ -397,6 +398,16 @@ Future<void> main(List<String> args) async {
 
 Future<void> _main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Móvil: barras de estado/navegación transparentes con iconos claros, acorde
+  // al tema oscuro (en escritorio no aplica).
+  if (isMobile) {
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Color(0xFF17131F),
+      systemNavigationBarIconBrightness: Brightness.light,
+    ));
+  }
   // Lo más temprano posible: engancha debugPrint + errores globales y abre el
   // archivo de log (rota la sesión anterior y detecta si crasheó).
   await CrashLog.instance.init();
